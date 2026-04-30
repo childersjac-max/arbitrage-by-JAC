@@ -3,13 +3,21 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Sports betting arbitrage finder API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: sports
+    description: Sports and leagues
+  - name: odds
+    description: Live odds and arbitrage
+  - name: opportunities
+    description: Arbitrage opportunities
+  - name: alerts
+    description: Saved arbitrage alerts
 paths:
   /healthz:
     get:
@@ -24,6 +32,200 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /config:
+    get:
+      operationId: getConfig
+      tags: [health]
+      summary: Get frontend configuration
+      description: Returns configuration values needed by the frontend (API keys, etc.)
+      responses:
+        "200":
+          description: Configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppConfig"
+        "503":
+          description: Service not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sports:
+    get:
+      operationId: getSports
+      tags: [sports]
+      summary: Get available sports
+      description: Returns list of sports supported by OddsJam
+      responses:
+        "200":
+          description: List of sports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Sport"
+
+  /odds:
+    get:
+      operationId: getOdds
+      tags: [odds]
+      summary: Get live odds for a sport
+      description: Fetches live odds from OddsJam for arbitrage analysis
+      parameters:
+        - name: sport
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Sport key (e.g. americanfootball_nfl)
+        - name: markets
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated market keys (e.g. h2h,spreads,totals)
+        - name: bookmakers
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated bookmaker keys to filter
+      responses:
+        "200":
+          description: Live odds data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GameOdds"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: OddsJam API error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /opportunities:
+    get:
+      operationId: getArbitrageOpportunities
+      tags: [opportunities]
+      summary: Get arbitrage opportunities
+      description: Returns computed arbitrage opportunities sorted by profit percentage
+      parameters:
+        - name: sport
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by sport key
+        - name: minProfit
+          in: query
+          required: false
+          schema:
+            type: number
+          description: Minimum profit percentage (default 0)
+        - name: market
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by market type (h2h, spreads, totals)
+      responses:
+        "200":
+          description: List of arbitrage opportunities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ArbitrageOpportunity"
+
+  /opportunities/summary:
+    get:
+      operationId: getOpportunitiesSummary
+      tags: [opportunities]
+      summary: Get summary stats for arbitrage opportunities
+      description: Returns aggregate stats on current arbitrage opportunities
+      responses:
+        "200":
+          description: Summary stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpportunitiesSummary"
+
+  /alerts:
+    get:
+      operationId: getAlerts
+      tags: [alerts]
+      summary: Get saved alerts
+      description: Returns user-configured arbitrage alerts
+      responses:
+        "200":
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+    post:
+      operationId: createAlert
+      tags: [alerts]
+      summary: Create an alert
+      description: Save an arbitrage alert configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAlertBody"
+      responses:
+        "201":
+          description: Alert created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /alerts/{id}:
+    delete:
+      operationId: deleteAlert
+      tags: [alerts]
+      summary: Delete an alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Alert deleted
+        "404":
+          description: Alert not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +236,227 @@ components:
       required:
         - status
 
+    AppConfig:
+      type: object
+      properties:
+        oddsjamApiKey:
+          type: string
+      required:
+        - oddsjamApiKey
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Sport:
+      type: object
+      properties:
+        key:
+          type: string
+        group:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        active:
+          type: boolean
+        hasOutrights:
+          type: boolean
+      required:
+        - key
+        - group
+        - title
+        - description
+        - active
+        - hasOutrights
+
+    BookmakerOdds:
+      type: object
+      properties:
+        bookmaker:
+          type: string
+        bookmakerTitle:
+          type: string
+        market:
+          type: string
+        outcome:
+          type: string
+        price:
+          type: number
+        point:
+          type: ["number", "null"]
+        lastUpdate:
+          type: string
+      required:
+        - bookmaker
+        - bookmakerTitle
+        - market
+        - outcome
+        - price
+        - lastUpdate
+
+    GameOdds:
+      type: object
+      properties:
+        id:
+          type: string
+        sport:
+          type: string
+        homeTeam:
+          type: string
+        awayTeam:
+          type: string
+        commenceTime:
+          type: string
+        bookmakerOdds:
+          type: array
+          items:
+            $ref: "#/components/schemas/BookmakerOdds"
+      required:
+        - id
+        - sport
+        - homeTeam
+        - awayTeam
+        - commenceTime
+        - bookmakerOdds
+
+    ArbLeg:
+      type: object
+      properties:
+        bookmaker:
+          type: string
+        bookmakerTitle:
+          type: string
+        outcome:
+          type: string
+        price:
+          type: number
+        stake:
+          type: number
+        impliedProbability:
+          type: number
+      required:
+        - bookmaker
+        - bookmakerTitle
+        - outcome
+        - price
+        - stake
+        - impliedProbability
+
+    ArbitrageOpportunity:
+      type: object
+      properties:
+        id:
+          type: string
+        gameId:
+          type: string
+        sport:
+          type: string
+        homeTeam:
+          type: string
+        awayTeam:
+          type: string
+        commenceTime:
+          type: string
+        market:
+          type: string
+        profitPercent:
+          type: number
+        totalImpliedProbability:
+          type: number
+        legs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArbLeg"
+        detectedAt:
+          type: string
+      required:
+        - id
+        - gameId
+        - sport
+        - homeTeam
+        - awayTeam
+        - commenceTime
+        - market
+        - profitPercent
+        - totalImpliedProbability
+        - legs
+        - detectedAt
+
+    OpportunitiesSummary:
+      type: object
+      properties:
+        totalOpportunities:
+          type: integer
+        averageProfitPercent:
+          type: number
+        bestProfitPercent:
+          type: number
+        sportBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              sport:
+                type: string
+              count:
+                type: integer
+              avgProfit:
+                type: number
+            required:
+              - sport
+              - count
+              - avgProfit
+        marketBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              market:
+                type: string
+              count:
+                type: integer
+            required:
+              - market
+              - count
+      required:
+        - totalOpportunities
+        - averageProfitPercent
+        - bestProfitPercent
+        - sportBreakdown
+        - marketBreakdown
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+        sport:
+          type: ["string", "null"]
+        market:
+          type: ["string", "null"]
+        minProfitPercent:
+          type: number
+        createdAt:
+          type: string
+      required:
+        - id
+        - minProfitPercent
+        - createdAt
+
+    CreateAlertBody:
+      type: object
+      properties:
+        sport:
+          type: ["string", "null"]
+        market:
+          type: ["string", "null"]
+        minProfitPercent:
+          type: number
+      required:
+        - minProfitPercent

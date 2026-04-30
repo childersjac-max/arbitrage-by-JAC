@@ -1,27 +1,44 @@
-# Workspace
+# Sports Arbitrage Finder — OddsJam
 
-## Overview
+A sports betting arbitrage detection tool powered by the OddsJam API. Finds guaranteed profit opportunities across multiple bookmakers using live odds data.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+## Architecture
 
-## Stack
+- **Frontend** (`artifacts/arb-finder`): React + Vite app. Fetches OddsJam API key from `/api/config`, then calls OddsJam directly from the browser. Arbitrage calculations run client-side.
+- **API Server** (`artifacts/api-server`): Express 5 + Node. Handles alerts CRUD (PostgreSQL), serves config, and acts as proxy for OddsJam.
+- **Database** (`lib/db`): PostgreSQL via Drizzle ORM. Stores user alerts.
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+## Network Note
 
-## Key Commands
+OddsJam's API (`api.oddsjam.com`) is not resolvable in Replit's development sandbox. **The app works correctly when deployed to production** where the server has full internet access. In development, odds data will return empty.
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
+## Pages
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+- `/` — Dashboard: Live arbitrage opportunities, summary stats (auto-refreshes every 30s)
+- `/odds` — Live Odds: Browse live game odds by sport and market type
+- `/alerts` — Alerts: Create/delete saved arbitrage alerts with profit thresholds
+- `/sports` — Sports: Directory of all OddsJam-supported sports
+
+## Key Files
+
+- `artifacts/arb-finder/src/lib/oddsjam-client.ts` — Browser-side OddsJam API client
+- `artifacts/arb-finder/src/lib/arbitrage.ts` — Arbitrage detection algorithm (client-side)
+- `artifacts/arb-finder/src/hooks/use-oddsjam.ts` — React Query hooks wrapping OddsJam
+- `artifacts/api-server/src/routes/config.ts` — Serves API key to frontend
+- `artifacts/api-server/src/routes/alerts.ts` — Alerts CRUD
+- `lib/db/src/schema/alerts.ts` — Alerts table schema
+
+## Secrets
+
+- `ODDSJAM_API_KEY` — OddsJam API key (required)
+- `SESSION_SECRET` — Session secret
+- `DATABASE_URL` — PostgreSQL connection string (auto-provisioned)
+
+## Arbitrage Algorithm
+
+For each game and market:
+1. Find the best (highest) decimal odds for each outcome across all bookmakers
+2. Calculate total implied probability: sum(1/odds_i)
+3. If total implied < 1.0: arbitrage exists
+4. Profit % = (1/total_implied - 1) × 100
+5. Optimal stakes: stake_i = bankroll × (1/odds_i) / total_implied

@@ -5,11 +5,13 @@ import oddsRouter from "./odds";
 import opportunitiesRouter from "./opportunities";
 import alertsRouter from "./alerts";
 import configRouter from "./config";
+import diagnosticsRouter from "./diagnostics";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(configRouter);
+router.use(diagnosticsRouter);
 router.use(sportsRouter);
 router.use(oddsRouter);
 router.use(opportunitiesRouter);

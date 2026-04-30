@@ -10,14 +10,13 @@ import {
 const router: IRouter = Router();
 
 const MAJOR_SPORTS = [
-  "americanfootball_nfl",
-  "basketball_nba",
-  "baseball_mlb",
-  "icehockey_nhl",
-  "soccer_epl",
-  "soccer_spain_la_liga",
-  "basketball_ncaab",
-  "mma_mixed_martial_arts",
+  "baseball",
+  "basketball",
+  "football",
+  "hockey",
+  "soccer",
+  "tennis",
+  "mma",
 ];
 
 async function fetchOpportunities(params: {

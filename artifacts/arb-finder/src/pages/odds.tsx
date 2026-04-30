@@ -9,8 +9,8 @@ import { formatDate } from "@/lib/format";
 import { Activity } from "lucide-react";
 
 export default function Odds() {
-  const [selectedSport, setSelectedSport] = useState<string>("americanfootball_nfl");
-  const [selectedMarket, setSelectedMarket] = useState<string>("h2h");
+  const [selectedSport, setSelectedSport] = useState<string>("baseball");
+  const [selectedMarket, setSelectedMarket] = useState<string>("moneyline");
 
   const { data: sports, isLoading: isLoadingSports } = useGetSports();
   const { data: games, isLoading: isLoadingOdds } = useGetOdds(
@@ -52,9 +52,9 @@ export default function Odds() {
                   <SelectValue placeholder="Select a market" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="h2h">Moneyline (H2H)</SelectItem>
-                  <SelectItem value="spreads">Spreads</SelectItem>
-                  <SelectItem value="totals">Totals (Over/Under)</SelectItem>
+                  <SelectItem value="moneyline">Moneyline</SelectItem>
+                  <SelectItem value="point_spread">Spread</SelectItem>
+                  <SelectItem value="total_points">Totals (Over/Under)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

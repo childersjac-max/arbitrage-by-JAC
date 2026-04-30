@@ -26,7 +26,7 @@ export default function Sports() {
       <div className="flex flex-col sm:flex-row justify-between gap-4 items-start sm:items-center">
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight">Supported Sports</h1>
-          <p className="text-muted-foreground">Directory of all sports and leagues tracked by OddsJam.</p>
+          <p className="text-muted-foreground">Directory of all sports and leagues tracked by Optic Odds.</p>
         </div>
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useOJSports, useOJOdds } from "@/hooks/use-oddsjam";
+import { useGetSports, useGetOdds } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,34 +12,13 @@ export default function Odds() {
   const [selectedSport, setSelectedSport] = useState<string>("americanfootball_nfl");
   const [selectedMarket, setSelectedMarket] = useState<string>("h2h");
 
-  const { data: sports, isLoading: isLoadingSports } = useOJSports();
-  const { data: games, isLoading: isLoadingOdds } = useOJOdds(
+  const { data: sports, isLoading: isLoadingSports } = useGetSports();
+  const { data: games, isLoading: isLoadingOdds } = useGetOdds(
     { sport: selectedSport, markets: selectedMarket },
-    !!selectedSport
+    { query: { queryKey: ["odds", selectedSport, selectedMarket], enabled: !!selectedSport } }
   );
 
   const activeSports = sports?.filter(s => s.active) || [];
-
-  const oddsData = games?.map(game => ({
-    id: game.id,
-    sport: game.sport_key,
-    homeTeam: game.home_team,
-    awayTeam: game.away_team,
-    commenceTime: game.commence_time,
-    bookmakerOdds: game.bookmakers.flatMap(bm =>
-      bm.markets.flatMap(mkt =>
-        mkt.outcomes.map(outcome => ({
-          bookmaker: bm.key,
-          bookmakerTitle: bm.title,
-          market: mkt.key,
-          outcome: outcome.name,
-          price: outcome.price,
-          point: outcome.point ?? null,
-          lastUpdate: mkt.last_update,
-        }))
-      )
-    ),
-  }));
 
   return (
     <div className="space-y-6">
@@ -91,7 +70,7 @@ export default function Odds() {
                 </div>
               ))}
             </div>
-          ) : !oddsData || oddsData.length === 0 ? (
+          ) : !games || games.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center border-t border-border border-dashed m-6 rounded-md bg-secondary/20">
               <Activity className="h-10 w-10 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold">No active games found</h3>
@@ -99,7 +78,7 @@ export default function Odds() {
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {oddsData.map(game => {
+              {games.map(game => {
                 const bookmakers = Array.from(new Set(game.bookmakerOdds.map(o => o.bookmakerTitle)));
                 const outcomes = Array.from(new Set(game.bookmakerOdds.map(o => o.outcome)));
 

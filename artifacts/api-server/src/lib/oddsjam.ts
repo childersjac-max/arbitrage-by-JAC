@@ -2,12 +2,15 @@ import { logger } from "./logger";
 
 const BASE_URL = "https://api.opticodds.com/api/v3";
 
+// North Carolina licensed sportsbooks (max 5 allowed per Optic Odds API request)
+// NC launched legal betting March 2024. All books below are licensed in NC.
+// Selected for maximum odds diversity to surface arbitrage opportunities.
 const US_SPORTSBOOKS = [
-  "draftkings",
-  "fanduel",
-  "betmgm",
-  "caesars",
-  "bet365",
+  "draftkings",  // DraftKings — largest US market share
+  "fanduel",     // FanDuel — second largest
+  "betmgm",      // BetMGM — unique odds models
+  "caesars",     // Caesars — frequent promotions create line discrepancies
+  "fanatics",    // Fanatics — aggressive NC market entry, often divergent lines
 ];
 
 function getApiKey(): string {

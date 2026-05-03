@@ -14,5 +14,3 @@
     "prettier": "^3.8.1"
   }
 }
-
-pnpm add -Dw @vercel/node

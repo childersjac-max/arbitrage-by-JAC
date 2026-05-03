@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "pnpm --filter arb-finder run build",
+  "buildCommand": "pnpm --filter arb-finder run build && cp -r artifacts/arb-finder/dist dist",
   "outputDirectory": "dist",
   "installCommand": "pnpm install --no-frozen-lockfile",
   "framework": null,

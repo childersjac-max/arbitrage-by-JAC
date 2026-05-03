@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "pnpm --filter arb-finder run build && cp -r artifacts/arb-finder/dist dist",
+  "buildCommand": "pnpm --filter arb-finder run build && cp -r /vercel/path0/artifacts/arb-finder/dist /vercel/path0/dist",
   "outputDirectory": "dist",
   "installCommand": "pnpm install --no-frozen-lockfile",
   "framework": null,

@@ -1,91 +1,113 @@
-const ODDSJAM_BASE = "https://api.oddsjam.com/api/v2";
+/**
+ * src/lib/oddsjam-client.ts
+ *
+ * Browser-side OddsJam API client.
+ *
+ * Flow:
+ *  1. On first call, fetches the OddsJam API key from /api/config (our own backend).
+ *     This keeps the key out of the browser bundle — it is never in client-side code.
+ *  2. Subsequent calls reuse the cached key (module-level singleton).
+ *  3. All OddsJam requests are made directly from the browser using the fetched key.
+ *
+ * Vercel note: /api/config is a serverless function (api/config.ts in the repo root).
+ * Dev note:    vite.config.ts proxies /api/* to localhost:3001 automatically.
+ */
 
-let cachedApiKey: string | null = null;
+import { apiUrl } from './api-base';
+
+const ODDSJAM_BASE = 'https://api.oddsjam.com/api/v2';
+
+// Module-level cache — resolved once per page load
+let apiKeyPromise: Promise<string> | null = null;
 
 async function getApiKey(): Promise<string> {
-  if (cachedApiKey) return cachedApiKey;
-  const res = await fetch("/api/config");
-  if (!res.ok) throw new Error("Failed to load API configuration");
-  const data = await res.json() as { oddsjamApiKey: string };
-  cachedApiKey = data.oddsjamApiKey;
-  return cachedApiKey;
+  if (!apiKeyPromise) {
+    apiKeyPromise = fetch(apiUrl('/api/config'))
+      .then((res) => {
+        if (!res.ok) throw new Error(`/api/config returned ${res.status}`);
+        return res.json();
+      })
+      .then((data: { apiKey: string }) => {
+        if (!data.apiKey) throw new Error('ODDSJAM_API_KEY is not configured on the server.');
+        return data.apiKey;
+      })
+      .catch((err) => {
+        // Reset so the next call retries instead of caching the failure
+        apiKeyPromise = null;
+        throw err;
+      });
+  }
+  return apiKeyPromise;
 }
 
-async function ojFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const apiKey = await getApiKey();
-  const url = new URL(`${ODDSJAM_BASE}${path}`);
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
-    }
-  }
-  const res = await fetch(url.toString(), {
-    headers: { "x-api-key": apiKey },
-  });
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface OddsJamGame {
+  id: string;
+  sport: string;
+  league: string;
+  home_team: string;
+  away_team: string;
+  start_date: string;
+}
+
+export interface OddsJamOdds {
+  game_id: string;
+  sportsbook: string;
+  market_name: string;
+  name: string; // outcome label, e.g. team name or Over/Under
+  price: number; // American odds integer
+  is_main: boolean;
+}
+
+export interface OddsJamSport {
+  name: string;
+  season_type: string;
+  is_live: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function ojFetch<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
+  const key = await getApiKey();
+  const url = new URL(`${ODDSJAM_BASE}${endpoint}`);
+  url.searchParams.set('key', key);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+
+  const res = await fetch(url.toString());
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`OddsJam API error ${res.status}: ${text}`);
+    const text = await res.text().catch(() => '');
+    throw new Error(`OddsJam ${endpoint} → ${res.status}: ${text}`);
   }
   return res.json() as Promise<T>;
 }
 
-export interface OJSport {
-  key: string;
-  group: string;
-  title: string;
-  description: string;
-  active: boolean;
-  has_outrights: boolean;
+// ---------------------------------------------------------------------------
+// Public API methods
+// ---------------------------------------------------------------------------
+
+/** Fetch all active games, optionally filtered by sport. */
+export async function fetchGames(sport?: string): Promise<OddsJamGame[]> {
+  const params: Record<string, string> = {};
+  if (sport) params['sport'] = sport;
+  const data = await ojFetch<{ data: OddsJamGame[] }>('/games', params);
+  return data.data ?? [];
 }
 
-export interface OJOutcome {
-  name: string;
-  price: number;
-  point?: number;
+/** Fetch live odds for a list of game IDs (or all games if omitted). */
+export async function fetchOdds(gameIds?: string[]): Promise<OddsJamOdds[]> {
+  const params: Record<string, string> = {};
+  if (gameIds?.length) params['game_id'] = gameIds.join(',');
+  const data = await ojFetch<{ data: OddsJamOdds[] }>('/game-odds', params);
+  return data.data ?? [];
 }
 
-export interface OJMarket {
-  key: string;
-  last_update: string;
-  outcomes: OJOutcome[];
-}
-
-export interface OJBookmaker {
-  key: string;
-  title: string;
-  markets: OJMarket[];
-}
-
-export interface OJGame {
-  id: string;
-  sport_key: string;
-  sport_title: string;
-  home_team: string;
-  away_team: string;
-  commence_time: string;
-  bookmakers: OJBookmaker[];
-}
-
-function unwrap<T>(data: T | { data: T }): T {
-  if (data && typeof data === "object" && "data" in (data as object)) {
-    return (data as { data: T }).data;
-  }
-  return data as T;
-}
-
-export async function fetchSports(): Promise<OJSport[]> {
-  const data = await ojFetch<OJSport[] | { data: OJSport[] }>("/sports");
-  return unwrap(data);
-}
-
-export async function fetchOdds(params: {
-  sport: string;
-  markets?: string;
-  bookmakers?: string;
-}): Promise<OJGame[]> {
-  const queryParams: Record<string, string> = { sport_key: params.sport };
-  if (params.markets) queryParams["markets"] = params.markets;
-  if (params.bookmakers) queryParams["bookmakers"] = params.bookmakers;
-  const data = await ojFetch<OJGame[] | { data: OJGame[] }>("/game-odds", queryParams);
-  return unwrap(data);
+/** Fetch all sports supported by OddsJam. */
+export async function fetchSports(): Promise<OddsJamSport[]> {
+  const data = await ojFetch<{ data: OddsJamSport[] }>('/sports');
+  return data.data ?? [];
 }

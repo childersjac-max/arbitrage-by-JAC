@@ -2,15 +2,18 @@ import { logger } from "./logger";
 
 const BASE_URL = "https://api.opticodds.com/api/v3";
 
-// North Carolina licensed sportsbooks (max 5 allowed per Optic Odds API request)
-// NC launched legal betting March 2024. All books below are licensed in NC.
-// Selected for maximum odds diversity to surface arbitrage opportunities.
-const US_SPORTSBOOKS = [
-  "draftkings",  // DraftKings — largest US market share
-  "fanduel",     // FanDuel — second largest
-  "betmgm",      // BetMGM — unique odds models
-  "caesars",     // Caesars — frequent promotions create line discrepancies
-  "fanatics",    // Fanatics — aggressive NC market entry, often divergent lines
+// All sportsbooks licensed in North Carolina (legal since March 11, 2024)
+// API allows max 5 per request — batched automatically in getOdds()
+const NC_SPORTSBOOKS = [
+  "draftkings",  // DraftKings
+  "fanduel",     // FanDuel
+  "betmgm",      // BetMGM
+  "caesars",     // Caesars
+  "bet365",      // Bet365
+  "fanatics",    // Fanatics
+  "hard_rock",   // Hard Rock Bet
+  "betrivers",   // BetRivers
+  "betparx",     // betPARX
 ];
 
 function getApiKey(): string {
@@ -171,8 +174,8 @@ export async function getOdds(params: {
   if (fixtures.length === 0) return [];
 
   const sportsbooks = params.bookmakers
-    ? params.bookmakers.split(",").slice(0, 5)
-    : US_SPORTSBOOKS;
+    ? params.bookmakers.split(",")
+    : NC_SPORTSBOOKS;
 
   const marketFilter = params.markets ? params.markets.split(",") : null;
 
@@ -180,19 +183,37 @@ export async function getOdds(params: {
   const MAIN_MARKETS = ["moneyline", "point_spread", "total_points", "total_goals", "total_rounds", "moneyline_3-way"];
   const markets = marketFilter ?? MAIN_MARKETS;
 
-  // 2. Fetch odds in batches of 5 fixtures (API limit)
-  const BATCH_SIZE = 5;
-  const allOddsData: OJFixtureOddsRaw[] = [];
-  for (let i = 0; i < fixtures.length; i += BATCH_SIZE) {
-    const batch = fixtures.slice(i, i + BATCH_SIZE);
-    const batchRes = await ojFetch<{ data: OJFixtureOddsRaw[] }>("/fixtures/odds", {
-      fixture_id: batch.map((f) => f.id),
-      sportsbook: sportsbooks,
-      market: markets,
-      odds_format: "american",
-    });
-    allOddsData.push(...(batchRes.data ?? []));
+  // 2. Fetch odds in batches — API limits: max 5 fixture_ids AND max 5 sportsbooks per request.
+  //    We batch both dimensions and merge all odds entries back per fixture.
+  const FIXTURE_BATCH = 5;
+  const BOOK_BATCH = 5;
+
+  // Accumulate odds keyed by fixture id so we can merge across sportsbook batches
+  const oddsByFixture = new Map<string, OJOddsEntry[]>();
+
+  for (let fi = 0; fi < fixtures.length; fi += FIXTURE_BATCH) {
+    const fixtureBatch = fixtures.slice(fi, fi + FIXTURE_BATCH);
+    const fixtureIds = fixtureBatch.map((f) => f.id);
+
+    for (let bi = 0; bi < sportsbooks.length; bi += BOOK_BATCH) {
+      const bookBatch = sportsbooks.slice(bi, bi + BOOK_BATCH);
+      const batchRes = await ojFetch<{ data: OJFixtureOddsRaw[] }>("/fixtures/odds", {
+        fixture_id: fixtureIds,
+        sportsbook: bookBatch,
+        market: markets,
+        odds_format: "american",
+      });
+      for (const f of batchRes.data ?? []) {
+        if (!oddsByFixture.has(f.id)) oddsByFixture.set(f.id, []);
+        oddsByFixture.get(f.id)!.push(...(f.odds ?? []));
+      }
+    }
   }
+
+  // Reconstruct array in fixture order with merged odds
+  const allOddsData: OJFixtureOddsRaw[] = fixtures
+    .filter((f) => oddsByFixture.has(f.id))
+    .map((f) => ({ ...f, odds: oddsByFixture.get(f.id)! } as OJFixtureOddsRaw));
 
   const oddsRes = { data: allOddsData };
 

@@ -76,7 +76,10 @@ export function useSports() {
     staleTime: 5 * 60_000,
   });
 }
-
+/** OddsJam sports list aliased to the name used by alerts and sports pages. */
+export function useOJSports() {
+  return useSports();
+}
 // ---------------------------------------------------------------------------
 // Arbitrage hooks
 // ---------------------------------------------------------------------------

@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "buildCommand": "pnpm --filter arb-finder run build",
+  "outputDirectory": "artifacts/arb-finder/dist",
+  "installCommand": "pnpm install",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

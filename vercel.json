@@ -1,16 +1,5 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "api/**/*.js", "use": "@vercel/node" },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": { "outputDirectory": "artifacts/dashboard/dist/public" }
-    }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
-  ]
+  "buildCommand": "node scripts/vercel-build.mjs",
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "framework": null
 }

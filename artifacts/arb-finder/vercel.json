@@ -1,11 +1,6 @@
 {
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "CommonJS",
-    "lib": ["ES2020"],
-    "strict": false,
-    "esModuleInterop": true,
-    "skipLibCheck": true
-  },
-  "include": ["./**/*.ts"]
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

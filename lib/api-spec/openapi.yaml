@@ -3,28 +3,26 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: Sports betting arbitrage finder API
+  description: API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
-  - name: sports
-    description: Sports and leagues
-  - name: odds
-    description: Live odds and arbitrage
-  - name: opportunities
-    description: Arbitrage opportunities
-  - name: alerts
-    description: Saved arbitrage alerts
+  - name: line-tracker
+    description: Line Tracker — bet slate from childersjac-max/Line-Tracker-Model
+  - name: nba-model
+    description: NBA Model — predictions from childersjac-max/nba-betting-model
+  - name: arbitrage
+    description: Arbitrage — live opportunities from OddsJam
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -33,194 +31,136 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
-  /config:
+  /line-tracker/slate:
     get:
-      operationId: getConfig
-      tags: [health]
-      summary: Get frontend configuration
-      description: Returns configuration values needed by the frontend (API keys, etc.)
+      operationId: getLineTrackerSlate
+      tags: [line-tracker]
+      summary: Get today's bet slate
+      description: Fetches and parses bet_slate_latest.csv from the Line-Tracker-Model GitHub repo
       responses:
         "200":
-          description: Configuration
+          description: Bet slate with metadata
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AppConfig"
-        "503":
-          description: Service not configured
+                $ref: "#/components/schemas/LineTrackerSlateResponse"
+        "500":
+          description: Failed to fetch slate
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /sports:
+  /line-tracker/patterns:
     get:
-      operationId: getSports
-      tags: [sports]
-      summary: Get available sports
-      description: Returns list of sports supported by OddsJam
+      operationId: getLineTrackerPatterns
+      tags: [line-tracker]
+      summary: Get discovered betting patterns
+      description: Fetches patterns.json from the Line-Tracker-Model GitHub repo
       responses:
         "200":
-          description: List of sports
+          description: Patterns data
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Sport"
-
-  /odds:
-    get:
-      operationId: getOdds
-      tags: [odds]
-      summary: Get live odds for a sport
-      description: Fetches live odds from OddsJam for arbitrage analysis
-      parameters:
-        - name: sport
-          in: query
-          required: true
-          schema:
-            type: string
-          description: Sport key (e.g. americanfootball_nfl)
-        - name: markets
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Comma-separated market keys (e.g. h2h,spreads,totals)
-        - name: bookmakers
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Comma-separated bookmaker keys to filter
-      responses:
-        "200":
-          description: Live odds data
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/GameOdds"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "502":
-          description: OddsJam API error
+                $ref: "#/components/schemas/PatternsResponse"
+        "500":
+          description: Failed to fetch patterns
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /opportunities:
+  /nba-model/predictions:
+    get:
+      operationId: getNbaModelPredictions
+      tags: [nba-model]
+      summary: Get today's NBA predictions
+      description: Fetches predictions.json from the nba-betting-model GitHub repo
+      responses:
+        "200":
+          description: NBA predictions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NbaPredictionsResponse"
+        "500":
+          description: Failed to fetch predictions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /nba-model/bet-log:
+    get:
+      operationId: getNbaModelBetLog
+      tags: [nba-model]
+      summary: Get NBA bet log
+      description: Fetches bet_log.json from the nba-betting-model GitHub repo
+      responses:
+        "200":
+          description: NBA bet log entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NbaBetLogResponse"
+        "500":
+          description: Failed to fetch bet log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /nba-model/backtest:
+    get:
+      operationId: getNbaModelBacktest
+      tags: [nba-model]
+      summary: Get NBA backtest metrics
+      description: Fetches backtest.json from the nba-betting-model GitHub repo
+      responses:
+        "200":
+          description: NBA backtest metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NbaBacktestResponse"
+        "500":
+          description: Failed to fetch backtest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /arbitrage/opportunities:
     get:
       operationId: getArbitrageOpportunities
-      tags: [opportunities]
-      summary: Get arbitrage opportunities
-      description: Returns computed arbitrage opportunities sorted by profit percentage
+      tags: [arbitrage]
+      summary: Get live arbitrage opportunities
+      description: >
+        Calls OddsJam API using ODDSJAM_API_KEY env var to find live arbitrage
+        opportunities. Falls back gracefully if the key is not configured.
       parameters:
         - name: sport
           in: query
           required: false
           schema:
             type: string
-          description: Filter by sport key
-        - name: minProfit
-          in: query
-          required: false
-          schema:
-            type: number
-          description: Minimum profit percentage (default 0)
+          description: Filter by sport key (e.g. basketball_nba)
         - name: market
           in: query
           required: false
           schema:
             type: string
-          description: Filter by market type (h2h, spreads, totals)
+          description: Filter by market (h2h, spreads, totals)
       responses:
         "200":
-          description: List of arbitrage opportunities
+          description: List of arbitrage opportunities sorted by profit %
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ArbitrageOpportunity"
-
-  /opportunities/summary:
-    get:
-      operationId: getOpportunitiesSummary
-      tags: [opportunities]
-      summary: Get summary stats for arbitrage opportunities
-      description: Returns aggregate stats on current arbitrage opportunities
-      responses:
-        "200":
-          description: Summary stats
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OpportunitiesSummary"
-
-  /alerts:
-    get:
-      operationId: getAlerts
-      tags: [alerts]
-      summary: Get saved alerts
-      description: Returns user-configured arbitrage alerts
-      responses:
-        "200":
-          description: List of alerts
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Alert"
-    post:
-      operationId: createAlert
-      tags: [alerts]
-      summary: Create an alert
-      description: Save an arbitrage alert configuration
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateAlertBody"
-      responses:
-        "201":
-          description: Alert created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Alert"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /alerts/{id}:
-    delete:
-      operationId: deleteAlert
-      tags: [alerts]
-      summary: Delete an alert
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "204":
-          description: Alert deleted
-        "404":
-          description: Alert not found
+                $ref: "#/components/schemas/ArbitrageResponse"
+        "500":
+          description: Failed to fetch opportunities
           content:
             application/json:
               schema:
@@ -236,227 +176,248 @@ components:
       required:
         - status
 
-    AppConfig:
-      type: object
-      properties:
-        oddsjamApiKey:
-          type: string
-      required:
-        - oddsjamApiKey
-
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
+        message:
+          type: string
       required:
         - error
 
-    Sport:
+    BetSlateRow:
       type: object
       properties:
-        key:
-          type: string
-        group:
-          type: string
-        title:
-          type: string
-        description:
-          type: string
-        active:
-          type: boolean
-        hasOutrights:
-          type: boolean
-      required:
-        - key
-        - group
-        - title
-        - description
-        - active
-        - hasOutrights
-
-    BookmakerOdds:
-      type: object
-      properties:
-        bookmaker:
-          type: string
-        bookmakerTitle:
+        sport:
           type: string
         market:
           type: string
-        outcome:
+        side:
           type: string
-        price:
+        matchup:
+          type: string
+        game_time:
+          type: string
+        hours_to_game:
           type: number
-        point:
-          type: ["number", "null"]
-        lastUpdate:
+        american_odds:
+          type: number
+        american_odds_display:
           type: string
-      required:
-        - bookmaker
-        - bookmakerTitle
-        - market
-        - outcome
-        - price
-        - lastUpdate
+        book:
+          type: string
+        model_prob:
+          type: number
+        fair_prob:
+          type: number
+        edge_pct:
+          type: number
+        ev_pct:
+          type: number
+        bet_pct:
+          type: number
+        bet_usd:
+          type: number
+        confidence:
+          type: string
+        signals:
+          type: string
+        n_signals:
+          type: number
+        is_arb_side:
+          type: string
+        arb_partner_book:
+          type: string
+        arb_partner_price:
+          type: string
+        arb_margin_pct:
+          type: number
+        injured_players:
+          type: string
+        side_injury_score:
+          type: number
+        opp_injury_score:
+          type: number
 
-    GameOdds:
+    LineTrackerSlateResponse:
       type: object
       properties:
-        id:
-          type: string
-        sport:
-          type: string
-        homeTeam:
-          type: string
-        awayTeam:
-          type: string
-        commenceTime:
-          type: string
-        bookmakerOdds:
+        bets:
           type: array
           items:
-            $ref: "#/components/schemas/BookmakerOdds"
+            $ref: "#/components/schemas/BetSlateRow"
+        total:
+          type: integer
+        fetched_at:
+          type: string
       required:
-        - id
-        - sport
-        - homeTeam
-        - awayTeam
-        - commenceTime
-        - bookmakerOdds
+        - bets
+        - total
+        - fetched_at
+
+    PatternsResponse:
+      type: object
+      description: Raw patterns.json from Line-Tracker-Model (pass-through)
+      additionalProperties: true
+
+    NbaPrediction:
+      type: object
+      properties:
+        game_id:
+          type: string
+        matchup:
+          type: string
+        team:
+          type: string
+        market:
+          type: string
+        side:
+          type: string
+        odds:
+          type: number
+        model_prob:
+          type: number
+        edge:
+          type: number
+        kelly_pct:
+          type: number
+        grade:
+          type: string
+        game_time:
+          type: string
+      additionalProperties: true
+
+    NbaPredictionsResponse:
+      type: object
+      properties:
+        predictions:
+          type: array
+          items:
+            $ref: "#/components/schemas/NbaPrediction"
+        total:
+          type: integer
+        fetched_at:
+          type: string
+      required:
+        - predictions
+        - total
+        - fetched_at
+
+    NbaBetLogResponse:
+      type: object
+      description: Raw bet log JSON from nba-betting-model
+      properties:
+        bets:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        fetched_at:
+          type: string
+      required:
+        - bets
+        - fetched_at
+
+    NbaBacktestResponse:
+      type: object
+      description: Backtest metrics from nba-betting-model
+      properties:
+        roi_pct:
+          type: number
+        win_rate:
+          type: number
+        total_bets:
+          type: integer
+        total_pnl:
+          type: number
+        sharpe:
+          type: number
+        max_drawdown_pct:
+          type: number
+        by_market:
+          type: object
+          additionalProperties: true
+        bankroll_history:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        fetched_at:
+          type: string
+      additionalProperties: true
 
     ArbLeg:
       type: object
       properties:
-        bookmaker:
+        side:
           type: string
-        bookmakerTitle:
-          type: string
-        outcome:
+        book:
           type: string
         price:
           type: number
+        line:
+          type: number
+          nullable: true
         stake:
           type: number
-        impliedProbability:
-          type: number
+          nullable: true
       required:
-        - bookmaker
-        - bookmakerTitle
-        - outcome
+        - side
+        - book
         - price
-        - stake
-        - impliedProbability
 
     ArbitrageOpportunity:
       type: object
       properties:
-        id:
+        event_id:
           type: string
-        gameId:
+        sport_key:
           type: string
-        sport:
+        commence_time:
           type: string
-        homeTeam:
+        home_team:
           type: string
-        awayTeam:
-          type: string
-        commenceTime:
+        away_team:
           type: string
         market:
           type: string
-        profitPercent:
-          type: number
-        totalImpliedProbability:
+        margin_pct:
           type: number
         legs:
           type: array
           items:
             $ref: "#/components/schemas/ArbLeg"
-        detectedAt:
-          type: string
       required:
-        - id
-        - gameId
-        - sport
-        - homeTeam
-        - awayTeam
-        - commenceTime
+        - sport_key
+        - home_team
+        - away_team
         - market
-        - profitPercent
-        - totalImpliedProbability
+        - margin_pct
         - legs
-        - detectedAt
 
-    OpportunitiesSummary:
+    ArbitrageResponse:
       type: object
       properties:
-        totalOpportunities:
-          type: integer
-        averageProfitPercent:
-          type: number
-        bestProfitPercent:
-          type: number
-        sportBreakdown:
+        opportunities:
           type: array
           items:
-            type: object
-            properties:
-              sport:
-                type: string
-              count:
-                type: integer
-              avgProfit:
-                type: number
-            required:
-              - sport
-              - count
-              - avgProfit
-        marketBreakdown:
-          type: array
-          items:
-            type: object
-            properties:
-              market:
-                type: string
-              count:
-                type: integer
-            required:
-              - market
-              - count
-      required:
-        - totalOpportunities
-        - averageProfitPercent
-        - bestProfitPercent
-        - sportBreakdown
-        - marketBreakdown
-
-    Alert:
-      type: object
-      properties:
-        id:
+            $ref: "#/components/schemas/ArbitrageOpportunity"
+        total:
           type: integer
-        sport:
-          type: ["string", "null"]
-        market:
-          type: ["string", "null"]
-        minProfitPercent:
-          type: number
-        createdAt:
+        fetched_at:
           type: string
+        configured:
+          type: boolean
+          description: False if ODDSJAM_API_KEY is not set
+        access_denied:
+          type: boolean
+          description: True if the API key lacks access to the arbitrage endpoint
+        access_denied_reason:
+          type: string
+          description: Human-readable reason for access denial
       required:
-        - id
-        - minProfitPercent
-        - createdAt
-
-    CreateAlertBody:
-      type: object
-      properties:
-        sport:
-          type: ["string", "null"]
-        market:
-          type: ["string", "null"]
-        minProfitPercent:
-          type: number
-      required:
-        - minProfitPercent
+        - opportunities
+        - total
+        - fetched_at
+        - configured

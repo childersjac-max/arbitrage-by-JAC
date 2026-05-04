@@ -1,0 +1,104 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "QXruc1oEBWDhkkpebmrw7"
+uri = "file://line-tracker-improvements.tar.gz"
+type = "unspecified"
+title = "Line-Tracker-Model — Tier 1 improvements (full bundle)"
+
+[[outputs]]
+id = "Od1cfc8noUwzPEsNgbabQ"
+uri = "file://line-tracker-improvements/improvements.patch.txt"
+type = "text"
+title = "improvements.patch — unified diff (rename to .patch and apply with git apply)"
+
+[[outputs]]
+id = "QZwisdQQO3rtxSaMfohLb"
+uri = "file://line-tracker-improvements/README_APPLY.md"
+type = "text"
+title = "How to apply & what changed"
+
+[[outputs]]
+id = "rjuGdk-2Vspq-yf2nGxi-"
+uri = "file://oddsjam-adapter.tar.gz"
+type = "unspecified"
+title = "OddsJam adapter — full bundle"
+
+[[outputs]]
+id = "uU82T-tD9_61sfsQ74okx"
+uri = "file://oddsjam-adapter/oddsjam_adapter.patch.txt"
+type = "text"
+title = "oddsjam_adapter.patch — unified diff (rename to .patch and apply with git apply)"
+
+[[outputs]]
+id = "O4MB66MrRHDGDHvfx25xl"
+uri = "file://oddsjam-adapter/README_APPLY.md"
+type = "text"
+title = "How to apply, switch sources, and verify OddsJam endpoints"
+
+[[outputs]]
+id = "f9_rtoLCHMbNSFtVgmDaY"
+uri = "file://oddsjam-history-arb.tar.gz"
+type = "unspecified"
+title = "OddsJam max-history + arbitrage angle — full bundle"
+
+[[outputs]]
+id = "FU0XopMl6OfS-k2aSf136"
+uri = "file://oddsjam-history-arb/oddsjam_history_arb.patch.txt"
+type = "text"
+title = "Unified diff (rename to .patch and apply with git apply)"
+
+[[outputs]]
+id = "SLwS6sDaPcZ0I3p_b20LE"
+uri = "file://oddsjam-history-arb/README_APPLY.md"
+type = "text"
+title = "How to apply, run the max-history pull, and verify the arb angle"
+
+[[outputs]]
+id = "-S-Rxf0cKnaxT-EzIA0np"
+uri = "file://github-workflows.tar.gz"
+type = "unspecified"
+title = "Updated daily workflow — now pushes slate to repo so the app can read it"
+
+[[outputs]]
+id = "Dr7wH8TdoijIKlv7_hQnP"
+uri = "file://github-workflows/.github/workflows/daily_pipeline.yml"
+type = "unspecified"
+title = "daily_pipeline.yml — updated workflow file"
+
+[[outputs]]
+id = "i2EsvD6BHI4DAUDX1a9z3"
+uri = "file://github-workflows/README_APPLY.md"
+type = "text"
+title = "How to add it to your repo"
+
+[[outputs]]
+id = "l2LTQ4FP9qamvXWcJf4QN"
+uri = "file://model-fix.tar.gz"
+type = "unspecified"
+title = "model.py fix — full bundle"
+
+[[outputs]]
+id = "WKCC8iOA-GZYUG8pAtwir"
+uri = "file://model-fix/model_fix.patch.txt"
+type = "text"
+title = "model_fix.patch — minimal diff only"
+
+[[outputs]]
+id = "b2T9JRGNin7dT1_mueoAi"
+uri = "file://model-fix/README_APPLY.md"
+type = "text"
+title = "How to apply"
+
+[[outputs]]
+id = "ZKzaJb0XMxBwzaxHu0Nh9"
+uri = "file://line-tracker-app-model-info.tar.gz"
+type = "unspecified"
+title = "Line-Tracker-App — updated index.html with rewritten Model Info tab"
+
+[[outputs]]
+id = "tlzgjTl3BQIm2nbc9o2fp"
+uri = "file://line-tracker-app-slate-update.tar.gz"
+type = "unspecified"
+title = "Line-Tracker-App — updated index.html (slate tab + model info)"

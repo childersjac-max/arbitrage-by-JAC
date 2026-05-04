@@ -1,0 +1,1037 @@
+--- a/data/sources/base.py	2026-04-30 05:23:49.027658813 +0000
++++ b/data/sources/base.py	2026-04-30 05:28:14.395741349 +0000
+@@ -48,7 +48,12 @@
+     # ---------- scores / results ----------
+     @abstractmethod
+     def fetch_scores(self, sport_key: str, days_from: int = 3) -> list[dict]:
+-        """Return completed-game score records (canonical shape)."""
++        """Return completed-game score records (canonical shape).
++
++        Providers should accept the largest `days_from` they can serve;
++        callers may request up to a year for backfill purposes. Providers
++        that cap the lookback (e.g. The Odds API at 3 days) should clamp
++        internally and document the limit."""
+         ...
+ 
+     # ---------- optional ----------
+@@ -56,5 +61,48 @@
+         """Optional. Default = empty list. Implement if the provider supports it."""
+         return []
+ 
++    def fetch_arbitrage_opportunities(
++        self,
++        sport_key: str | None = None,
++        markets: Iterable[str] | None = None,
++    ) -> list[dict]:
++        """Optional. Pre-computed arbitrage feed from the provider, if any.
++
++        Default returns []. The arbitrage angle in features/arbitrage.py
++        will still detect arbs locally from the cross-book odds we
++        already pull, so this is purely an optional hint.
++
++        Providers that implement this should return a list of records with
++        the canonical shape:
++          {
++            "event_id":     str,
++            "sport_key":    str,
++            "commence_time": str,
++            "home_team":    str,
++            "away_team":    str,
++            "market":       "h2h" | "spreads" | "totals",
++            "margin_pct":   float,                 # >0 if arb
++            "legs": [
++              {"side": str, "book": str, "price": int, "line": float|None},
++              {"side": str, "book": str, "price": int, "line": float|None},
++            ],
++          }
++        """
++        return []
++
++    # ---------- max-history hints ----------
++    @property
++    def max_historical_days(self) -> int:
++        """Maximum days back the provider will reliably serve historical
++        odds for. Bootstrap scripts use this to decide how far to crawl.
++        Override in subclasses; default is conservative."""
++        return 30
++
++    @property
++    def max_scores_days(self) -> int:
++        """Maximum days back the scores endpoint will return. The Odds
++        API caps at 3; OddsJam goes much further."""
++        return 3
++
+     def __repr__(self) -> str:
+         return f"<OddsSource name={self.name!r}>"
+--- a/data/sources/oddsjam.py	2026-04-30 05:23:49.028658811 +0000
++++ b/data/sources/oddsjam.py	2026-04-30 05:28:14.404760483 +0000
+@@ -45,8 +45,16 @@
+     "historical_odds":  "/historical-odds",      # historical snapshot at a timestamp
+     "scores":           "/scores",               # completed-game scores
+     "injuries":         "/injuries",             # injury reports (optional)
++    "arbitrage":        "/arbitrage",            # OddsJam arbitrage feed (optional)
++    "positive_ev":      "/positive-ev",          # OddsJam +EV feed (not used; here for reference)
+ }
+ 
++# How far back OddsJam will reliably serve historical odds.
++# OddsJam's marketing claims multi-year coverage; 365 is a safe default
++# for the bootstrap script. Adjust per your subscription tier.
++MAX_HISTORICAL_DAYS = 365
++MAX_SCORES_DAYS     = 365
++
+ # Map our internal Odds-API sport_keys -> OddsJam league identifiers.
+ # Confirm these against /sports in your dashboard. Any league name OddsJam
+ # returns for these sports should work; the strings below are the conventional
+@@ -100,6 +108,15 @@
+ class OddsJamSource(OddsSource):
+     name = "oddsjam"
+ 
++    # Long-history hints (read by bootstrap_oddsjam.py)
++    @property
++    def max_historical_days(self) -> int:
++        return MAX_HISTORICAL_DAYS
++
++    @property
++    def max_scores_days(self) -> int:
++        return MAX_SCORES_DAYS
++
+     def __init__(self, api_key: str | None = None):
+         self.api_key = api_key or os.environ.get("ODDSJAM_API_KEY", "")
+         if not self.api_key:
+@@ -274,6 +291,70 @@
+         rows = payload.get("data") if isinstance(payload, dict) else payload
+         return self._normalize_scores(rows or [], sport_key)
+ 
++    # ---------- arbitrage (optional, OddsJam-specific) ----------
++    def fetch_arbitrage_opportunities(
++        self,
++        sport_key: str | None = None,
++        markets: Iterable[str] | None = None,
++    ) -> list[dict]:
++        """Pull OddsJam's pre-computed arbitrage feed.
++
++        Returns canonical arb records (see base.py docstring) or [] if the
++        endpoint isn't available on your plan. Local arb detection in
++        features/arbitrage.py runs independently, so an empty result here
++        does NOT disable the arbitrage angle in the model."""
++        markets = list(markets) if markets else ["h2h", "spreads", "totals"]
++        params: dict = {}
++        if sport_key:
++            league = SPORT_TO_LEAGUE.get(sport_key)
++            if league:
++                params["sport"]  = SPORT_TO_SPORT.get(sport_key, "")
++                params["league"] = league
++        oj_markets = [MARKET_NAME[m] for m in markets if m in MARKET_NAME]
++        if oj_markets:
++            params["market"] = ",".join(oj_markets)
++
++        payload = self._get(PATHS["arbitrage"], params)
++        if not payload:
++            return []
++        rows = payload.get("data") if isinstance(payload, dict) else payload
++        if not rows:
++            return []
++        out = []
++        for row in rows:
++            mkt_raw = row.get("market") or row.get("market_name") or ""
++            mkt     = MARKET_KEY_FROM_ODDSJAM.get(mkt_raw, mkt_raw.lower().replace(" ", "_"))
++            legs_raw = row.get("legs") or row.get("bets") or []
++            legs = []
++            for leg in legs_raw:
++                legs.append({
++                    "side":  leg.get("name") or leg.get("bet_name") or leg.get("side"),
++                    "book":  self._book_key(leg.get("sportsbook") or leg.get("book") or ""),
++                    "price": _to_int_american(leg.get("price") or leg.get("odds")
++                                                or leg.get("american_odds")),
++                    "line":  _to_float(leg.get("point") or leg.get("line")
++                                        or leg.get("handicap")),
++                })
++            margin = row.get("profit_margin") or row.get("margin_pct") or row.get("arbitrage_percentage")
++            try:
++                margin = float(margin) if margin is not None else 0.0
++            except (TypeError, ValueError):
++                margin = 0.0
++            # Some payloads express margin as decimal (0.012) rather than %
++            if 0.0 < margin < 1.0:
++                margin = margin * 100.0
++            out.append({
++                "event_id":      row.get("game_id") or row.get("id") or row.get("event_id"),
++                "sport_key":     sport_key or row.get("sport_key", ""),
++                "commence_time": self._to_iso(row.get("start_date") or row.get("commence_time")),
++                "home_team":     row.get("home_team", ""),
++                "away_team":     row.get("away_team", ""),
++                "market":        mkt,
++                "margin_pct":    margin,
++                "legs":          legs,
++            })
++        return out
++
+     # ---------- injuries (optional) ----------
+     def fetch_injuries(self, sport_key: str) -> list[dict]:
+         league = SPORT_TO_LEAGUE.get(sport_key)
+--- a/data/historical.py	2026-04-30 05:23:49.032658804 +0000
++++ b/data/historical.py	2026-04-30 05:28:14.387468244 +0000
+@@ -2,23 +2,24 @@
+ # =====================================================================
+ # HISTORICAL DATA PULLER
+ # =====================================================================
+-# Pulls historical odds snapshots from The Odds API going back N days.
+-# Each day is sampled at multiple timestamps to simulate line movement.
+-# Then pulls completed scores to generate real outcome labels.
++# Pulls historical odds snapshots going back N days from the configured
++# data source (The Odds API or OddsJam). Each day is sampled at multiple
++# timestamps to simulate line movement, then completed scores are pulled
++# to generate real outcome labels.
+ #
+ # This replaces synthetic training data with real historical data,
+ # dramatically improving model accuracy.
+ #
+-# API usage estimate:
+-#   3 sports × 4 timestamps/day × 30 days = 360 historical odds calls
+-#   3 sports × 30 days of scores          =  90 score calls
+-#   Total: ~450 calls
++# API usage estimate (defaults):
++#   THE ODDS API:  3 sports × 4 hrs × 30 days = 360 historical odds calls
++#   ODDSJAM:       6 sports × 8 hrs × 365 days ≈ 17,520 calls
++#                  (rate-limited; resume support skips already-pulled
++#                   timestamps so you can re-run safely)
+ # =====================================================================
+ 
+ import os
+ import json
+ import time
+-import requests
+ from datetime import datetime, timezone, timedelta
+ from pathlib import Path
+ 
+@@ -40,16 +41,59 @@
+ 
+ LINE_HISTORY_DIR.mkdir(exist_ok=True)
+ 
+-# Sports to pull historical data for
+-HISTORICAL_SPORTS = {
++# Sports we know how to pull. The Odds API path is expensive so the
++# the-odds-api default is the original 3-sport set; OddsJam unlocks the
++# full 6 by default. Override either with HISTORICAL_SPORTS env var
++# (comma-separated sport_keys).
++_FULL_SPORTS = {
++    "americanfootball_nfl":   "NFL",
++    "basketball_nba":         "NBA",
++    "baseball_mlb":           "MLB",
++    "icehockey_nhl":          "NHL",
++    "americanfootball_ncaaf": "CFB",
++    "basketball_ncaab":       "CBB",
++}
++_THE_ODDS_API_DEFAULT = {
+     "basketball_nba": "NBA",
+     "baseball_mlb":   "MLB",
+     "icehockey_nhl":  "NHL",
+ }
+ 
+-# Sample these hours each day for line movement simulation
+-# Morning open, midday, afternoon, evening close
+-DAILY_HOURS = [9, 13, 17, 21]
++
++def _resolve_historical_sports() -> dict:
++    env = os.environ.get("HISTORICAL_SPORTS", "").strip()
++    if env:
++        keys = [k.strip() for k in env.split(",") if k.strip()]
++        return {k: _FULL_SPORTS.get(k, k.upper()) for k in keys if k in _FULL_SPORTS}
++    if ODDS_DATA_SOURCE == "oddsjam":
++        return dict(_FULL_SPORTS)
++    return dict(_THE_ODDS_API_DEFAULT)
++
++
++HISTORICAL_SPORTS = _resolve_historical_sports()
++
++# Sample these hours each day for line movement simulation.
++# Override via DAILY_HOURS env var (comma-separated 0-23). OddsJam gets
++# 8x/day by default for richer line-movement features.
++_DEFAULT_HOURS_THE_ODDS_API = [9, 13, 17, 21]
++_DEFAULT_HOURS_ODDSJAM      = [3, 7, 10, 13, 16, 19, 21, 23]
++
++
++def _resolve_daily_hours() -> list[int]:
++    env = os.environ.get("DAILY_HOURS", "").strip()
++    if env:
++        try:
++            return sorted({int(h) for h in env.split(",") if h.strip()})
++        except ValueError:
++            pass
++    return list(_DEFAULT_HOURS_ODDSJAM if ODDS_DATA_SOURCE == "oddsjam"
++                else _DEFAULT_HOURS_THE_ODDS_API)
++
++
++DAILY_HOURS = _resolve_daily_hours()
++
++# Polite delay between historical-odds calls (seconds).
++PULL_SLEEP_SEC = float(os.environ.get("HISTORICAL_PULL_SLEEP", "0.5"))
+ 
+ PUBLIC_BOOKS = ["draftkings", "fanduel", "betmgm", "bovada", "williamhill_us", "bet365"]
+ SHARP_BOOKS  = ["pinnacle", "circa", "bookmaker"]
+@@ -70,8 +114,12 @@
+ 
+ 
+ def fetch_historical_scores(sport_key, days_from):
+-    """Fetch completed scores for the past N days."""
+-    return _src().fetch_scores(sport_key, days_from=days_from)
++    """Fetch completed scores for the past N days. Source-aware: clamped
++    to the source's max_scores_days when known."""
++    src = _src()
++    cap = getattr(src, "max_scores_days", 3)
++    days_from = max(1, min(int(days_from), int(cap or days_from)))
++    return src.fetch_scores(sport_key, days_from=days_from)
+ 
+ 
+ # ── Line history helpers ──────────────────────────────────────────────
+@@ -128,20 +176,55 @@
+         json.dump(history, f, indent=2)
+ 
+ 
++# ── Resume helpers ────────────────────────────────────────────────────
++
++def _build_pulled_index() -> dict:
++    """Scan line_history/ once and return {sport_key: set(timestamps)}.
++
++    Used to skip (sport, timestamp) pairs we've already fetched. Massive
++    speedup when re-running a 365-day OddsJam crawl after a partial run.
++    A timestamp is considered 'pulled' for a sport if we have it on at
++    least one event of that sport — historical pulls for a (sport, ts)
++    pair return ALL events for that league at that moment, so partial
++    coverage is essentially impossible.
++    """
++    idx: dict = {}
++    if not LINE_HISTORY_DIR.exists():
++        return idx
++    for p in LINE_HISTORY_DIR.glob("*.json"):
++        try:
++            with open(p) as f:
++                h = json.load(f)
++        except Exception:
++            continue
++        sk = h.get("sport_key")
++        if not sk:
++            continue
++        bucket = idx.setdefault(sk, set())
++        for snap in h.get("snapshots", []):
++            ts = snap.get("timestamp")
++            if ts:
++                bucket.add(ts)
++    return idx
++
++
+ # ── Main historical pull ──────────────────────────────────────────────
+ 
+-def pull_historical_odds(days_back=30):
++def pull_historical_odds(days_back=30, resume=True):
+     """
+     Pull historical odds snapshots for the past N days.
+     Builds line movement history for completed games.
+ 
++    resume: skip (sport, timestamp) pairs already saved (default True).
++
+     Returns: (n_events, n_snapshots)
+     """
+     print(f"\n=== PULLING HISTORICAL ODDS ({days_back} days) ===\n")
+ 
+     now = datetime.now(timezone.utc)
+-    total_events   = 0
++    total_events    = 0
+     total_snapshots = 0
++    total_skipped   = 0
+ 
+     # Generate timestamps: N days back, sampled at DAILY_HOURS
+     timestamps = []
+@@ -152,15 +235,31 @@
+             if ts < now:
+                 timestamps.append(ts.strftime("%Y-%m-%dT%H:%M:%SZ"))
+ 
+-    print(f"Pulling {len(timestamps)} snapshots across {days_back} days...")
+-    print(f"Sports: {list(HISTORICAL_SPORTS.keys())}\n")
++    print(f"Source:       {_src().name}")
++    print(f"Sports:       {list(HISTORICAL_SPORTS.keys())}")
++    print(f"Daily hours:  {DAILY_HOURS}")
++    print(f"Timestamps:   {len(timestamps)} per sport "
++          f"(across {days_back} days)")
++    pulled_index = _build_pulled_index() if resume else {}
++    if resume and pulled_index:
++        already = sum(len(v) for v in pulled_index.values())
++        print(f"Resume mode:  found {already} (sport,ts) pairs already pulled — will skip\n")
++    else:
++        print()
+ 
+     for sport_key, label in HISTORICAL_SPORTS.items():
+         print(f"─── {label} ───")
+-        sport_events = 0
+-        sport_snaps  = 0
++        sport_events  = 0
++        sport_snaps   = 0
++        sport_skipped = 0
++        already_have  = pulled_index.get(sport_key, set())
+ 
+         for ts in timestamps:
++            if resume and ts in already_have:
++                sport_skipped += 1
++                total_skipped  += 1
++                continue
++
+             events = fetch_historical_odds(sport_key, ts)
+ 
+             for event in events:
+@@ -169,10 +268,9 @@
+                 if not event_id:
+                     continue
+ 
+-                # Skip games still in the future at this snapshot
++                # Skip games already over at this snapshot time
+                 htg = hours_to_game(flat.get("commence_time", ""), ts)
+                 if htg is not None and htg < -3.0:
+-                    # Game already over at this snapshot time — skip
+                     continue
+ 
+                 snap = {
+@@ -197,23 +295,22 @@
+                     sport_events += 1
+                     total_events += 1
+                 else:
+-                    # Avoid duplicate timestamps
+                     existing_ts = {s["timestamp"] for s in history["snapshots"]}
+                     if ts not in existing_ts:
+                         history["snapshots"].append(snap)
+-                        # Keep snapshots sorted by time
+                         history["snapshots"].sort(key=lambda s: s["timestamp"])
+ 
+                 save_history(history)
+-                sport_snaps += 1
++                sport_snaps  += 1
+                 total_snapshots += 1
+ 
+-            # Polite delay between API calls
+-            time.sleep(0.5)
++            time.sleep(PULL_SLEEP_SEC)
+ 
+-        print(f"  {label}: {sport_events} new events, {sport_snaps} snapshots saved")
++        print(f"  {label}: {sport_events} new events, {sport_snaps} snapshots saved, "
++              f"{sport_skipped} timestamps skipped (already pulled)")
+ 
+-    print(f"\n✅ Historical odds complete: {total_events} events, {total_snapshots} snapshots")
++    print(f"\n✅ Historical odds complete: {total_events} events, "
++          f"{total_snapshots} snapshots, {total_skipped} skipped (resume).")
+     return total_events, total_snapshots
+ 
+ 
+@@ -222,11 +319,14 @@
+     Pull completed game scores for the past N days.
+     Maps results to event IDs in outcomes.json.
+ 
++    For sources that cap days_from (The Odds API: 3) the call is clamped
++    internally; for OddsJam (365) the full window is requested in chunks
++    of source's `max_scores_days`.
++
+     Returns: n_new_outcomes
+     """
+     print(f"\n=== PULLING HISTORICAL SCORES ({days_back} days) ===\n")
+ 
+-    # Load existing outcomes
+     if OUTCOMES_FILE.exists():
+         with open(OUTCOMES_FILE) as f:
+             outcomes = json.load(f)
+@@ -234,45 +334,51 @@
+         outcomes = {}
+ 
+     new_count = 0
++    src = _src()
++    chunk = max(1, int(getattr(src, "max_scores_days", 3) or 3))
+ 
+     for sport_key, label in HISTORICAL_SPORTS.items():
+-        print(f"  {label}: fetching scores...")
+-        # The Odds API scores endpoint supports up to 3 days
+-        # For historical, we call it multiple times
+-        # Actually it supports daysFrom up to 3 — for 30 days we
+-        # rely on the line history matching + the 3-day rolling window
+-        # that runs daily. Here we pull max available.
+-        games = fetch_historical_scores(sport_key, days_from=3)
+-
+-        for game in games:
+-            if not game.get("completed"):
+-                continue
+-            eid  = game.get("id")
+-            home = game.get("home_team", "")
+-            away = game.get("away_team", "")
+-
+-            if f"{eid}_home_ml" in outcomes:
+-                continue
++        print(f"  {label}: fetching scores ({days_back}d in chunks of {chunk}d)...")
++        # Iterate in chunks so providers with a small days_from cap
++        # (The Odds API = 3) still get coverage when called repeatedly
++        # over many runs. For OddsJam (365) this is just one call.
++        remaining = days_back
++        while remaining > 0:
++            window = min(remaining, chunk)
++            games  = fetch_historical_scores(sport_key, days_from=window)
+ 
+-            scores = {
+-                s["name"]: int(float(s["score"]))
+-                for s in (game.get("scores") or [])
+-                if s.get("score")
+-            }
+-            hs  = scores.get(home)
+-            as_ = scores.get(away)
+-
+-            if hs is None or as_ is None:
+-                continue
++            for game in games:
++                if not game.get("completed"):
++                    continue
++                eid  = game.get("id")
++                home = game.get("home_team", "")
++                away = game.get("away_team", "")
++                if f"{eid}_home_ml" in outcomes:
++                    continue
+ 
+-            outcomes[f"{eid}_home_ml"]    = int(hs > as_)
+-            outcomes[f"{eid}_away_ml"]    = int(as_ > hs)
+-            outcomes[f"{eid}_total"]      = hs + as_
+-            outcomes[f"{eid}_home_score"] = hs
+-            outcomes[f"{eid}_away_score"] = as_
+-            new_count += 1
++                scores = {
++                    s["name"]: int(float(s["score"]))
++                    for s in (game.get("scores") or [])
++                    if s.get("score")
++                }
++                hs  = scores.get(home)
++                as_ = scores.get(away)
++                if hs is None or as_ is None:
++                    continue
+ 
+-        time.sleep(0.5)
++                outcomes[f"{eid}_home_ml"]    = int(hs > as_)
++                outcomes[f"{eid}_away_ml"]    = int(as_ > hs)
++                outcomes[f"{eid}_total"]      = hs + as_
++                outcomes[f"{eid}_home_score"] = hs
++                outcomes[f"{eid}_away_score"] = as_
++                new_count += 1
++
++            time.sleep(PULL_SLEEP_SEC)
++            remaining -= window
++            # Single-call providers (OddsJam) return everything in one shot
++            # so further chunks would just be duplicates.
++            if chunk >= days_back:
++                break
+ 
+     with open(OUTCOMES_FILE, "w") as f:
+         json.dump(outcomes, f, indent=2)
+@@ -282,7 +388,7 @@
+     return new_count
+ 
+ 
+-def run_historical_pull(days_back=30):
++def run_historical_pull(days_back=30, resume=True):
+     """Full historical pull: odds snapshots + scores."""
+     if ODDS_DATA_SOURCE == "the_odds_api" and not ODDS_API_KEY:
+         print("ERROR: ODDS_API_KEY not set")
+@@ -292,10 +398,13 @@
+         return
+     print(f"  [data source] {_src().name}")
+ 
+-    # Pull odds history
+-    n_events, n_snaps = pull_historical_odds(days_back=days_back)
++    # Clamp days_back to the provider's max
++    cap = getattr(_src(), "max_historical_days", days_back)
++    if cap and days_back > cap:
++        print(f"  [info] requested {days_back}d > provider cap {cap}d; clamping")
++        days_back = cap
+ 
+-    # Pull scores
++    n_events, n_snaps = pull_historical_odds(days_back=days_back, resume=resume)
+     n_outcomes = pull_historical_scores(days_back=days_back)
+ 
+     print(f"\n{'='*50}")
+@@ -308,4 +417,11 @@
+ 
+ 
+ if __name__ == "__main__":
+-    run_historical_pull(days_back=30)
++    import argparse
++    ap = argparse.ArgumentParser()
++    ap.add_argument("--days", type=int, default=30,
++                    help="Days back to pull (default 30; OddsJam supports up to 365)")
++    ap.add_argument("--no-resume", action="store_true",
++                    help="Re-pull every (sport,timestamp) pair even if already saved")
++    args = ap.parse_args()
++    run_historical_pull(days_back=args.days, resume=not args.no_resume)
+--- a/features/movement.py	2026-04-30 05:23:49.036658796 +0000
++++ b/features/movement.py	2026-04-30 05:28:14.354789125 +0000
+@@ -5,6 +5,12 @@
+ from datetime import datetime, timezone, timedelta
+ from configs.config import PUBLIC_BOOKS, SHARP_BOOKS
+ from utils.odds_math import american_to_implied_prob, line_move_in_prob, no_vig_prob_for_side
++from features.arbitrage import arb_features_for_side, DEFAULT_MIN_ARB_MARGIN_PCT
++
++try:
++    from configs.config import MIN_ARB_MARGIN_PCT as _MIN_ARB_MARGIN_PCT
++except ImportError:
++    _MIN_ARB_MARGIN_PCT = DEFAULT_MIN_ARB_MARGIN_PCT
+ 
+ 
+ def _parse_ts(ts_str):
+@@ -229,7 +235,14 @@
+     home_injury_score = float(snap_injuries.get("home_injury_score", 0))
+     away_injury_score = float(snap_injuries.get("away_injury_score", 0))
+     injury_asymmetry  = abs(home_injury_score - away_injury_score)
+-    
++
++    # ── Arbitrage features (new "angle") ─────────────────────────
++    # Detect cross-book 2-way arbs at the latest snapshot. When this side
++    # is one leg of a positive-margin arb, surface the partner book/price
++    # so the slate can show it AND let the model learn that "market
++    # disagrees with itself" is a real signal.
++    arb = arb_features_for_side(latest, market, side, min_margin_pct=_MIN_ARB_MARGIN_PCT)
++
+     return {
+         "event_id": record["event_id"], "sport_key": record["sport_key"],
+         "commence_time": record.get("commence_time"),
+@@ -266,6 +279,14 @@
+         "home_injury_score":  home_injury_score,
+         "away_injury_score":  away_injury_score,
+         "injury_asymmetry":   injury_asymmetry,
++        # Arbitrage angle
++        "is_arb_side":        arb["is_arb_side"],
++        "arb_margin_pct":     arb["arb_margin_pct"],
++        "arb_book_count":     arb["arb_book_count"],
++        "arb_book":           arb["arb_book"],
++        "arb_partner_book":   arb["arb_partner_book"],
++        "arb_partner_price":  arb["arb_partner_price"],
++        "arb_partner_line":   arb["arb_partner_line"],
+     }
+ 
+ 
+@@ -283,6 +304,9 @@
+     # Legacy with-vig prob retained (predictive on its own; harmless to keep)
+     "pin_implied_prob", "is_home",
+     "has_major_injury", "home_injury_score", "away_injury_score", "injury_asymmetry",
++    # Arbitrage angle (numeric features only — string fields kept off the
++    # model input vector but still surface in the slate via scorer.py).
++    "is_arb_side", "arb_margin_pct", "arb_book_count",
+ ]
+ 
+ 
+--- a/models/scorer.py	2026-04-30 05:23:49.176658536 +0000
++++ b/models/scorer.py	2026-04-30 05:28:14.363163949 +0000
+@@ -105,6 +105,9 @@
+                 if row.get("sig_sharp"): signals.append("SHARP_MONEY")
+                 if row.get("sig_rlm"):   signals.append("REVERSE_LINE_MOVEMENT")
+                 if row.get("sig_fade"):  signals.append("PUBLIC_FADE")
++                if row.get("is_arb_side"):
++                    margin_lbl = float(row.get("arb_margin_pct") or 0.0)
++                    signals.append(f"ARBITRAGE({margin_lbl:.2f}%)")
+ 
+                 all_bets.append({
+                     "event_id":    row.get("event_id"),
+@@ -133,6 +136,14 @@
+                     "clv_signed_train": row.get("clv_signed", 0),
+                     "trained_on":       trained_on,    # Tier 1 fix #21 — visible in CSV
+                     "american_odds_display": f"+{int(best_odds)}" if best_odds > 0 else str(int(best_odds)),
++                    # Arbitrage angle (always present; 0/None when not an arb)
++                    "is_arb_side":       int(row.get("is_arb_side", 0) or 0),
++                    "arb_margin_pct":    round(float(row.get("arb_margin_pct", 0) or 0), 3),
++                    "arb_book_count":    int(row.get("arb_book_count", 0) or 0),
++                    "arb_book":          row.get("arb_book"),
++                    "arb_partner_book":  row.get("arb_partner_book"),
++                    "arb_partner_price": row.get("arb_partner_price"),
++                    "arb_partner_line":  row.get("arb_partner_line"),
+                 })
+ 
+     if synthetic_models_used:
+--- a/pipeline.py	2026-04-30 05:23:49.177658535 +0000
++++ b/pipeline.py	2026-04-30 05:28:14.371252104 +0000
+@@ -79,6 +79,9 @@
+         "ev_pct", "bet_pct", "bet_usd",
+         "confidence", "signals", "n_signals", "pin_move_full", "money_vs_tickets",
+         "clv_signed_train", "trained_on",
++        # Arbitrage angle
++        "is_arb_side", "arb_margin_pct", "arb_book_count",
++        "arb_book", "arb_partner_book", "arb_partner_price", "arb_partner_line",
+         "book", "line", "is_home", "event_id", "sport_key",
+     ]
+ 
+--- a/configs/config.py	2026-04-30 05:23:49.021658824 +0000
++++ b/configs/config.py	2026-04-30 05:28:14.379374979 +0000
+@@ -32,6 +32,12 @@
+ LATE_MOVE_HOURS_THRESHOLD  = 6.0
+ EARLY_OPEN_HOURS_THRESHOLD = 48.0
+ 
++# ── Arbitrage angle ────────────────────────────────────────────────
++# Minimum 2-way arb margin (% profit on pair) before a side is flagged
++# as `is_arb_side` in the slate. Set above zero to filter razor-thin
++# edges that are usually stale-line artifacts.
++MIN_ARB_MARGIN_PCT         = 0.5
++
+ MIN_EDGE_TO_BET            = 0.005
+ MIN_SAMPLES_TO_TRAIN       = 50          # raised from 10 — 10 is far too few for stable training
+ MIN_REAL_OUTCOMES          = 20
+--- /dev/null	2026-04-30 01:26:07.520494314 +0000
++++ b/features/arbitrage.py	2026-04-30 05:28:14.345232234 +0000
+@@ -0,0 +1,220 @@
++# features/arbitrage.py
++# =====================================================================
++# ARBITRAGE DETECTION
++# =====================================================================
++# A two-way arbitrage exists when the inverse-decimal-prices of the two
++# best opposing prices, taken from possibly different books, sum to less
++# than 1.0:
++#
++#     1/dec_A + 1/dec_B  <  1.0
++#
++# The "edge" / margin is:  margin_pct = (1 - (1/dec_A + 1/dec_B)) * 100
++#
++# This module is provider-agnostic: it works on any flat snapshot in our
++# canonical shape ({h2h: {side: {book: price}}, spreads/totals: {side:
++# {book: {line, price}}}}) -- so it produces signals identically whether
++# the underlying source is The Odds API or OddsJam.
++#
++# OddsJam's flagship "Positive EV / Arbitrage" feed can ALSO be pulled
++# directly via OddsJamSource.fetch_arbitrage_opportunities() and is
++# merged in when present; locally-detected arbs are kept as a fallback
++# so the angle still works on every provider.
++# =====================================================================
++
++from __future__ import annotations
++
++from typing import Iterable, Optional
++
++from utils.odds_math import american_to_decimal
++
++
++# ---- minimum profit margin (%) to flag a side as part of an arb -----
++# Set above zero to ignore razor-thin "arbs" that are usually stale-line
++# artifacts. Override via configs.config.MIN_ARB_MARGIN_PCT.
++DEFAULT_MIN_ARB_MARGIN_PCT = 0.5
++
++
++def _safe_dec(price) -> Optional[float]:
++    if price is None:
++        return None
++    try:
++        d = american_to_decimal(price)
++        if d <= 1.0:
++            return None
++        return float(d)
++    except Exception:
++        return None
++
++
++def _two_way_arb(price_a, price_b) -> Optional[dict]:
++    """Compute arb stats for a candidate pair; None if not an arb."""
++    da = _safe_dec(price_a)
++    db = _safe_dec(price_b)
++    if da is None or db is None:
++        return None
++    inv_sum = (1.0 / da) + (1.0 / db)
++    if inv_sum >= 1.0:
++        return None
++    margin = (1.0 - inv_sum) * 100.0
++    # Equal-profit stake split (sum to 1.0)
++    stake_a = (1.0 / da) / inv_sum
++    stake_b = (1.0 / db) / inv_sum
++    return {
++        "margin_pct": margin,
++        "inv_sum":    inv_sum,
++        "stake_a":    stake_a,
++        "stake_b":    stake_b,
++    }
++
++
++def _opposing_side(market_dict) -> dict:
++    """Given snap[market], return {side: other_side_label}."""
++    sides = list(market_dict.keys())
++    if len(sides) < 2:
++        return {}
++    out = {}
++    # We support 2-way markets (the only kind in MARKETS = h2h/spreads/totals).
++    # Pair every side with every OTHER side; in practice only one pair exists.
++    for s in sides:
++        for o in sides:
++            if o != s:
++                out[s] = o
++                break
++    return out
++
++
++def _iter_books_h2h(market_dict, side):
++    for bk, price in (market_dict.get(side) or {}).items():
++        if price is not None:
++            yield bk, price, None  # h2h has no line
++
++
++def _iter_books_pointed(market_dict, side):
++    """Spreads / totals iterator. Yields (book, price, line)."""
++    for bk, entry in (market_dict.get(side) or {}).items():
++        if not isinstance(entry, dict):
++            continue
++        price = entry.get("price")
++        line  = entry.get("line")
++        if price is None:
++            continue
++        yield bk, price, line
++
++
++def _lines_match(a, b) -> bool:
++    """Spreads/totals: arb only counts when the two sides are at the
++    SAME (mirror) line — for spreads home -L vs away +L, for totals
++    Over L vs Under L."""
++    if a is None or b is None:
++        return False
++    # For totals both legs are the same number; for spreads the magnitudes
++    # match (one is +L, one is -L). Allow tiny float tolerance.
++    return abs(abs(a) - abs(b)) < 0.001
++
++
++def arb_features_for_side(
++    flat_snapshot: dict,
++    market: str,
++    side: str,
++    min_margin_pct: float = DEFAULT_MIN_ARB_MARGIN_PCT,
++) -> dict:
++    """
++    Compute arbitrage signal features for ONE side of a market.
++
++    Returns dict with:
++      is_arb_side       (1.0 / 0.0)  — this side is one leg of an arb
++      arb_margin_pct    (float)      — best arb margin found pairing
++                                        this side's BEST price with any
++                                        opposing side's available price
++      arb_book          (str|None)   — the book offering THIS leg
++      arb_partner_book  (str|None)   — the book offering the other leg
++      arb_partner_price (int|None)   — opposing leg American price
++      arb_partner_line  (float|None) — opposing leg line (spreads/totals)
++      arb_book_count    (int)        — how many books are quoting this
++                                        side at a price that COULD be an
++                                        arb leg vs at least one partner
++    """
++    empty = {
++        "is_arb_side":       0.0,
++        "arb_margin_pct":    0.0,
++        "arb_book":          None,
++        "arb_partner_book":  None,
++        "arb_partner_price": None,
++        "arb_partner_line":  None,
++        "arb_book_count":    0,
++    }
++    if not flat_snapshot:
++        return empty
++    market_dict = flat_snapshot.get(market) or {}
++    pairs = _opposing_side(market_dict)
++    other = pairs.get(side)
++    if other is None:
++        return empty
++
++    is_pointed = market in ("spreads", "totals")
++    this_iter  = list(_iter_books_pointed(market_dict, side))  if is_pointed else list(_iter_books_h2h(market_dict, side))
++    other_iter = list(_iter_books_pointed(market_dict, other)) if is_pointed else list(_iter_books_h2h(market_dict, other))
++    if not this_iter or not other_iter:
++        return empty
++
++    best = None
++    book_count = 0
++    for tb, tp, tl in this_iter:
++        local_best_for_book = None
++        for ob, op, ol in other_iter:
++            if is_pointed and not _lines_match(tl, ol):
++                continue
++            res = _two_way_arb(tp, op)
++            if res is None:
++                continue
++            if local_best_for_book is None or res["margin_pct"] > local_best_for_book["margin_pct"]:
++                local_best_for_book = {**res, "this_book": tb, "this_price": tp,
++                                        "this_line": tl, "partner_book": ob,
++                                        "partner_price": op, "partner_line": ol}
++        if local_best_for_book is not None:
++            book_count += 1
++            if best is None or local_best_for_book["margin_pct"] > best["margin_pct"]:
++                best = local_best_for_book
++
++    if best is None or best["margin_pct"] < min_margin_pct:
++        out = dict(empty)
++        out["arb_book_count"] = book_count
++        return out
++
++    return {
++        "is_arb_side":       1.0,
++        "arb_margin_pct":    float(best["margin_pct"]),
++        "arb_book":          best["this_book"],
++        "arb_partner_book":  best["partner_book"],
++        "arb_partner_price": int(best["partner_price"]) if best["partner_price"] is not None else None,
++        "arb_partner_line":  best["partner_line"],
++        "arb_book_count":    book_count,
++    }
++
++
++def find_all_arbs_in_snapshot(
++    flat_snapshot: dict,
++    markets: Iterable[str] = ("h2h", "spreads", "totals"),
++    min_margin_pct: float = DEFAULT_MIN_ARB_MARGIN_PCT,
++) -> list[dict]:
++    """
++    Scan a flat snapshot for every arb across the requested markets.
++    Returns a list of arb records (one per side that participates).
++    """
++    out = []
++    for market in markets:
++        market_dict = flat_snapshot.get(market) or {}
++        for side in market_dict.keys():
++            r = arb_features_for_side(flat_snapshot, market, side, min_margin_pct)
++            if r.get("is_arb_side"):
++                out.append({
++                    "event_id":      flat_snapshot.get("event_id"),
++                    "sport_key":     flat_snapshot.get("sport_key"),
++                    "commence_time": flat_snapshot.get("commence_time"),
++                    "home_team":     flat_snapshot.get("home_team"),
++                    "away_team":     flat_snapshot.get("away_team"),
++                    "market":        market,
++                    "side":          side,
++                    **r,
++                })
++    return out
+--- /dev/null	2026-04-30 01:26:07.520494314 +0000
++++ b/bootstrap_oddsjam.py	2026-04-30 05:28:14.413507447 +0000
+@@ -0,0 +1,138 @@
++#!/usr/bin/env python3
++# bootstrap_oddsjam.py
++# =====================================================================
++# ONE-SHOT MAX-HISTORY BOOTSTRAP FOR ODDSJAM
++# =====================================================================
++# Pulls as much historical data as your OddsJam plan will give you:
++#   • all 6 supported leagues (NFL, NBA, MLB, NHL, CFB, CBB)
++#   • 8 snapshots per day (3a/7a/10a/1p/4p/7p/9p/11p UTC)
++#   • up to 365 days back (configurable, capped by provider)
++#   • completed scores for the same window
++#
++# Resume support is on by default — re-running after a network blip just
++# skips (sport, timestamp) pairs that already exist on disk, so you can
++# run this overnight without losing progress.
++#
++# USAGE:
++#   export ODDS_DATA_SOURCE=oddsjam
++#   export ODDSJAM_API_KEY=<your key>
++#   python bootstrap_oddsjam.py                # 365 days, all 6 sports
++#   python bootstrap_oddsjam.py --days 90      # last 90 days only
++#   python bootstrap_oddsjam.py --sports NBA,NHL
++#   python bootstrap_oddsjam.py --hours 9,15,21
++#   python bootstrap_oddsjam.py --no-resume    # force re-pull
++#   python bootstrap_oddsjam.py --dry-run      # estimate API calls only
++#
++# After the pull, retrain:
++#   python train.py
++# =====================================================================
++
++import argparse
++import os
++import sys
++from datetime import datetime, timezone, timedelta
++
++
++SPORT_ALIAS_TO_KEY = {
++    "NFL":  "americanfootball_nfl",
++    "CFB":  "americanfootball_ncaaf", "NCAAF": "americanfootball_ncaaf",
++    "NBA":  "basketball_nba",
++    "CBB":  "basketball_ncaab",       "NCAAB": "basketball_ncaab",
++    "MLB":  "baseball_mlb",
++    "NHL":  "icehockey_nhl",
++}
++
++
++def _resolve_sports(arg: str | None) -> list[str]:
++    if not arg:
++        return list(SPORT_ALIAS_TO_KEY.values() | set())  # all 6
++    out = []
++    seen = set()
++    for token in arg.split(","):
++        t = token.strip().upper()
++        if not t:
++            continue
++        key = SPORT_ALIAS_TO_KEY.get(t, t.lower())
++        if key not in seen:
++            seen.add(key)
++            out.append(key)
++    return out
++
++
++def main() -> int:
++    ap = argparse.ArgumentParser(
++        description="Pull max OddsJam historical odds + scores into ./line_history and ./outcomes.json"
++    )
++    ap.add_argument("--days", type=int, default=365,
++                    help="Days back to pull (default 365; clamped to provider's max)")
++    ap.add_argument("--sports", default="",
++                    help="Comma-separated sport list (NFL,NBA,MLB,NHL,CFB,CBB). "
++                         "Default = all 6.")
++    ap.add_argument("--hours", default="",
++                    help="Comma-separated UTC hours to sample per day. "
++                         "Default = 3,7,10,13,16,19,21,23 (8x/day).")
++    ap.add_argument("--sleep", type=float, default=0.5,
++                    help="Seconds to sleep between API calls (default 0.5).")
++    ap.add_argument("--no-resume", action="store_true",
++                    help="Re-pull every (sport, timestamp) pair even if saved.")
++    ap.add_argument("--dry-run", action="store_true",
++                    help="Just estimate the call count and exit.")
++    args = ap.parse_args()
++
++    # Force the OddsJam source for this script.
++    os.environ["ODDS_DATA_SOURCE"] = "oddsjam"
++    if not os.environ.get("ODDSJAM_API_KEY"):
++        print("ERROR: ODDSJAM_API_KEY is not set in your environment.")
++        return 2
++
++    sports = _resolve_sports(args.sports)
++    if args.hours:
++        os.environ["DAILY_HOURS"] = args.hours
++    if sports:
++        os.environ["HISTORICAL_SPORTS"] = ",".join(sports)
++    os.environ["HISTORICAL_PULL_SLEEP"] = str(args.sleep)
++
++    # Import after env vars are set so module-level resolution picks them up.
++    from data import historical as H
++    from data.sources import get_source
++
++    src = get_source("oddsjam")
++    cap = int(getattr(src, "max_historical_days", args.days) or args.days)
++    days = min(args.days, cap)
++
++    n_sports = len(H.HISTORICAL_SPORTS)
++    n_hours  = len(H.DAILY_HOURS)
++    est_odds_calls   = n_sports * n_hours * days
++    est_score_calls  = n_sports * max(1, days // max(1, getattr(src, "max_scores_days", 365) or 365))
++    est_total        = est_odds_calls + est_score_calls
++    est_secs         = est_total * args.sleep
++
++    print("=" * 60)
++    print("OddsJam max-history bootstrap")
++    print("=" * 60)
++    print(f"  source ........ {src.name}")
++    print(f"  sports ({n_sports}) .. {list(H.HISTORICAL_SPORTS.keys())}")
++    print(f"  hours/day ({n_hours}) {H.DAILY_HOURS}")
++    print(f"  days back ..... {days} (provider cap = {cap})")
++    print(f"  resume mode ... {'OFF' if args.no_resume else 'ON'}")
++    print(f"  sleep/call .... {args.sleep:.2f}s")
++    print()
++    print(f"  estimated historical-odds calls  : {est_odds_calls:>7,}")
++    print(f"  estimated scores calls           : {est_score_calls:>7,}")
++    print(f"  estimated total calls            : {est_total:>7,}")
++    print(f"  estimated wall-clock (no resume) : {est_secs/60:>7,.1f} min "
++          f"({est_secs/3600:.1f} h)")
++    print("=" * 60)
++
++    if args.dry_run:
++        print("\n--dry-run set; exiting without pulling.")
++        return 0
++
++    print()
++    H.run_historical_pull(days_back=days, resume=not args.no_resume)
++    print("\nDone. Next: `python train.py` to retrain on the new history.")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())

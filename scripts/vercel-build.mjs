@@ -40,6 +40,7 @@ writeFileSync(
 
 // Serverless functions
 const endpoints = [
+  "healthz",
   "line-tracker/slate",
   "line-tracker/patterns",
   "nba-model/predictions",

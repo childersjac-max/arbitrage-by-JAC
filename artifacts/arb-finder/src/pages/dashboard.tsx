@@ -9,23 +9,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // ── Sportsbook logos via Clearbit CDN (fetched by browser, not server) ───────
 
+// NC-licensed sportsbooks only (launched March 11, 2024)
+const G = "https://www.google.com/s2/favicons?domain=";
 const BOOK_LOGOS: Record<string, string> = {
-  draftkings:  "https://logo.clearbit.com/draftkings.com",
-  fanduel:     "https://logo.clearbit.com/fanduel.com",
-  betmgm:      "https://logo.clearbit.com/betmgm.com",
-  caesars:     "https://logo.clearbit.com/caesars.com",
-  bet365:      "https://logo.clearbit.com/bet365.com",
-  fanatics:    "https://logo.clearbit.com/fanatics.com",
-  hard_rock:   "https://logo.clearbit.com/hardrock.bet",
-  betrivers:   "https://logo.clearbit.com/betrivers.com",
-  betparx:     "https://logo.clearbit.com/betparx.com",
-  pointsbet:   "https://logo.clearbit.com/pointsbet.com",
-  barstool:    "https://logo.clearbit.com/barstoolsports.com",
-  espnbet:     "https://logo.clearbit.com/espnbet.com",
-  fliff:       "https://logo.clearbit.com/getfliff.com",
-  pinnacle:    "https://logo.clearbit.com/pinnacle.com",
-  unibet:      "https://logo.clearbit.com/unibet.com",
-  superbook:   "https://logo.clearbit.com/superbook.com",
+  draftkings:  `${G}draftkings.com&sz=64`,
+  fanduel:     `${G}fanduel.com&sz=64`,
+  betmgm:      `${G}betmgm.com&sz=64`,
+  caesars:     `${G}caesars.com&sz=64`,
+  bet365:      `${G}bet365.com&sz=64`,
+  fanatics:    `${G}fanatics.com&sz=64`,
+  hard_rock:   `${G}hardrock.bet&sz=64`,
+  betrivers:   `${G}betrivers.com&sz=64`,
+  betparx:     `${G}betparx.com&sz=64`,
+  espnbet:     `${G}espnbet.com&sz=64`,
 };
 
 function getBookLogo(bookTitle: string): string | null {

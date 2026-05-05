@@ -89,8 +89,11 @@ export function findArbitrageOpportunities(
         const outcomeMap = marketMap.get(marketKey)!;
 
         for (const outcome of market.outcomes) {
-          const outcomeName = outcome.point !== undefined
-            ? `${outcome.name} ${outcome.point > 0 ? "+" : ""}${outcome.point}`
+          const ptStr = outcome.point !== undefined
+            ? `${outcome.point > 0 ? "+" : ""}${outcome.point}`
+            : "";
+          const outcomeName = (ptStr && !outcome.name.includes(ptStr))
+            ? `${outcome.name} ${ptStr}`
             : outcome.name;
 
           if (!outcomeMap.has(outcomeName)) outcomeMap.set(outcomeName, []);

@@ -137,8 +137,8 @@ function betColor(idx: number) {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function Arbitrage() {
-  const [bankroll, setBankroll]           = useState<number>(10000);
-  const [bankrollInput, setBankrollInput] = useState<string>("10000");
+  const [bankroll, setBankroll]           = useState<number>(100);
+  const [bankrollInput, setBankrollInput] = useState<string>("100");
   const [customBets, setCustomBets]       = useState<Record<string, string[]>>({});
 
   const { data, isLoading, error, refetch, isFetching } =

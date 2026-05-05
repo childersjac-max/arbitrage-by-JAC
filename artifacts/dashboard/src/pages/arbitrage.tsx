@@ -13,27 +13,18 @@ import { Button } from "@/components/ui/button";
 
 // ── Sportsbook logos (Clearbit CDN — fetched by user browser) ────────────────
 
+// NC-licensed sportsbooks only (launched March 11, 2024)
 const BOOK_LOGOS: Record<string, string> = {
-  draftkings:   "https://logo.clearbit.com/draftkings.com",
-  fanduel:      "https://logo.clearbit.com/fanduel.com",
-  betmgm:       "https://logo.clearbit.com/betmgm.com",
-  caesars:      "https://logo.clearbit.com/caesars.com",
-  bet365:       "https://logo.clearbit.com/bet365.com",
-  fanatics:     "https://logo.clearbit.com/fanatics.com",
-  hard_rock:    "https://logo.clearbit.com/hardrock.bet",
-  betrivers:    "https://logo.clearbit.com/betrivers.com",
-  betparx:      "https://logo.clearbit.com/betparx.com",
-  pointsbet:    "https://logo.clearbit.com/pointsbet.com",
-  barstool:     "https://logo.clearbit.com/barstoolsports.com",
-  williamhill:  "https://logo.clearbit.com/williamhill.com",
-  superbook:    "https://logo.clearbit.com/superbook.com",
-  unibet:       "https://logo.clearbit.com/unibet.com",
-  betonline:    "https://logo.clearbit.com/betonline.ag",
-  mybookie:     "https://logo.clearbit.com/mybookie.ag",
-  bovada:       "https://logo.clearbit.com/bovada.lv",
-  espnbet:      "https://logo.clearbit.com/espnbet.com",
-  fliff:        "https://logo.clearbit.com/getfliff.com",
-  pinnacle:     "https://logo.clearbit.com/pinnacle.com",
+  draftkings:  `https://www.google.com/s2/favicons?domain=draftkings.com&sz=64`,
+  fanduel:     `https://www.google.com/s2/favicons?domain=fanduel.com&sz=64`,
+  betmgm:      `https://www.google.com/s2/favicons?domain=betmgm.com&sz=64`,
+  caesars:     `https://www.google.com/s2/favicons?domain=caesars.com&sz=64`,
+  bet365:      `https://www.google.com/s2/favicons?domain=bet365.com&sz=64`,
+  fanatics:    `https://www.google.com/s2/favicons?domain=fanatics.com&sz=64`,
+  hard_rock:   `https://www.google.com/s2/favicons?domain=hardrock.bet&sz=64`,
+  betrivers:   `https://www.google.com/s2/favicons?domain=betrivers.com&sz=64`,
+  betparx:     `https://www.google.com/s2/favicons?domain=betparx.com&sz=64`,
+  espnbet:     `https://www.google.com/s2/favicons?domain=espnbet.com&sz=64`,
 };
 
 function getBookLogo(bookTitle: string): string | null {

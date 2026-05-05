@@ -287,6 +287,10 @@ function calcProfitIfWins(legs: Array<{ price: number }>, betSizes: number[], wi
   return winnerBet * (decimal - 1) - otherBets;
 }
 
+function stripLineSuffix(side: string): string {
+  return side.replace(/\s[+-]?\d+\.?\d*$/, '').trim();
+}
+
 // ── Styling ──────────────────────────────────────────────────────────────────
 
 function marginColor(pct: number): string {
@@ -579,7 +583,7 @@ export default function Arbitrage() {
                               <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
                               {/* Show team/outcome name only — no repeated line */}
                               <span className="text-muted-foreground truncate">
-                                If <span className="text-foreground font-semibold">{leg.side}</span> wins
+                                If <span className="text-foreground font-semibold">{stripLineSuffix(leg.side)}</span> wins
                               </span>
                             </div>
                             <span className={`font-mono font-bold shrink-0 ${profit >= 0 ? "text-green-400" : "text-red-400"}`}>

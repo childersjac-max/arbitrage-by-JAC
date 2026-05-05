@@ -25,7 +25,7 @@ const SPORT_CONFIGS = [
 
 const MAIN_MARKETS = [
   "moneyline", "point_spread", "total_points",
-  "total_goals", "total_rounds", "moneyline_3-way",
+  "total_goals", "total_rounds",
 ];
 
 async function ojFetch(apiKey, path, params) {
@@ -186,7 +186,13 @@ function findArb(games) {
 
     for (const [mktKey, outcomeMap] of marketMap) {
       const outcomes = Array.from(outcomeMap.entries());
-      if (outcomes.length < 2 || outcomes.length > 3) continue;
+      // Only 2-outcome markets guarantee a win on one side — skip 3-way (draw) and 1-way
+      if (outcomes.length !== 2) continue;
+      // Extra safety: skip if any outcome name suggests a draw or tie
+      const hasDraw = outcomes.some(([name]) =>
+        /draw|tie|void|push/i.test(name)
+      );
+      if (hasDraw) continue;
 
       const bestLegs = outcomes.map(([outcomeName, bets]) => {
         let best = bets[0];

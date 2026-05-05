@@ -6,7 +6,7 @@ import {
 import { formatMoney, formatTimeAgo, formatOdds } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { KeyRound, RefreshCw, Info, AlertCircle, TrendingUp } from "lucide-react";
+import { KeyRound, RefreshCw, Info, AlertCircle, TrendingUp, MapPin } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,86 +14,74 @@ import { Button } from "@/components/ui/button";
 // ── Market label helpers ─────────────────────────────────────────────────────
 
 const MARKET_LABELS: Record<string, string> = {
-  moneyline:          "Moneyline",
-  "moneyline_3-way":  "3-Way Moneyline",
-  point_spread:       "Point Spread",
-  total_points:       "Total Points",
-  total_goals:        "Total Goals",
-  total_rounds:       "Total Rounds",
-  h2h:                "Moneyline",
-  spreads:            "Spread",
-  totals:             "Total",
-  "1h_moneyline":     "1st Half Moneyline",
-  "1h_spread":        "1st Half Spread",
-  "1h_total":         "1st Half Total Points",
-  "2h_moneyline":     "2nd Half Moneyline",
-  "2h_spread":        "2nd Half Spread",
-  "2h_total":         "2nd Half Total Points",
-  "1q_moneyline":     "1st Quarter Moneyline",
-  "1q_spread":        "1st Quarter Point Spread",
-  "1q_total":         "1st Quarter Total Points",
-  "2q_moneyline":     "2nd Quarter Moneyline",
-  "2q_spread":        "2nd Quarter Point Spread",
-  "3q_moneyline":     "3rd Quarter Moneyline",
-  "3q_spread":        "3rd Quarter Point Spread",
-  "4q_moneyline":     "4th Quarter Moneyline",
-  "4q_spread":        "4th Quarter Point Spread",
-  "1p_moneyline":     "1st Period Moneyline",
-  "2p_moneyline":     "2nd Period Moneyline",
-  "3p_moneyline":     "3rd Period Moneyline",
-  "1p_total":         "1st Period Total Goals",
-  "draw_no_bet":      "Draw No Bet",
-  "btts":             "Both Teams to Score",
-  "asian_handicap":   "Asian Handicap",
-  "alternate_spread": "Alternate Spread",
-  "alternate_total":  "Alternate Total",
+  moneyline:           "Moneyline",
+  "moneyline_3-way":   "3-Way Moneyline",
+  point_spread:        "Point Spread",
+  total_points:        "Total Points",
+  total_goals:         "Total Goals",
+  total_rounds:        "Total Rounds",
+  h2h:                 "Moneyline",
+  spreads:             "Spread",
+  totals:              "Total",
+  "1h_moneyline":      "1st Half Moneyline",
+  "1h_spread":         "1st Half Point Spread",
+  "1h_total":          "1st Half Total Points",
+  "2h_moneyline":      "2nd Half Moneyline",
+  "2h_spread":         "2nd Half Point Spread",
+  "2h_total":          "2nd Half Total Points",
+  "1q_moneyline":      "1st Quarter Moneyline",
+  "1q_spread":         "1st Quarter Point Spread",
+  "1q_total":          "1st Quarter Total Points",
+  "2q_moneyline":      "2nd Quarter Moneyline",
+  "2q_spread":         "2nd Quarter Point Spread",
+  "3q_moneyline":      "3rd Quarter Moneyline",
+  "3q_spread":         "3rd Quarter Point Spread",
+  "4q_moneyline":      "4th Quarter Moneyline",
+  "4q_spread":         "4th Quarter Point Spread",
+  "1p_moneyline":      "1st Period Moneyline",
+  "2p_moneyline":      "2nd Period Moneyline",
+  "3p_moneyline":      "3rd Period Moneyline",
+  "1p_total":          "1st Period Total Goals",
+  draw_no_bet:         "Draw No Bet",
+  btts:                "Both Teams to Score",
+  asian_handicap:      "Asian Handicap",
+  alternate_spread:    "Alternate Spread",
+  alternate_total:     "Alternate Total",
 };
 
 function getMarketLabel(market: string): string {
-  // Try direct lookup first
   if (MARKET_LABELS[market]) return MARKET_LABELS[market];
-  // Fall back to title-casing with spaces
   return market
     .replace(/_/g, " ")
-    .replace(/\b(\d)(h|q|p)\b/gi, (_, n, t) => {
-      const period = t.toLowerCase() === "h" ? "Half" : t.toLowerCase() === "q" ? "Quarter" : "Period";
-      const ord = n === "1" ? "1st" : n === "2" ? "2nd" : n === "3" ? "3rd" : `${n}th`;
-      return `${ord} ${period}`;
-    })
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function getMarketDetail(
   market: string,
-  legs: Array<{ line?: number | null; side?: string }>,
+  legs: Array<{ line?: number | null }>,
 ): string {
   const label = getMarketLabel(market);
   const line = legs[0]?.line;
-  if (line != null && market.includes("spread")) {
+  if (line != null && market.includes("spread"))
     return `${label}  (${line > 0 ? `+${line}` : line})`;
-  }
-  if (line != null && (market.includes("total") || market.includes("totals"))) {
+  if (line != null && market.includes("total"))
     return `${label}  (O/U ${Math.abs(line)})`;
-  }
   return label;
 }
 
-// ── Odds / stake math ────────────────────────────────────────────────────────
-
-function americanToDecimal(price: number): number {
-  return price >= 100 ? price / 100 + 1 : 100 / Math.abs(price) + 1;
-}
+// ── Math helpers ─────────────────────────────────────────────────────────────
 
 function toImplied(price: number): number {
   return price > 0 ? 100 / (price + 100) : -price / (-price + 100);
 }
 
-function calcOptimalStakes(
-  legs: Array<{ price: number }>,
-  bankroll: number,
-): number[] {
+function americanToDecimal(price: number): number {
+  return price >= 100 ? price / 100 + 1 : 100 / Math.abs(price) + 1;
+}
+
+function calcOptimalStakes(legs: Array<{ price: number }>, bankroll: number): number[] {
   const implied = legs.map((l) => toImplied(l.price));
-  const total = implied.reduce((a, b) => a + b, 0);
+  const total   = implied.reduce((a, b) => a + b, 0);
   if (total <= 0) return legs.map(() => bankroll / legs.length);
   return implied.map((imp) => Math.round((bankroll * imp) / total * 100) / 100);
 }
@@ -103,31 +91,55 @@ function calcProfitIfWins(
   betSizes: number[],
   winnerIdx: number,
 ): number {
-  const decimal = americanToDecimal(legs[winnerIdx].price);
-  const winnerBet = betSizes[winnerIdx] ?? 0;
-  const otherBets = betSizes.reduce((s, b, i) => (i !== winnerIdx ? s + b : s), 0);
+  const decimal    = americanToDecimal(legs[winnerIdx].price);
+  const winnerBet  = betSizes[winnerIdx] ?? 0;
+  const otherBets  = betSizes.reduce((s, b, i) => (i !== winnerIdx ? s + b : s), 0);
   return winnerBet * (decimal - 1) - otherBets;
 }
 
-// ── Styling ──────────────────────────────────────────────────────────────────
+// ── Styling helpers ──────────────────────────────────────────────────────────
 
 function marginColor(pct: number): string {
-  if (pct > 2)  return "border-green-500 text-green-500 bg-green-500/10";
-  if (pct > 1)  return "border-yellow-500 text-yellow-500 bg-yellow-500/10";
+  if (pct > 2) return "border-green-500 text-green-500 bg-green-500/10";
+  if (pct > 1) return "border-yellow-500 text-yellow-500 bg-yellow-500/10";
   return "border-muted-foreground text-muted-foreground";
 }
 
-function profitColor(val: number): string {
-  return val >= 0 ? "text-green-400" : "text-red-400";
+// Distinct accent colors per bet position so it's impossible to mix up
+const BET_COLORS = [
+  {
+    badge:    "bg-blue-500/15 border-blue-500/50 text-blue-400",
+    book:     "text-blue-400",
+    input:    "bg-blue-500/10 border-blue-500/40 text-blue-200 focus:ring-blue-500",
+    dot:      "bg-blue-500",
+    strip:    "border-l-blue-500",
+  },
+  {
+    badge:    "bg-orange-500/15 border-orange-500/50 text-orange-400",
+    book:     "text-orange-400",
+    input:    "bg-orange-500/10 border-orange-500/40 text-orange-200 focus:ring-orange-500",
+    dot:      "bg-orange-500",
+    strip:    "border-l-orange-500",
+  },
+  {
+    badge:    "bg-purple-500/15 border-purple-500/50 text-purple-400",
+    book:     "text-purple-400",
+    input:    "bg-purple-500/10 border-purple-500/40 text-purple-200 focus:ring-purple-500",
+    dot:      "bg-purple-500",
+    strip:    "border-l-purple-500",
+  },
+];
+
+function betColor(idx: number) {
+  return BET_COLORS[idx % BET_COLORS.length];
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function Arbitrage() {
-  const [bankroll, setBankroll]         = useState<number>(10000);
+  const [bankroll, setBankroll]           = useState<number>(10000);
   const [bankrollInput, setBankrollInput] = useState<string>("10000");
-  // customBets keyed by opportunity event_id, value is array of string inputs per leg
-  const [customBets, setCustomBets]     = useState<Record<string, string[]>>({});
+  const [customBets, setCustomBets]       = useState<Record<string, string[]>>({});
 
   const { data, isLoading, error, refetch, isFetching } =
     useGetArbitrageOpportunities(undefined, {
@@ -146,12 +158,12 @@ export default function Arbitrage() {
     }
   };
 
-  function getOptimalStr(opp: { legs: Array<{ price: number }> }, bankrollVal: number): string[] {
-    return calcOptimalStakes(opp.legs, bankrollVal).map((s) => s.toFixed(2));
+  function getOptimalStrs(opp: { legs: Array<{ price: number }> }): string[] {
+    return calcOptimalStakes(opp.legs, bankroll).map((s) => s.toFixed(2));
   }
 
   function getDisplayValues(opp: { event_id: string; legs: Array<{ price: number }> }): string[] {
-    return customBets[opp.event_id] ?? getOptimalStr(opp, bankroll);
+    return customBets[opp.event_id] ?? getOptimalStrs(opp);
   }
 
   function getParsedBets(opp: { event_id: string; legs: Array<{ price: number }> }): number[] {
@@ -170,21 +182,21 @@ export default function Arbitrage() {
     opp: { legs: Array<{ price: number }> },
   ) {
     setCustomBets((prev) => {
-      const current = prev[eventId] ?? getOptimalStr(opp, bankroll);
+      const current = prev[eventId] ?? getOptimalStrs(opp);
       const updated = [...current];
       updated[legIdx] = val;
       return { ...prev, [eventId]: updated };
     });
   }
 
-  // ── Early return states ─────────────────────────────────────────────────
+  // ── Loading / error states ───────────────────────────────────────────────
 
   if (isLoading && !data) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-[200px] w-full" />
-        <Skeleton className="h-[200px] w-full" />
+        <Skeleton className="h-[300px] w-full" />
+        <Skeleton className="h-[300px] w-full" />
       </div>
     );
   }
@@ -198,11 +210,9 @@ export default function Arbitrage() {
             OddsJam API Key Required
           </AlertTitle>
           <AlertDescription className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Live arbitrage scanning requires an active OddsJam API key. Set the{" "}
-            <code className="bg-secondary px-1 py-0.5 rounded text-foreground">
-              ODDSJAM_API_KEY
-            </code>{" "}
-            environment variable to enable this feature.
+            Set the{" "}
+            <code className="bg-secondary px-1 py-0.5 rounded text-foreground">ODDSJAM_API_KEY</code>{" "}
+            environment variable to enable live arbitrage scanning.
           </AlertDescription>
         </Alert>
       </div>
@@ -218,18 +228,13 @@ export default function Arbitrage() {
             Arbitrage Access Not Included
           </AlertTitle>
           <AlertDescription className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            {data.access_denied_reason ||
-              "Your OddsJam plan does not include arbitrage API access."}{" "}
+            {data.access_denied_reason || "Your plan does not include arbitrage API access."}{" "}
             Visit{" "}
-            <a
-              href="https://oddsjam.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline text-foreground hover:text-primary"
-            >
+            <a href="https://oddsjam.com" target="_blank" rel="noopener noreferrer"
+              className="underline text-foreground hover:text-primary">
               oddsjam.com
             </a>{" "}
-            to upgrade your subscription and unlock live arbitrage scanning.
+            to upgrade.
           </AlertDescription>
         </Alert>
       </div>
@@ -255,7 +260,8 @@ export default function Arbitrage() {
 
   return (
     <div className="space-y-6">
-      {/* ── Header ── */}
+
+      {/* ── Page header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Live Arbitrage</h1>
@@ -270,9 +276,7 @@ export default function Arbitrage() {
               Bankroll $
             </label>
             <input
-              type="number"
-              min="100"
-              step="100"
+              type="number" min="100" step="100"
               value={bankrollInput}
               onChange={(e) => handleBankrollChange(e.target.value)}
               className="w-24 bg-secondary text-foreground text-sm rounded-md px-2 py-1.5 border border-border outline-none focus:ring-1 focus:ring-primary font-mono"
@@ -294,119 +298,169 @@ export default function Arbitrage() {
           <CardContent className="flex flex-col items-center justify-center p-12 text-muted-foreground">
             <Info className="w-8 h-8 mb-4 opacity-50" />
             <p>No profitable arbitrage opportunities found right now.</p>
-            <p className="text-xs mt-2 opacity-50">Auto-refreshing every 30 seconds...</p>
+            <p className="text-xs mt-2 opacity-50">Auto-refreshing every 30 seconds…</p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {opps.map((opp, i) => {
-            const betSizes  = getParsedBets(opp);
-            const displays  = getDisplayValues(opp);
+            const betSizes    = getParsedBets(opp);
+            const displays    = getDisplayValues(opp);
+            const totalStaked = betSizes.reduce((s, b) => s + b, 0);
             const marketDetail = getMarketDetail(opp.market, opp.legs);
-            const totalStaked  = betSizes.reduce((s, b) => s + b, 0);
 
             return (
               <Card key={i} className="bg-card border-border overflow-hidden flex flex-col">
 
-                {/* ── RED BOX: Game + detailed market ── */}
-                <div className="p-4 border-b border-border bg-secondary/20 flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold leading-tight">
-                      {opp.home_team} vs {opp.away_team}
+                {/* ── Game header ── */}
+                <div className="px-4 pt-4 pb-3 border-b border-border">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold leading-tight text-base">
+                        {opp.home_team} vs {opp.away_team}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                          {opp.sport_key}
+                        </span>
+                        <span className="text-border text-xs">•</span>
+                        <span className="text-xs text-foreground/80 font-semibold">
+                          {marketDetail}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5 mt-1.5">
-                      <span className="uppercase tracking-wider font-medium">{opp.sport_key}</span>
-                      <span className="text-border">•</span>
-                      <span className="text-foreground/80 font-medium">{marketDetail}</span>
-                    </div>
+                    <Badge
+                      variant="outline"
+                      className={`font-mono font-bold text-sm shrink-0 ${marginColor(opp.margin_pct)}`}
+                    >
+                      +{opp.margin_pct.toFixed(2)}%
+                    </Badge>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={`font-mono font-bold text-sm shrink-0 ${marginColor(opp.margin_pct)}`}
-                  >
-                    +{opp.margin_pct.toFixed(2)}%
-                  </Badge>
-                </div>
 
-                {/* ── YELLOW BOXES: Legs with bet size inputs ── */}
-                <CardContent className="p-0 flex-1">
-                  <div className="divide-y divide-border">
+                  {/* Bet position legend strip */}
+                  <div className="flex gap-2 mt-3">
                     {opp.legs.map((leg, j) => {
-                      const profit = calcProfitIfWins(opp.legs, betSizes, j);
-                      const lineStr = leg.line != null
-                        ? ` ${leg.line > 0 ? `+${leg.line}` : leg.line}`
-                        : "";
+                      const c = betColor(j);
                       return (
-                        <div key={j} className="px-4 py-3 flex items-center gap-3">
-                          {/* Outcome + book */}
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm truncate">
-                              {leg.side}{lineStr}
-                            </div>
-                            <div className="text-xs text-muted-foreground uppercase tracking-wide mt-0.5">
-                              {leg.book}
-                            </div>
-                          </div>
-
-                          {/* Odds */}
-                          <div className="font-mono text-sm shrink-0 w-14 text-right">
-                            {formatOdds(leg.price)}
-                          </div>
-
-                          {/* YELLOW: bet size input */}
-                          <div className="flex flex-col items-end gap-1 shrink-0">
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs text-muted-foreground">$</span>
-                              <input
-                                type="number"
-                                min="0"
-                                step="10"
-                                value={displays[j] ?? ""}
-                                onChange={(e) =>
-                                  handleBetInput(opp.event_id, j, e.target.value, opp)
-                                }
-                                className="w-20 bg-yellow-500/10 border border-yellow-500/40 text-yellow-300 text-sm rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-yellow-500 font-mono text-right"
-                              />
-                            </div>
-                            <div className={`text-xs font-mono font-semibold ${profitColor(profit)}`}>
-                              {profit >= 0 ? "+" : ""}
-                              {formatMoney(profit)} if wins
-                            </div>
-                          </div>
+                        <div key={j} className={`flex items-center gap-1.5 px-2 py-1 rounded-full border text-xs font-semibold ${c.badge}`}>
+                          <span className={`w-2 h-2 rounded-full ${c.dot}`} />
+                          Bet {j + 1} → {leg.book}
                         </div>
                       );
                     })}
                   </div>
+                </div>
+
+                {/* ── Individual bet instructions ── */}
+                <CardContent className="p-3 flex-1 space-y-3">
+                  {opp.legs.map((leg, j) => {
+                    const c       = betColor(j);
+                    const profit  = calcProfitIfWins(opp.legs, betSizes, j);
+                    const lineStr = leg.line != null
+                      ? ` (${leg.line > 0 ? `+${leg.line}` : leg.line})`
+                      : "";
+
+                    return (
+                      <div
+                        key={j}
+                        className={`rounded-lg border border-border border-l-4 ${c.strip} bg-secondary/20 overflow-hidden`}
+                      >
+                        {/* Bet number + book */}
+                        <div className={`flex items-center justify-between px-3 py-2 bg-secondary/40 border-b border-border`}>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold uppercase tracking-widest ${c.book}`}>
+                              BET {j + 1} of {opp.legs.length}
+                            </span>
+                          </div>
+                          <div className={`flex items-center gap-1 text-xs font-bold ${c.book}`}>
+                            <MapPin className="w-3 h-3" />
+                            {leg.book}
+                          </div>
+                        </div>
+
+                        {/* Selection + odds */}
+                        <div className="px-3 py-2 flex items-center justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-sm text-foreground">
+                              {leg.side}{lineStr}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              at odds{" "}
+                              <span className="font-mono font-semibold text-foreground">
+                                {formatOdds(leg.price)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Stake input + profit */}
+                        <div className="px-3 pb-3 flex items-end gap-3">
+                          <div className="flex-1">
+                            <label className="text-xs text-muted-foreground font-medium mb-1 block">
+                              Stake ($)
+                            </label>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-muted-foreground">$</span>
+                              <input
+                                type="number" min="0" step="10"
+                                value={displays[j] ?? ""}
+                                onChange={(e) =>
+                                  handleBetInput(opp.event_id, j, e.target.value, opp)
+                                }
+                                className={`w-full border rounded-md px-2 py-1.5 text-sm outline-none focus:ring-1 font-mono ${c.input}`}
+                              />
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-xs text-muted-foreground mb-1">
+                              Profit if wins
+                            </div>
+                            <div className={`text-sm font-bold font-mono ${profit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                              {profit >= 0 ? "+" : ""}{formatMoney(profit)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
 
                   {/* ── Outcome summary ── */}
-                  <div className="mx-4 mb-4 mt-2 rounded-md border border-border bg-secondary/30 p-3">
-                    <div className="flex items-center gap-1.5 mb-2">
+                  <div className="rounded-lg border border-border bg-secondary/30 p-3">
+                    <div className="flex items-center gap-1.5 mb-2.5">
                       <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
                       <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Outcome Summary
+                        Guaranteed Outcome Summary
                       </span>
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       {opp.legs.map((leg, j) => {
-                        const profit = calcProfitIfWins(opp.legs, betSizes, j);
+                        const profit  = calcProfitIfWins(opp.legs, betSizes, j);
+                        const c       = betColor(j);
                         const lineStr = leg.line != null
-                          ? ` ${leg.line > 0 ? `+${leg.line}` : leg.line}`
+                          ? ` (${leg.line > 0 ? `+${leg.line}` : leg.line})`
                           : "";
                         return (
-                          <div key={j} className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground truncate mr-2">
-                              If <span className="text-foreground font-medium">{leg.side}{lineStr}</span> wins
-                            </span>
-                            <span className={`font-mono font-bold shrink-0 ${profitColor(profit)}`}>
+                          <div key={j} className="flex items-center justify-between text-xs gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
+                              <span className="text-muted-foreground">
+                                If{" "}
+                                <span className="text-foreground font-semibold">
+                                  {leg.side}{lineStr}
+                                </span>{" "}
+                                wins
+                              </span>
+                            </div>
+                            <span className={`font-mono font-bold shrink-0 ${profit >= 0 ? "text-green-400" : "text-red-400"}`}>
                               {profit >= 0 ? "+" : ""}{formatMoney(profit)}
                             </span>
                           </div>
                         );
                       })}
-                      <div className="flex items-center justify-between text-xs pt-1.5 border-t border-border mt-1.5">
-                        <span className="text-muted-foreground">Total staked</span>
-                        <span className="font-mono text-foreground">{formatMoney(totalStaked)}</span>
-                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-xs pt-2.5 mt-2.5 border-t border-border">
+                      <span className="text-muted-foreground font-medium">Total staked across all books</span>
+                      <span className="font-mono font-semibold text-foreground">{formatMoney(totalStaked)}</span>
                     </div>
                   </div>
                 </CardContent>

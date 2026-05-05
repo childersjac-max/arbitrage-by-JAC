@@ -7,6 +7,61 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Activity, Clock, Percent, TrendingUp, DollarSign } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
+// ── Sportsbook logos via Clearbit CDN (fetched by browser, not server) ───────
+
+const BOOK_LOGOS: Record<string, string> = {
+  draftkings:  "https://logo.clearbit.com/draftkings.com",
+  fanduel:     "https://logo.clearbit.com/fanduel.com",
+  betmgm:      "https://logo.clearbit.com/betmgm.com",
+  caesars:     "https://logo.clearbit.com/caesars.com",
+  bet365:      "https://logo.clearbit.com/bet365.com",
+  fanatics:    "https://logo.clearbit.com/fanatics.com",
+  hard_rock:   "https://logo.clearbit.com/hardrock.bet",
+  betrivers:   "https://logo.clearbit.com/betrivers.com",
+  betparx:     "https://logo.clearbit.com/betparx.com",
+  pointsbet:   "https://logo.clearbit.com/pointsbet.com",
+  barstool:    "https://logo.clearbit.com/barstoolsports.com",
+  espnbet:     "https://logo.clearbit.com/espnbet.com",
+  fliff:       "https://logo.clearbit.com/getfliff.com",
+  pinnacle:    "https://logo.clearbit.com/pinnacle.com",
+  unibet:      "https://logo.clearbit.com/unibet.com",
+  superbook:   "https://logo.clearbit.com/superbook.com",
+};
+
+function getBookLogo(bookTitle: string): string | null {
+  const key = bookTitle.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+  return BOOK_LOGOS[key] ?? null;
+}
+
+function BookLogo({ title }: { title: string }) {
+  const src = getBookLogo(title);
+  if (!src) return (
+    <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-secondary text-[9px] font-bold text-muted-foreground shrink-0">
+      {title.slice(0, 2).toUpperCase()}
+    </span>
+  );
+  return (
+    <img
+      src={src}
+      alt={title}
+      width={20}
+      height={20}
+      className="rounded object-contain shrink-0 inline-block"
+      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+    />
+  );
+}
+
+// ── Clean market label ────────────────────────────────────────────────────────
+
+function cleanMarketLabel(raw: string): string {
+  // Strip grouping key suffix (e.g. "moneyline::home" → "moneyline")
+  const base = raw.includes("::") ? raw.split("::")[0]! : raw;
+  // Strip trailing numeric line (e.g. "spreads_-3.5" → "spreads")
+  const clean = base.replace(/_[-+]?\d+\.?\d*$/, "");
+  return clean.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function Dashboard() {
   const { data: summary, isLoading: isLoadingSummary } = useOpportunitiesSummary();
   const { data: opportunities, isLoading: isLoadingOpps, error } = useArbitrageOpportunities();
@@ -93,7 +148,7 @@ export default function Dashboard() {
                         <div className="flex flex-col items-start gap-1">
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="font-mono">{opp.sport}</Badge>
-                            <Badge variant="secondary">{opp.market}</Badge>
+                            <Badge variant="secondary">{cleanMarketLabel(opp.market)}</Badge>
                           </div>
                           <span className="font-semibold text-left">{opp.homeTeam} vs {opp.awayTeam}</span>
                           <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -123,9 +178,18 @@ export default function Dashboard() {
                             <TableBody>
                               {opp.legs.map((leg, i) => (
                                 <TableRow key={i}>
-                                  <TableCell className="font-medium">{leg.bookmakerTitle}</TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center gap-2 font-medium">
+                                      <BookLogo title={leg.bookmakerTitle} />
+                                      {leg.bookmakerTitle}
+                                    </div>
+                                  </TableCell>
                                   <TableCell>{leg.outcome}</TableCell>
-                                  <TableCell className="text-right font-mono">{leg.price > 0 && leg.price < 100 ? leg.price.toFixed(2) : (leg.price > 0 ? `+${leg.price}` : leg.price)}</TableCell>
+                                  <TableCell className="text-right font-mono">
+                                    {leg.price > 0 && leg.price < 100
+                                      ? leg.price.toFixed(2)
+                                      : leg.price > 0 ? `+${leg.price}` : leg.price}
+                                  </TableCell>
                                   <TableCell className="text-right font-mono text-success">${leg.stake.toFixed(2)}</TableCell>
                                 </TableRow>
                               ))}
@@ -187,7 +251,7 @@ export default function Dashboard() {
                 <div className="space-y-4">
                   {summary?.marketBreakdown?.map(mb => (
                     <div key={mb.market} className="flex items-center justify-between">
-                      <span className="text-sm font-medium">{mb.market}</span>
+                      <span className="text-sm font-medium">{cleanMarketLabel(mb.market)}</span>
                       <span className="text-sm font-mono">{mb.count}</span>
                     </div>
                   ))}

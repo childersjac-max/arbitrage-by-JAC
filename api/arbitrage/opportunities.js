@@ -170,8 +170,11 @@ function findArb(games) {
         const outcomeMap = marketMap.get(mktKey);
 
         for (const outcome of mkt.outcomes) {
-          const name = outcome.point !== undefined
-            ? `${outcome.name} ${outcome.point > 0 ? "+" : ""}${outcome.point}`
+          const ptStr = outcome.point !== undefined
+            ? `${outcome.point > 0 ? "+" : ""}${outcome.point}`
+            : "";
+        const name = (ptStr && !outcome.name.includes(ptStr))
+            ? `${outcome.name} ${ptStr}`
             : outcome.name;
           if (!outcomeMap.has(name)) outcomeMap.set(name, []);
           outcomeMap.get(name).push({

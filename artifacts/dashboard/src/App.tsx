@@ -8,7 +8,15 @@ import LineTracker from "@/pages/line-tracker";
 import NbaModel from "@/pages/nba-model";
 import Arbitrage from "@/pages/arbitrage";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 function Router() {
   return (

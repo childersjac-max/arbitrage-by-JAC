@@ -90,7 +90,7 @@ export default function LineTracker() {
     );
   }
 
-  if (error || !data) {
+  if (!data) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
@@ -110,6 +110,15 @@ export default function LineTracker() {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <Alert variant="destructive" className="py-2">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-xs">
+            Refresh failed — showing last known data.{" "}
+            <button className="underline" onClick={() => refetch()}>Try again</button>
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Live Bet Slate</h1>

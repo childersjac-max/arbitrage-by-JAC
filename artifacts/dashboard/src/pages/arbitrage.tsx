@@ -21,7 +21,6 @@ const BOOK_LOGOS: Record<string, string> = {
   caesars:     `https://www.google.com/s2/favicons?domain=caesars.com&sz=64`,
   bet365:      `https://www.google.com/s2/favicons?domain=bet365.com&sz=64`,
   fanatics:    `https://www.google.com/s2/favicons?domain=fanatics.com&sz=64`,
-  hard_rock:   `https://www.google.com/s2/favicons?domain=hardrock.bet&sz=64`,
   betrivers:   `https://www.google.com/s2/favicons?domain=betrivers.com&sz=64`,
   betparx:     `https://www.google.com/s2/favicons?domain=betparx.com&sz=64`,
   espnbet:     `https://www.google.com/s2/favicons?domain=espnbet.com&sz=64`,

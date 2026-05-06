@@ -7,6 +7,7 @@ import { Layout } from "@/components/layout";
 import LineTracker from "@/pages/line-tracker";
 import NbaModel from "@/pages/nba-model";
 import Arbitrage from "@/pages/arbitrage";
+import { DateProvider } from "@/lib/date-context";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,10 +36,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
+        <DateProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+          <Toaster />
+        </DateProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

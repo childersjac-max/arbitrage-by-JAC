@@ -45,7 +45,20 @@ function castBet(row) {
   return out;
 }
 
+// In-memory cache — survives within a single warm function instance
+let _cache = null;
+let _cacheTime = 0;
+const CACHE_TTL_MS = 45_000; // 45 seconds
+
 module.exports = async function handler(req, res) {
+  // Tell Vercel CDN to cache at the edge for 30s, serve stale for up to 60s
+  res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=60");
+
+  // Serve in-process cache if still fresh
+  if (_cache && Date.now() - _cacheTime < CACHE_TTL_MS) {
+    return res.json(_cache);
+  }
+
   try {
     const r = await fetch(
       "https://raw.githubusercontent.com/childersjac-max/Line-Tracker-Model/main/pipeline_output/bet_slate_latest.csv?t=" + Date.now()
@@ -55,8 +68,24 @@ module.exports = async function handler(req, res) {
     const bets = parseCSV(text)
       .filter((row) => row.sport && row.sport.trim() !== "")
       .map(castBet);
+
+    // Only update cache when we get real data — don't cache empty responses
+    if (bets.length > 0) {
+      _cache = { bets, total: bets.length, fetched_at: new Date().toISOString() };
+      _cacheTime = Date.now();
+    }
+
+    // If bets is empty but we have a previous cached result, serve it instead
+    if (bets.length === 0 && _cache) {
+      return res.json(_cache);
+    }
+
     res.json({ bets, total: bets.length, fetched_at: new Date().toISOString() });
   } catch (e) {
+    // On error, serve last known good cache if available
+    if (_cache) {
+      return res.json(_cache);
+    }
     res.status(500).json({ error: "fetch_failed", message: e.message });
   }
 };

@@ -5,7 +5,7 @@ const BASE_URL = "https://api.opticodds.com/api/v3";
 
 const NC_SPORTSBOOKS = [
   "draftkings", "fanduel", "betmgm", "caesars",
-  "bet365", "fanatics", "hard_rock", "betrivers", "betparx", "espnbet",
+  "bet365", "fanatics", "betrivers", "betparx", "espnbet",
 ];
 
 // Sport ID → league filter for Optic Odds API.

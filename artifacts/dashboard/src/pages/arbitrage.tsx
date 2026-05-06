@@ -29,7 +29,7 @@ function calcStakes(price: number, bankroll: number, oppPrice: number): number {
 }
 
 function useArbNotifications(
-  opportunities: Array<{ event_id: string; market: string; margin_pct: number; home_team: string; away_team: string }> | undefined,
+  opportunities: Array<{ event_id?: string; market?: string; margin_pct: number; home_team?: string; away_team?: string }> | undefined,
 ) {
   const notifiedRef = useRef<Set<string>>(new Set());
   const [notifEnabled, setNotifEnabled] = useState<boolean>(
@@ -46,11 +46,11 @@ function useArbNotifications(
     if (!opportunities || !notifEnabled) return;
     const high = opportunities.filter((o) => o.margin_pct > 1);
     high.forEach((opp) => {
-      const key = `${opp.event_id}-${opp.market}-${opp.margin_pct.toFixed(2)}`;
+      const key = `${opp.event_id ?? ""}-${opp.market ?? ""}-${opp.margin_pct.toFixed(2)}`;
       if (!notifiedRef.current.has(key)) {
         notifiedRef.current.add(key);
-        new Notification(`ARB +${opp.margin_pct.toFixed(2)}% — ${opp.home_team} vs ${opp.away_team}`, {
-          body: `Market: ${opp.market}. Open the app to view stakes.`,
+        new Notification(`ARB +${opp.margin_pct.toFixed(2)}% — ${opp.home_team ?? ""} vs ${opp.away_team ?? ""}`, {
+          body: `Market: ${opp.market ?? ""}. Open the app to view stakes.`,
           icon: "/favicon.ico",
         });
       }

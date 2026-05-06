@@ -5,6 +5,11 @@ const router: IRouter = Router();
 const LT_RAW =
   "https://raw.githubusercontent.com/childersjac-max/Line-Tracker-Model/main";
 
+// In-memory cache — survives across requests in the same process
+let _slateCache: { bets: unknown[]; total: number; fetched_at: string } | null = null;
+let _slateCacheTime = 0;
+const SLATE_CACHE_TTL = 45_000; // 45 seconds
+
 function parseCSV(text: string): Record<string, string>[] {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
@@ -75,19 +80,35 @@ async function fetchText(url: string): Promise<string> {
 }
 
 router.get("/line-tracker/slate", async (req, res) => {
+  // Serve in-process cache if still fresh
+  if (_slateCache && Date.now() - _slateCacheTime < SLATE_CACHE_TTL) {
+    return res.json(_slateCache);
+  }
+
   try {
     const text = await fetchText(`${LT_RAW}/pipeline_output/bet_slate_latest.csv`);
     const rows = parseCSV(text);
     const bets = rows
       .filter((r) => r.sport && r.sport.trim() !== "")
       .map(castBet);
-    res.json({
-      bets,
-      total: bets.length,
-      fetched_at: new Date().toISOString(),
-    });
+
+    // Only cache when we get real data — never replace good cache with empty result
+    if (bets.length > 0) {
+      _slateCache = { bets, total: bets.length, fetched_at: new Date().toISOString() };
+      _slateCacheTime = Date.now();
+    }
+
+    // If pipeline returned 0 rows but we have prior good data, serve it
+    if (bets.length === 0 && _slateCache) {
+      return res.json(_slateCache);
+    }
+
+    res.json({ bets, total: bets.length, fetched_at: new Date().toISOString() });
   } catch (e: unknown) {
     req.log.error({ err: e }, "Failed to fetch line tracker slate");
+    if (_slateCache) {
+      return res.json(_slateCache);
+    }
     res.status(500).json({
       error: "fetch_failed",
       message: e instanceof Error ? e.message : String(e),

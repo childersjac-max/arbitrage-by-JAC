@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useHealthCheck, useGetArbitrageOpportunities } from "@workspace/api-client-react";
 import { Activity } from "lucide-react";
+import { DateNav } from "@/components/date-nav";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -61,6 +62,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
+
+      <DateNav />
 
       <main className="flex-1 p-4 md:p-6 overflow-x-hidden">{children}</main>
     </div>

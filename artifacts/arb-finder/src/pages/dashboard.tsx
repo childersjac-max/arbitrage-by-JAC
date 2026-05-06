@@ -18,7 +18,6 @@ const BOOK_LOGOS: Record<string, string> = {
   caesars:     `${G}caesars.com&sz=64`,
   bet365:      `${G}bet365.com&sz=64`,
   fanatics:    `${G}fanatics.com&sz=64`,
-  hard_rock:   `${G}hardrock.bet&sz=64`,
   betrivers:   `${G}betrivers.com&sz=64`,
   betparx:     `${G}betparx.com&sz=64`,
   espnbet:     `${G}espnbet.com&sz=64`,

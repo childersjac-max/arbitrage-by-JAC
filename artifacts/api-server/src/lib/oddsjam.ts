@@ -11,7 +11,6 @@ const NC_SPORTSBOOKS = [
   "caesars",     // Caesars
   "bet365",      // Bet365
   "fanatics",    // Fanatics
-  "hard_rock",   // Hard Rock Bet
   "betrivers",   // BetRivers
   "betparx",     // betPARX
   "espnbet",     // ESPN BET

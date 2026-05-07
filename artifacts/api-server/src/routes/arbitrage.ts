@@ -76,19 +76,9 @@ router.get("/arbitrage/opportunities", async (req, res): Promise<void> => {
     if (req.query["sport"]) params.set("sport", String(req.query["sport"]));
     if (req.query["market"]) params.set("market", String(req.query["market"]));
 
-    const SPORTSBOOKS = [
-      "betmgm", "draftkings", "fanduel", "caesars", "pointsbet",
-      "williamhill_us", "barstool", "unibet_us", "betrivers",
-      "twinspires", "bovada", "mybookieag", "betonlineag",
-      "lowvig", "betanysports", "circa", "superbook",
-      "onexbet", "matchbook", "pinnacle",
-      "sportzino",
-    ];
-
-    const body: Record<string, unknown> = {};
+    const body: Record<string, string> = {};
     if (req.query["sport"]) body["sport"] = String(req.query["sport"]);
     if (req.query["market"]) body["market"] = String(req.query["market"]);
-    body["sportsbooks"] = SPORTSBOOKS;
 
     const response = await fetch(
       `${ODDSJAM_BASE}/arbitrage?${params.toString()}`,

@@ -48,19 +48,9 @@ module.exports = async function handler(req, res) {
     if (query.sport) params.set("sport", String(query.sport));
     if (query.market) params.set("market", String(query.market));
 
-    const SPORTSBOOKS = [
-      "betmgm", "draftkings", "fanduel", "caesars", "pointsbet",
-      "williamhill_us", "barstool", "unibet_us", "betrivers",
-      "twinspires", "bovada", "mybookieag", "betonlineag",
-      "lowvig", "betanysports", "circa", "superbook",
-      "onexbet", "matchbook", "pinnacle",
-      "sportzino",
-    ];
-
     const body = {};
     if (query.sport) body.sport = String(query.sport);
     if (query.market) body.market = String(query.market);
-    body.sportsbooks = SPORTSBOOKS;
 
     const response = await fetch(ODDSJAM_BASE + "/arbitrage?" + params.toString(), {
       method: "POST",

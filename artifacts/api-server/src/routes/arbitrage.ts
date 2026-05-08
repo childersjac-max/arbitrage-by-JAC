@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 
 const router: IRouter = Router();
 
-const ODDSJAM_BASE = process.env["ODDSJAM_API_BASE"] || "https://api.oddsjam.com/api/v2";
+const ODDSJAM_BASE = process.env["ODDSJAM_API_BASE"] || "https://api-dev.oddsjam.com/api/v2";
 
 interface ArbLeg {
   side: string;

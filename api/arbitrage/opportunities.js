@@ -1,4 +1,4 @@
-const ODDSJAM_BASE = process.env.ODDSJAM_API_BASE || "https://api.oddsjam.com/api/v2";
+const ODDSJAM_BASE = process.env.ODDSJAM_API_BASE || "https://api-dev.oddsjam.com/api/v2";
 
 const MARKET_MAP = {
   Moneyline: "h2h", moneyline: "h2h",

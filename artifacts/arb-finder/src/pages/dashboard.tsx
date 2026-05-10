@@ -163,6 +163,45 @@ function getTeamLogo(outcome: string, sport: string): string | null {
   return `${ESPN}/${espnSport}/500/${abbrev}.png`;
 }
 
+// ── Stat label from market key ────────────────────────────────────────────────
+function getStatLabel(market: string): string {
+  const base = market.includes("::") ? market.split("::")[0]! : market;
+  const key = base.replace(/^alternate_/, "").replace(/^player_/, "");
+  const LABELS: Record<string, string> = {
+    // Basketball
+    points: "points", assists: "assists", rebounds: "rebounds",
+    steals: "steals", blocks: "blocks", threes: "3-pointers",
+    pts_rebs_asts: "PRA", pts_rebs: "Pts+Reb", pts_asts: "Pts+Ast",
+    rebs_asts: "Reb+Ast", double_double: "double-double",
+    // Baseball
+    hits: "hits", home_runs: "home runs", strikeouts: "strikeouts",
+    total_bases: "total bases", rbi: "RBIs", walks: "walks",
+    runs_scored: "runs", hits_runs_rbis: "H+R+RBI",
+    // Football
+    passing_yards: "pass yds", rushing_yards: "rush yds",
+    receiving_yards: "rec yds", receptions: "receptions",
+    touchdowns: "TDs", interceptions: "INTs",
+    passing_tds: "pass TDs", rushing_tds: "rush TDs", receiving_tds: "rec TDs",
+    kicking_points: "kicking pts", tackles: "tackles",
+    // Hockey
+    shots_on_goal: "shots", goals: "goals",
+    // Generic
+    fantasy_points: "fantasy pts",
+  };
+  return LABELS[key] ?? key.replace(/_/g, " ");
+}
+
+// Format a player-prop outcome: strip duplicate trailing line, append stat label
+// "Jaden McDaniels Over 2.5 +2.5" + player_rebounds → "Jaden McDaniels Over 2.5 rebounds"
+function formatOutcome(outcome: string, market: string): string {
+  const isPlayerProp = /player/i.test(market);
+  if (!isPlayerProp) return outcome;
+  // Strip trailing ±number that duplicates the line already in the outcome string
+  const cleaned = outcome.replace(/\s+[+-]\d+\.?\d*\s*$/, "").trim();
+  const stat = getStatLabel(market);
+  return `${cleaned} ${stat}`;
+}
+
 // ── Bet type helpers ──────────────────────────────────────────────────────────
 function getBetType(market: string): string {
   const base = market.includes("::") ? market.split("::")[0]! : market;
@@ -355,7 +394,7 @@ export default function Dashboard() {
                                     )}
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <Badge variant="outline" className={`text-xs ${betTypeColor(betType)}`}>{betType}</Badge>
-                                      <span className="font-bold text-sm">{leg.outcome}</span>
+                                      <span className="font-bold text-sm">{formatOutcome(leg.outcome, opp.market)}</span>
                                     </div>
                                   </div>
                                   <p className="text-xs text-muted-foreground">

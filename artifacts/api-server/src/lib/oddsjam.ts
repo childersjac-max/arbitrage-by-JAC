@@ -2,18 +2,13 @@ import { logger } from "./logger";
 
 const BASE_URL = "https://api.opticodds.com/api/v3";
 
-// All sportsbooks licensed in North Carolina (legal since March 11, 2024)
-// API allows max 5 per request — batched automatically in getOdds()
 const NC_SPORTSBOOKS = [
   "draftkings",  // DraftKings
   "fanduel",     // FanDuel
   "betmgm",      // BetMGM
-  "caesars",     // Caesars
   "bet365",      // Bet365
   "fanatics",    // Fanatics
-  "betrivers",   // BetRivers
-  "betparx",     // betPARX
-  "espnbet",     // ESPN BET
+  "thescore",    // theScore Bet
 ];
 
 function getApiKey(): string {
@@ -179,8 +174,31 @@ export async function getOdds(params: {
 
   const marketFilter = params.markets ? params.markets.split(",") : null;
 
-  // Default to main game markets only (avoids exotic/prop markets that skew arbitrage)
-  const MAIN_MARKETS = ["moneyline", "point_spread", "total_points", "total_goals", "total_rounds", "moneyline_3-way"];
+  // Markets to scan: standard + alt spreads + player props + alt player props
+  const MAIN_MARKETS = [
+    // Game lines
+    "moneyline",
+    "point_spread",
+    // Alt spreads
+    "alternate_spread",
+    "alternate_point_spread",
+    // Player props — NBA
+    "player_points", "player_assists", "player_rebounds", "player_threes",
+    "player_blocks", "player_steals", "player_points_rebounds_assists",
+    // Player props — NFL
+    "player_pass_yards", "player_pass_touchdowns", "player_pass_completions",
+    "player_rush_yards", "player_rush_touchdowns",
+    "player_receiving_yards", "player_receptions", "player_receiving_touchdowns",
+    // Player props — MLB
+    "player_hits", "player_home_runs", "player_strikeouts", "player_runs_batted_in",
+    // Player props — NHL
+    "player_goals", "player_shots_on_goal",
+    // Alt player props
+    "alternate_player_points", "alternate_player_assists", "alternate_player_rebounds",
+    "alternate_player_pass_yards", "alternate_player_rush_yards",
+    "alternate_player_receiving_yards", "alternate_player_home_runs",
+    "alternate_player_strikeouts",
+  ];
   const markets = marketFilter ?? MAIN_MARKETS;
 
   // 2. Fetch odds in batches — API limits: max 5 fixture_ids AND max 5 sportsbooks per request.

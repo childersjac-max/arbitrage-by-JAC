@@ -6,6 +6,18 @@ const MARKET_MAP = {
   Total: "totals", total: "totals",
 };
 
+
+// Only show opportunities involving these sportsbooks
+const SELECTED_BOOKS = ['draftkings','fanduel','betmgm','bet365','fanatics','thescore'];
+function normBook(b) { return String(b).toLowerCase().replace(/\s+/g,'').replace(/[^a-z0-9]/g,''); }
+const NORM_BOOKS = SELECTED_BOOKS.map(normBook);
+
+// Keep: moneyline, spreads, alt spreads, player props — exclude totals
+function keepMarket(mkt) {
+  var m = String(mkt || '').toLowerCase();
+  return m.includes('moneyline') || m.includes('h2h') ||
+         m.includes('spread') || m.includes('player');
+}
 function toAmerican(price) {
   if (typeof price === "number") return Math.round(price);
   const n = parseFloat(String(price));
@@ -112,7 +124,14 @@ module.exports = async function handler(req, res) {
         margin_pct: Math.round(margin * 100) / 100,
         legs: calcStakes(legs, DEFAULT_BANKROLL),
       };
-    }).filter(function(o) { return o !== null && o.margin_pct > 0; })
+    }).filter(function(o) {
+      if (!o || o.margin_pct <= 0) return false;
+      if (!keepMarket(o.market)) return false;
+      // At least one leg must be from a selected book; ideally both
+      return o.legs.length > 0 && o.legs.every(function(l) {
+        return NORM_BOOKS.includes(normBook(l.book));
+      });
+    })
       .sort(function(a, b) { return b.margin_pct - a.margin_pct; });
 
     res.json({

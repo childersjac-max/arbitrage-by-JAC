@@ -4,10 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Activity, Clock, Percent, TrendingUp, DollarSign } from "lucide-react";
+import { Activity, Clock, ExternalLink, Percent, TrendingUp, DollarSign } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// ── Sportsbook logos via Clearbit CDN (fetched by browser, not server) ───────
+// ── Sportsbook logos ──────────────────────────────────────────────────────────
 
 const G = "https://www.google.com/s2/favicons?domain=";
 const BOOK_LOGOS: Record<string, string> = {
@@ -20,6 +20,80 @@ const BOOK_LOGOS: Record<string, string> = {
   thescore:    `${G}thescore.bet&sz=64`,
 };
 
+// ── Sportsbook deep links by sport ───────────────────────────────────────────
+
+const BOOK_URLS: Record<string, Record<string, string>> = {
+  draftkings: {
+    football:   "https://sportsbook.draftkings.com/leagues/football/nfl",
+    basketball: "https://sportsbook.draftkings.com/leagues/basketball/nba",
+    baseball:   "https://sportsbook.draftkings.com/leagues/baseball/mlb",
+    hockey:     "https://sportsbook.draftkings.com/leagues/hockey/nhl",
+    soccer:     "https://sportsbook.draftkings.com/sport/soccer",
+    tennis:     "https://sportsbook.draftkings.com/sport/tennis",
+    mma:        "https://sportsbook.draftkings.com/sport/mma",
+    default:    "https://sportsbook.draftkings.com",
+  },
+  fanduel: {
+    football:   "https://sportsbook.fanduel.com/football/nfl",
+    basketball: "https://sportsbook.fanduel.com/basketball/nba",
+    baseball:   "https://sportsbook.fanduel.com/baseball/mlb",
+    hockey:     "https://sportsbook.fanduel.com/hockey/nhl",
+    soccer:     "https://sportsbook.fanduel.com/soccer",
+    tennis:     "https://sportsbook.fanduel.com/tennis",
+    mma:        "https://sportsbook.fanduel.com/mma",
+    default:    "https://sportsbook.fanduel.com",
+  },
+  betmgm: {
+    football:   "https://sports.betmgm.com/en/sports/football-11/betting/usa/nfl-35",
+    basketball: "https://sports.betmgm.com/en/sports/basketball-7/betting/usa/nba-6004",
+    baseball:   "https://sports.betmgm.com/en/sports/baseball-23/betting/usa/mlb-75",
+    hockey:     "https://sports.betmgm.com/en/sports/ice-hockey-19/betting/usa/nhl-41",
+    soccer:     "https://sports.betmgm.com/en/sports/soccer-4/betting",
+    default:    "https://sports.betmgm.com/en/sports",
+  },
+  caesars: {
+    football:   "https://sportsbook.caesars.com/us/nc/bet/sports/american-football",
+    basketball: "https://sportsbook.caesars.com/us/nc/bet/sports/basketball",
+    baseball:   "https://sportsbook.caesars.com/us/nc/bet/sports/baseball",
+    hockey:     "https://sportsbook.caesars.com/us/nc/bet/sports/ice-hockey",
+    soccer:     "https://sportsbook.caesars.com/us/nc/bet/sports/soccer",
+    mma:        "https://sportsbook.caesars.com/us/nc/bet/sports/mma",
+    default:    "https://sportsbook.caesars.com/us/nc/bet",
+  },
+  bet365: {
+    football:   "https://www.bet365.com/#/AS/B4/",
+    basketball: "https://www.bet365.com/#/AS/B6/",
+    baseball:   "https://www.bet365.com/#/AS/B18/",
+    hockey:     "https://www.bet365.com/#/AS/B17/",
+    soccer:     "https://www.bet365.com/#/AS/B1/",
+    tennis:     "https://www.bet365.com/#/AS/B13/",
+    default:    "https://www.bet365.com",
+  },
+  fanatics: {
+    football:   "https://sportsbook.fanatics.com/sports/football",
+    basketball: "https://sportsbook.fanatics.com/sports/basketball",
+    baseball:   "https://sportsbook.fanatics.com/sports/baseball",
+    hockey:     "https://sportsbook.fanatics.com/sports/hockey",
+    soccer:     "https://sportsbook.fanatics.com/sports/soccer",
+    default:    "https://sportsbook.fanatics.com",
+  },
+  thescore: {
+    football:   "https://www.thescore.bet/sports/american-football",
+    basketball: "https://www.thescore.bet/sports/basketball",
+    baseball:   "https://www.thescore.bet/sports/baseball",
+    hockey:     "https://www.thescore.bet/sports/ice-hockey",
+    soccer:     "https://www.thescore.bet/sports/soccer",
+    default:    "https://www.thescore.bet",
+  },
+};
+
+function getBookUrl(bookTitle: string, sport: string): string {
+  const key = bookTitle.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+  const urls = BOOK_URLS[key];
+  if (!urls) return "#";
+  return urls[sport] ?? urls["default"] ?? "#";
+}
+
 function getBookLogo(bookTitle: string): string | null {
   const key = bookTitle.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
   return BOOK_LOGOS[key] ?? null;
@@ -28,7 +102,7 @@ function getBookLogo(bookTitle: string): string | null {
 function BookLogo({ title }: { title: string }) {
   const src = getBookLogo(title);
   if (!src) return (
-    <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-secondary text-[9px] font-bold text-muted-foreground shrink-0">
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-secondary text-[9px] font-bold text-muted-foreground shrink-0">
       {title.slice(0, 2).toUpperCase()}
     </span>
   );
@@ -36,20 +110,43 @@ function BookLogo({ title }: { title: string }) {
     <img
       src={src}
       alt={title}
-      width={20}
-      height={20}
+      width={22}
+      height={22}
       className="rounded object-contain shrink-0 inline-block"
       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
     />
   );
 }
 
-// ── Clean market label ────────────────────────────────────────────────────────
+// ── Bet type helpers ──────────────────────────────────────────────────────────
+
+function getBetType(market: string): string {
+  const base = market.includes("::") ? market.split("::")[0]! : market;
+  if (base.startsWith("alternate_player_")) return "Alt Prop";
+  if (base.startsWith("player_"))           return "Player Prop";
+  if (base === "alternate_spread" || base === "alternate_point_spread") return "Alt Spread";
+  if (base === "alternate_total" || base.startsWith("alternate_total_")) return "Alt Total";
+  if (base === "moneyline" || base === "moneyline_3-way") return "Moneyline";
+  if (base === "point_spread")              return "Spread";
+  if (base === "total_points" || base === "total_goals" || base === "total_rounds") return "Total";
+  return base.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function betTypeColor(type: string): string {
+  if (type === "Moneyline")                          return "border-blue-500/50 text-blue-400";
+  if (type === "Spread" || type === "Alt Spread")    return "border-purple-500/50 text-purple-400";
+  if (type === "Total" || type === "Alt Total")      return "border-orange-500/50 text-orange-400";
+  if (type === "Player Prop" || type === "Alt Prop") return "border-pink-500/50 text-pink-400";
+  return "border-muted-foreground text-muted-foreground";
+}
+
+function formatOdds(price: number): string {
+  if (price > 0 && price < 100) return price.toFixed(2);
+  return price > 0 ? `+${price}` : `${price}`;
+}
 
 function cleanMarketLabel(raw: string): string {
-  // Strip grouping key suffix (e.g. "moneyline::home" → "moneyline")
   const base = raw.includes("::") ? raw.split("::")[0]! : raw;
-  // Strip trailing numeric line (e.g. "spreads_-3.5" → "spreads")
   const clean = base.replace(/_[-+]?\d+\.?\d*$/, "");
   return clean.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -116,7 +213,7 @@ export default function Dashboard() {
         <Card className="col-span-7 lg:col-span-5">
           <CardHeader>
             <CardTitle>Live Arbitrage Finder</CardTitle>
-            <CardDescription>Sorted by maximum guaranteed return</CardDescription>
+            <CardDescription>Sorted by maximum guaranteed return — click a row to see bets and links</CardDescription>
           </CardHeader>
           <CardContent>
             {error ? (
@@ -133,69 +230,98 @@ export default function Dashboard() {
               </div>
             ) : (
               <Accordion type="single" collapsible className="w-full space-y-2">
-                {opportunities?.map((opp) => (
-                  <AccordionItem key={opp.id} value={opp.id} className="border border-border bg-card rounded-md px-4 data-[state=open]:border-primary/50 transition-colors" data-testid={`arb-item-${opp.id}`}>
-                    <AccordionTrigger className="hover:no-underline py-4">
-                      <div className="flex items-center justify-between w-full pr-4">
-                        <div className="flex flex-col items-start gap-1">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="font-mono">{opp.sport}</Badge>
-                            <Badge variant="secondary">{cleanMarketLabel(opp.market)}</Badge>
+                {opportunities?.map((opp) => {
+                  const betType = getBetType(opp.market);
+                  return (
+                    <AccordionItem
+                      key={opp.id}
+                      value={opp.id}
+                      className="border border-border bg-card rounded-md px-4 data-[state=open]:border-primary/50 transition-colors"
+                      data-testid={`arb-item-${opp.id}`}
+                    >
+                      <AccordionTrigger className="hover:no-underline py-4">
+                        <div className="flex items-center justify-between w-full pr-4">
+                          <div className="flex flex-col items-start gap-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant="outline" className="font-mono text-xs">{opp.sport}</Badge>
+                              <Badge variant="outline" className={`text-xs ${betTypeColor(betType)}`}>{betType}</Badge>
+                            </div>
+                            <span className="font-semibold text-left">{opp.homeTeam} vs {opp.awayTeam}</span>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> {formatDate(opp.commenceTime)}
+                            </span>
                           </div>
-                          <span className="font-semibold text-left">{opp.homeTeam} vs {opp.awayTeam}</span>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> {formatDate(opp.commenceTime)}
-                          </span>
+                          <div className="flex flex-col items-end">
+                            <span className="text-lg font-bold text-success font-mono" data-testid={`profit-${opp.id}`}>
+                              +{opp.profitPercent.toFixed(3)}%
+                            </span>
+                            <span className="text-xs text-muted-foreground">Guaranteed</span>
+                          </div>
                         </div>
-                        <div className="flex flex-col items-end">
-                          <span className="text-lg font-bold text-success font-mono" data-testid={`profit-${opp.id}`}>
-                            +{opp.profitPercent.toFixed(3)}%
-                          </span>
-                          <span className="text-xs text-muted-foreground">Guaranteed Profit</span>
-                        </div>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="pt-2 pb-4">
-                        <div className="rounded-md border border-border overflow-hidden">
-                          <Table>
-                            <TableHeader className="bg-secondary/50">
-                              <TableRow>
-                                <TableHead>Bookmaker</TableHead>
-                                <TableHead>Outcome</TableHead>
-                                <TableHead className="text-right">Odds</TableHead>
-                                <TableHead className="text-right">Stake ($1000 Total)</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {opp.legs.map((leg, i) => (
-                                <TableRow key={i}>
-                                  <TableCell>
-                                    <div className="flex items-center gap-2 font-medium">
-                                      <BookLogo title={leg.bookmakerTitle} />
-                                      {leg.bookmakerTitle}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>{leg.outcome}</TableCell>
-                                  <TableCell className="text-right font-mono">
-                                    {leg.price > 0 && leg.price < 100
-                                      ? leg.price.toFixed(2)
-                                      : leg.price > 0 ? `+${leg.price}` : leg.price}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono text-success">${leg.stake.toFixed(2)}</TableCell>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="pt-2 pb-4">
+                          <div className="rounded-md border border-border overflow-hidden">
+                            <Table>
+                              <TableHeader className="bg-secondary/50">
+                                <TableRow>
+                                  <TableHead>Sportsbook</TableHead>
+                                  <TableHead>Bet Type</TableHead>
+                                  <TableHead>Side / Outcome</TableHead>
+                                  <TableHead className="text-right">Odds</TableHead>
+                                  <TableHead className="text-right">Stake ($1,000)</TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                              </TableHeader>
+                              <TableBody>
+                                {opp.legs.map((leg, i) => (
+                                  <TableRow key={i} className="align-top">
+                                    <TableCell>
+                                      <div className="flex items-center gap-2">
+                                        <BookLogo title={leg.bookmakerTitle} />
+                                        <div className="flex flex-col">
+                                          <span className="font-semibold text-sm">{leg.bookmakerTitle}</span>
+                                          <a
+                                            href={getBookUrl(leg.bookmakerTitle, opp.sport)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 hover:underline font-bold mt-0.5 w-fit"
+                                          >
+                                            Bet Now <ExternalLink className="w-3 h-3" />
+                                          </a>
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline" className={`text-xs whitespace-nowrap ${betTypeColor(betType)}`}>
+                                        {betType}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="font-medium max-w-[160px]">
+                                      {leg.outcome}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <span className={`font-mono font-bold text-base ${leg.price > 0 ? "text-success" : "text-foreground"}`}>
+                                        {formatOdds(leg.price)}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono text-success font-semibold">
+                                      ${leg.stake.toFixed(2)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          <div className="mt-2 text-xs text-muted-foreground flex justify-between">
+                            <span>Detected: {formatDate(opp.detectedAt)}</span>
+                            <span>Total Implied: {(opp.totalImpliedProbability * 100).toFixed(2)}%</span>
+                          </div>
                         </div>
-                        <div className="mt-2 text-xs text-muted-foreground flex justify-between">
-                          <span>Detected: {formatDate(opp.detectedAt)}</span>
-                          <span>Total Implied: {(opp.totalImpliedProbability * 100).toFixed(2)}%</span>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
               </Accordion>
             )}
           </CardContent>

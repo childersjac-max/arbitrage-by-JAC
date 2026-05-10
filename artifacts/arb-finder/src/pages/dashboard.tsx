@@ -1,9 +1,10 @@
+import { useState, useCallback } from "react";
 import { useArbitrageOpportunities, useOpportunitiesSummary } from "@/hooks/use-oddsjam";
 import { formatPercent, formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Activity, Clock, ExternalLink, Percent, TrendingUp, DollarSign } from "lucide-react";
+import { Activity, Check, Clock, ExternalLink, Percent, TrendingUp, DollarSign } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // ── Sportsbook logos ──────────────────────────────────────────────────────────
@@ -237,6 +238,14 @@ function cleanMarketLabel(raw: string): string {
 export default function Dashboard() {
   const { data: summary, isLoading: isLoadingSummary } = useOpportunitiesSummary();
   const { data: opportunities, isLoading: isLoadingOpps, error } = useArbitrageOpportunities();
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copyBet = useCallback((key: string, text: string, url: string) => {
+    navigator.clipboard.writeText(text).catch(() => {});
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -353,6 +362,15 @@ export default function Dashboard() {
                         <div className="pt-2 pb-4 space-y-3">
                           {opp.legs.map((leg, i) => {
                             const teamLogo = getTeamLogo(leg.outcome, opp.sport);
+                            const legKey = `${opp.id}-${i}`;
+                            const isCopied = copiedKey === legKey;
+                            const bookUrl = getBookUrl(leg.bookmakerTitle, opp.sport);
+                            const oddsStr = leg.price > 0 ? `+${leg.price}` : `${leg.price}`;
+                            const clipText = [
+                              `${leg.bookmakerTitle}: ${formatOutcome(leg.outcome, opp.market)}`,
+                              `Odds: ${oddsStr}  |  Stake: $${leg.stake.toFixed(2)}`,
+                              `Game: ${opp.homeTeam} vs ${opp.awayTeam}`,
+                            ].join("\n");
                             return (
                               <div key={i}
                                 className="rounded-lg border border-border bg-secondary/20 p-4 flex flex-col sm:flex-row sm:items-center gap-4"
@@ -367,12 +385,15 @@ export default function Dashboard() {
                                   <BookLogo title={leg.bookmakerTitle} />
                                   <div className="flex flex-col">
                                     <span className="font-bold text-sm">{leg.bookmakerTitle}</span>
-                                    <a href={getBookUrl(leg.bookmakerTitle, opp.sport)} target="_blank" rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-bold mt-0.5"
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); copyBet(legKey, clipText, bookUrl); }}
+                                      className="inline-flex items-center gap-1 text-xs font-bold mt-0.5 transition-colors"
+                                      style={{ color: isCopied ? "var(--color-success, #22c55e)" : "var(--color-primary)" }}
                                     >
-                                      Open & Bet <ExternalLink className="w-3 h-3" />
-                                    </a>
+                                      {isCopied
+                                        ? <><Check className="w-3 h-3" /> Copied!</>
+                                        : <><ExternalLink className="w-3 h-3" /> Open & Bet</>}
+                                    </button>
                                   </div>
                                 </div>
 

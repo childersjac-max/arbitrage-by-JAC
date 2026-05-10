@@ -163,8 +163,8 @@ function useArbNotifications(
 }
 
 export default function Arbitrage() {
-  const [bankroll, setBankroll] = useState<number>(10000);
-  const [bankrollInput, setBankrollInput] = useState<string>("10000");
+  const [bankroll, setBankroll] = useState<number>(100);
+  const [bankrollInput, setBankrollInput] = useState<string>("100");
   const { selectedDate } = useSelectedDate();
 
   const { data, isLoading, error, refetch, isFetching } = useGetArbitrageOpportunities(

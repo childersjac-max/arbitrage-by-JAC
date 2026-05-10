@@ -91,7 +91,7 @@ module.exports = async function handler(req, res) {
 
     const data = await response.json();
     const rows = Array.isArray(data) ? data : ((data && data.data) || []);
-    const DEFAULT_BANKROLL = 10000;
+    const DEFAULT_BANKROLL = 100;
 
     const opportunities = rows.map(function(row) {
       if (!row || typeof row !== "object") return null;

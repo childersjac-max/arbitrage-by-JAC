@@ -65,6 +65,45 @@ function betTypeBadgeClass(type: string) {
   return "border-muted-foreground/50 text-muted-foreground";
 }
 
+// ── Stat label + outcome formatting ─────────────────────────────────────────
+function getStatLabel(market: string): string {
+  const base = market.includes("::") ? market.split("::")[0]! : market;
+  const key = base.replace(/^alternate_/, "").replace(/^player_/, "");
+  const LABELS: Record<string, string> = {
+    points: "points", assists: "assists", rebounds: "rebounds",
+    steals: "steals", blocks: "blocks", threes: "3-pointers",
+    pts_rebs_asts: "PRA", pts_rebs: "Pts+Reb", pts_asts: "Pts+Ast",
+    rebs_asts: "Reb+Ast", double_double: "double-double",
+    hits: "hits", home_runs: "home runs", strikeouts: "strikeouts",
+    total_bases: "total bases", rbi: "RBIs", walks: "walks",
+    runs_scored: "runs", hits_runs_rbis: "H+R+RBI",
+    passing_yards: "pass yds", rushing_yards: "rush yds",
+    receiving_yards: "rec yds", receptions: "receptions",
+    touchdowns: "TDs", interceptions: "INTs",
+    passing_tds: "pass TDs", rushing_tds: "rush TDs", receiving_tds: "rec TDs",
+    kicking_points: "kicking pts", tackles: "tackles",
+    shots_on_goal: "shots", goals: "goals",
+    fantasy_points: "fantasy pts",
+  };
+  return LABELS[key] ?? key.replace(/_/g, " ");
+}
+
+// For player props: strips the duplicate trailing ±number, appends stat label.
+// e.g. "Jaden McDaniels Over 2.5 +2.5" + player_rebounds → "Jaden McDaniels Over 2.5 rebounds"
+// For spread/total/moneyline: appends line as-is.
+function formatSide(side: string | undefined, line: number | null | undefined, market: string): string {
+  if (!side) return "";
+  const isPlayerProp = /player/i.test(market);
+  if (isPlayerProp) {
+    // Strip duplicate trailing ±number (the alternate line suffix already in the string)
+    const cleaned = side.replace(/\s+[+-]\d+\.?\d*\s*$/, "").trim();
+    return `${cleaned} ${getStatLabel(market)}`;
+  }
+  // Non-prop: keep the spread/line suffix
+  if (line != null) return `${side} ${line > 0 ? `+${line}` : line}`;
+  return side;
+}
+
 // ── Team logos via ESPN CDN ───────────────────────────────────────────────────
 const ESPN = "https://a.espncdn.com/i/teamlogos";
 
@@ -361,7 +400,7 @@ export default function Arbitrage() {
                 ? [calcStakes(prices[0], bankroll, prices[1]), calcStakes(prices[1], bankroll, prices[0])]
                 : opp.legs.map((l) => l.stake ?? null);
 
-            const bt = getBetType(opp.market);
+            const bt = getBetType(opp.market ?? "");
 
             return (
               <Card key={i} className="bg-card border-border overflow-hidden flex flex-col">
@@ -388,6 +427,7 @@ export default function Arbitrage() {
                 <div className="flex flex-col divide-y divide-border">
                   {opp.legs.map((leg, j) => {
                     const teamLogo = getTeamLogo(leg.side, opp.sport_key);
+                    const displaySide = formatSide(leg.side, leg.line, opp.market ?? "");
                     return (
                       <div key={j} className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/10">
                         {/* Step number */}
@@ -411,9 +451,7 @@ export default function Arbitrage() {
 
                         {/* Bet details */}
                         <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-sm truncate">
-                            {leg.side}{leg.line != null ? ` ${leg.line > 0 ? `+${leg.line}` : leg.line}` : ""}
-                          </div>
+                          <div className="font-semibold text-sm">{displaySide}</div>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="text-xs text-muted-foreground font-medium">{leg.book}</span>
                             <span className="text-muted-foreground/40">·</span>

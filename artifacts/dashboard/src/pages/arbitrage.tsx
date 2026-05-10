@@ -312,7 +312,7 @@ export default function Arbitrage() {
               <Card key={i} className="bg-card border-border overflow-hidden flex flex-col">
                 <div className="p-4 border-b border-border bg-secondary/20 flex items-start justify-between">
                   <div>
-                    <div className="font-semibold">{opp.home_team} vs {opp.away_team}</div>
+                    {(() => { const hl = getTeamLogo(opp.home_team, opp.sport_key); const al = getTeamLogo(opp.away_team, opp.sport_key); return (<div className="flex items-center gap-2"><>{hl && <img src={hl} alt={opp.home_team ?? ""} width={24} height={24} className="object-contain shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />}</>{al && <img src={al} alt={opp.away_team ?? ""} width={24} height={24} className="object-contain shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />}<span className="font-semibold">{opp.home_team} vs {opp.away_team}</span></div>); })()}
                     <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
                       <span className="uppercase tracking-wider">{opp.sport_key}</span>
                       <span>•</span>

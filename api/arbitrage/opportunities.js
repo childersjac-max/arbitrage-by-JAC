@@ -8,7 +8,7 @@ const MARKET_MAP = {
 
 
 // Only show opportunities involving these sportsbooks
-const SELECTED_BOOKS = ['draftkings','fanduel','betmgm','bet365','fanatics','thescore'];
+const SELECTED_BOOKS = ['draftkings','fanduel','betmgm','caesars','bet365','fanatics','thescore'];
 function normBook(b) { return String(b).toLowerCase().replace(/\s+/g,'').replace(/[^a-z0-9]/g,''); }
 const NORM_BOOKS = SELECTED_BOOKS.map(normBook);
 
@@ -16,7 +16,7 @@ const NORM_BOOKS = SELECTED_BOOKS.map(normBook);
 function keepMarket(mkt) {
   var m = String(mkt || '').toLowerCase();
   return m.includes('moneyline') || m.includes('h2h') ||
-         m.includes('spread') || m.includes('player');
+         m.includes('spread') || m.includes('total') || m.includes('player');
 }
 function toAmerican(price) {
   if (typeof price === "number") return Math.round(price);

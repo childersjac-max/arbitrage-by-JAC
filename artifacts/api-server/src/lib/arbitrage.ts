@@ -138,7 +138,7 @@ export function findArbitrageOpportunities(
       // True arbitrage: totalImplied strictly < 1.0
       if (totalImplied < 1) {
         const profitPercent = ((1 / totalImplied) - 1) * 100;
-        const bankroll = 1000;
+        const bankroll = 100;
         const stakes = calculateOptimalStakes(bestLegs, bankroll);
 
         const baseMkt = marketKey.includes("::") ? marketKey.split("::")[0]! : marketKey;

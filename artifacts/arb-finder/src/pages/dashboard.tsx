@@ -322,6 +322,8 @@ export default function Dashboard() {
               <Accordion type="single" collapsible className="w-full space-y-2">
                 {opportunities?.map((opp) => {
                   const betType = getBetType(opp.market);
+                  const homeLogoUrl = getTeamLogo(opp.homeTeam, opp.sport);
+                  const awayLogoUrl = getTeamLogo(opp.awayTeam, opp.sport);
                   const totalStake = opp.legs.reduce((s, l) => s + l.stake, 0);
                   const guaranteedReturn = opp.legs[0]
                     ? opp.legs[0].stake * (opp.legs[0].price > 0
@@ -341,7 +343,11 @@ export default function Dashboard() {
                               <Badge variant="outline" className="font-mono text-xs">{opp.sport}</Badge>
                               <Badge variant="outline" className={`text-xs ${betTypeColor(betType)}`}>{betType}</Badge>
                             </div>
-                            <span className="font-semibold text-left">{opp.homeTeam} vs {opp.awayTeam}</span>
+                            <div className="flex items-center gap-2">
+                              {homeLogoUrl && <img src={homeLogoUrl} alt={opp.homeTeam} width={24} height={24} className="object-contain shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />}
+                              {awayLogoUrl && <img src={awayLogoUrl} alt={opp.awayTeam} width={24} height={24} className="object-contain shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />}
+                              <span className="font-semibold text-left">{opp.homeTeam} vs {opp.awayTeam}</span>
+                            </div>
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <Clock className="w-3 h-3" /> {formatDate(opp.commenceTime)}
                             </span>

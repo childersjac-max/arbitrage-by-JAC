@@ -6,6 +6,7 @@ const NC_SPORTSBOOKS = [
   "draftkings",  // DraftKings
   "fanduel",     // FanDuel
   "betmgm",      // BetMGM
+  "caesars",     // Caesars
   "bet365",      // Bet365
   "fanatics",    // Fanatics
   "thescore",    // theScore Bet
@@ -179,9 +180,13 @@ export async function getOdds(params: {
     // Game lines
     "moneyline",
     "point_spread",
+    // Totals
+    "total_points", "total_goals", "total_rounds",
     // Alt spreads
     "alternate_spread",
     "alternate_point_spread",
+    // Alt totals
+    "alternate_total", "alternate_total_points", "alternate_total_goals",
     // Player props — NBA
     "player_points", "player_assists", "player_rebounds", "player_threes",
     "player_blocks", "player_steals", "player_points_rebounds_assists",

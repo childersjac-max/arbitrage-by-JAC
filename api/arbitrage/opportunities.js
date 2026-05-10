@@ -127,10 +127,15 @@ module.exports = async function handler(req, res) {
     }).filter(function(o) {
       if (!o || o.margin_pct <= 0) return false;
       if (!keepMarket(o.market)) return false;
-      // At least one leg must be from a selected book; ideally both
-      return o.legs.length > 0 && o.legs.every(function(l) {
-        return NORM_BOOKS.includes(normBook(l.book));
-      });
+      if (o.legs.length < 2) return false;
+      // All legs must have valid American odds (≥ 100 or ≤ -100)
+      if (o.legs.some(function(l) { return l.price > -100 && l.price < 100; })) return false;
+      // All legs must be from a selected sportsbook
+      if (!o.legs.every(function(l) { return NORM_BOOKS.includes(normBook(l.book)); })) return false;
+      // True arb requires bets at ≥2 distinct sportsbooks — same-book "arbs" are not executable
+      var books = o.legs.map(function(l) { return normBook(l.book); });
+      var uniqueBooks = books.filter(function(b, i) { return books.indexOf(b) === i; });
+      return uniqueBooks.length >= 2;
     })
       .sort(function(a, b) { return b.margin_pct - a.margin_pct; });
 

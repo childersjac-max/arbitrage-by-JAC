@@ -2,7 +2,6 @@ import { useArbitrageOpportunities, useOpportunitiesSummary } from "@/hooks/use-
 import { formatPercent, formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Activity, Clock, ExternalLink, Percent, TrendingUp, DollarSign } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -102,17 +101,13 @@ function getBookLogo(bookTitle: string): string | null {
 function BookLogo({ title }: { title: string }) {
   const src = getBookLogo(title);
   if (!src) return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-secondary text-[9px] font-bold text-muted-foreground shrink-0">
+    <span className="inline-flex items-center justify-center w-7 h-7 rounded bg-secondary text-[9px] font-bold text-muted-foreground shrink-0">
       {title.slice(0, 2).toUpperCase()}
     </span>
   );
   return (
-    <img
-      src={src}
-      alt={title}
-      width={22}
-      height={22}
-      className="rounded object-contain shrink-0 inline-block"
+    <img src={src} alt={title} width={28} height={28}
+      className="rounded object-contain shrink-0"
       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
     />
   );
@@ -133,10 +128,10 @@ function getBetType(market: string): string {
 }
 
 function betTypeColor(type: string): string {
-  if (type === "Moneyline")                          return "border-blue-500/50 text-blue-400";
-  if (type === "Spread" || type === "Alt Spread")    return "border-purple-500/50 text-purple-400";
-  if (type === "Total" || type === "Alt Total")      return "border-orange-500/50 text-orange-400";
-  if (type === "Player Prop" || type === "Alt Prop") return "border-pink-500/50 text-pink-400";
+  if (type === "Moneyline")                          return "border-blue-500/60 text-blue-400 bg-blue-500/10";
+  if (type === "Spread" || type === "Alt Spread")    return "border-purple-500/60 text-purple-400 bg-purple-500/10";
+  if (type === "Total" || type === "Alt Total")      return "border-orange-500/60 text-orange-400 bg-orange-500/10";
+  if (type === "Player Prop" || type === "Alt Prop") return "border-pink-500/60 text-pink-400 bg-pink-500/10";
   return "border-muted-foreground text-muted-foreground";
 }
 
@@ -162,6 +157,7 @@ export default function Dashboard() {
         <p className="text-muted-foreground">Live arbitrage opportunities automatically refreshed every 30s.</p>
       </div>
 
+      {/* ── Summary stats ── */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -210,10 +206,11 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-7">
+        {/* ── Arb list ── */}
         <Card className="col-span-7 lg:col-span-5">
           <CardHeader>
             <CardTitle>Live Arbitrage Finder</CardTitle>
-            <CardDescription>Sorted by maximum guaranteed return — click a row to see bets and links</CardDescription>
+            <CardDescription>Sorted by guaranteed return — click a row to see exact bet instructions</CardDescription>
           </CardHeader>
           <CardContent>
             {error ? (
@@ -232,6 +229,13 @@ export default function Dashboard() {
               <Accordion type="single" collapsible className="w-full space-y-2">
                 {opportunities?.map((opp) => {
                   const betType = getBetType(opp.market);
+                  const totalStake = opp.legs.reduce((s, l) => s + l.stake, 0);
+                  const guaranteedReturn = opp.legs[0]
+                    ? opp.legs[0].stake * (opp.legs[0].price > 0
+                        ? (opp.legs[0].price / 100 + 1)
+                        : (100 / Math.abs(opp.legs[0].price) + 1))
+                    : totalStake * (1 + opp.profitPercent / 100);
+
                   return (
                     <AccordionItem
                       key={opp.id}
@@ -251,71 +255,82 @@ export default function Dashboard() {
                               <Clock className="w-3 h-3" /> {formatDate(opp.commenceTime)}
                             </span>
                           </div>
-                          <div className="flex flex-col items-end">
+                          <div className="flex flex-col items-end gap-0.5">
                             <span className="text-lg font-bold text-success font-mono" data-testid={`profit-${opp.id}`}>
                               +{opp.profitPercent.toFixed(3)}%
                             </span>
-                            <span className="text-xs text-muted-foreground">Guaranteed</span>
+                            <span className="text-xs text-muted-foreground">guaranteed profit</span>
+                            <span className="text-xs font-mono text-muted-foreground">
+                              Bet ${totalStake.toFixed(2)} → Return ${guaranteedReturn.toFixed(2)}
+                            </span>
                           </div>
                         </div>
                       </AccordionTrigger>
+
                       <AccordionContent>
-                        <div className="pt-2 pb-4">
-                          <div className="rounded-md border border-border overflow-hidden">
-                            <Table>
-                              <TableHeader className="bg-secondary/50">
-                                <TableRow>
-                                  <TableHead>Sportsbook</TableHead>
-                                  <TableHead>Bet Type</TableHead>
-                                  <TableHead>Side / Outcome</TableHead>
-                                  <TableHead className="text-right">Odds</TableHead>
-                                  <TableHead className="text-right">Stake ($1,000)</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {opp.legs.map((leg, i) => (
-                                  <TableRow key={i} className="align-top">
-                                    <TableCell>
-                                      <div className="flex items-center gap-2">
-                                        <BookLogo title={leg.bookmakerTitle} />
-                                        <div className="flex flex-col">
-                                          <span className="font-semibold text-sm">{leg.bookmakerTitle}</span>
-                                          <a
-                                            href={getBookUrl(leg.bookmakerTitle, opp.sport)}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 hover:underline font-bold mt-0.5 w-fit"
-                                          >
-                                            Bet Now <ExternalLink className="w-3 h-3" />
-                                          </a>
-                                        </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge variant="outline" className={`text-xs whitespace-nowrap ${betTypeColor(betType)}`}>
-                                        {betType}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell className="font-medium max-w-[160px]">
-                                      {leg.outcome}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      <span className={`font-mono font-bold text-base ${leg.price > 0 ? "text-success" : "text-foreground"}`}>
-                                        {formatOdds(leg.price)}
-                                      </span>
-                                    </TableCell>
-                                    <TableCell className="text-right font-mono text-success font-semibold">
-                                      ${leg.stake.toFixed(2)}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                          <div className="mt-2 text-xs text-muted-foreground flex justify-between">
+                        <div className="pt-2 pb-4 space-y-3">
+                          {/* Bet instructions — one card per leg */}
+                          {opp.legs.map((leg, i) => (
+                            <div
+                              key={i}
+                              className="rounded-lg border border-border bg-secondary/20 p-4 flex flex-col sm:flex-row sm:items-center gap-4"
+                            >
+                              {/* Step number */}
+                              <div className="flex items-center justify-center w-9 h-9 rounded-full bg-primary/10 text-primary font-bold text-sm shrink-0 self-start sm:self-center">
+                                {i + 1}
+                              </div>
+
+                              {/* Sportsbook */}
+                              <div className="flex items-center gap-2 min-w-[140px]">
+                                <BookLogo title={leg.bookmakerTitle} />
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-sm">{leg.bookmakerTitle}</span>
+                                  <a
+                                    href={getBookUrl(leg.bookmakerTitle, opp.sport)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-bold mt-0.5"
+                                  >
+                                    Open & Bet <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                </div>
+                              </div>
+
+                              {/* Divider */}
+                              <div className="hidden sm:block w-px h-10 bg-border shrink-0" />
+
+                              {/* Bet details */}
+                              <div className="flex-1 flex flex-col gap-0.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Badge variant="outline" className={`text-xs ${betTypeColor(betType)}`}>{betType}</Badge>
+                                  <span className="text-xs text-muted-foreground">→</span>
+                                  <span className="font-semibold text-sm">{leg.outcome}</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Bet <span className="font-mono font-semibold text-foreground">${leg.stake.toFixed(2)}</span> at odds{" "}
+                                  <span className={`font-mono font-bold text-base ${leg.price > 0 ? "text-success" : "text-foreground"}`}>
+                                    {formatOdds(leg.price)}
+                                  </span>
+                                </p>
+                              </div>
+
+                              {/* Stake chip */}
+                              <div className="flex flex-col items-end sm:items-center shrink-0">
+                                <span className="text-xs text-muted-foreground">Stake</span>
+                                <span className="font-mono font-bold text-lg text-success">${leg.stake.toFixed(2)}</span>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Summary footer */}
+                          <div className="flex items-center justify-between px-1 pt-1 text-xs text-muted-foreground">
                             <span>Detected: {formatDate(opp.detectedAt)}</span>
-                            <span>Total Implied: {(opp.totalImpliedProbability * 100).toFixed(2)}%</span>
+                            <span className="font-mono">
+                              Total bet: <span className="text-foreground font-semibold">${totalStake.toFixed(2)}</span>
+                              &nbsp;·&nbsp;
+                              Implied probability: <span className="text-foreground font-semibold">{(opp.totalImpliedProbability * 100).toFixed(2)}%</span>
+                            </span>
                           </div>
                         </div>
                       </AccordionContent>
@@ -327,6 +342,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* ── Sidebar ── */}
         <div className="col-span-7 lg:col-span-2 space-y-4">
           <Card>
             <CardHeader>
@@ -334,9 +350,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {isLoadingSummary ? (
-                <div className="space-y-2">
-                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
-                </div>
+                <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
               ) : (
                 <div className="space-y-4">
                   {summary?.sportBreakdown?.map(sb => (
@@ -362,9 +376,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {isLoadingSummary ? (
-                <div className="space-y-2">
-                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
-                </div>
+                <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
               ) : (
                 <div className="space-y-4">
                   {summary?.marketBreakdown?.map(mb => (

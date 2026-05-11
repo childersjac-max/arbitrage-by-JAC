@@ -169,7 +169,12 @@ export default function Arbitrage() {
     navigator.clipboard.writeText(text).catch(() => {});
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
-    window.open(url, "_blank", "noopener,noreferrer");
+    const a = Object.assign(document.createElement("a"), {
+      href: url, target: "_blank", rel: "noopener noreferrer",
+    });
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }, []);
 
   const { data, isLoading, error, refetch, isFetching } = useGetArbitrageOpportunities(

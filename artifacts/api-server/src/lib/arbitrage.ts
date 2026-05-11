@@ -77,12 +77,20 @@ export function findArbitrageOpportunities(
           // Reject any price that is not valid American odds
           if (!isValidAmericanOdds(outcome.price)) continue;
 
+          // Normalize outcome name to a canonical form so the same prop line
+          // matches across books regardless of how they embed the point value.
+          // e.g. "Over 11.5", "Over +11.5", "Over" (point:11.5) → "Over +11.5"
           const ptStr = outcome.point !== undefined
             ? `${outcome.point > 0 ? "+" : ""}${outcome.point}`
             : "";
-          const outcomeName = (ptStr && !outcome.name.includes(ptStr))
-            ? `${outcome.name} ${ptStr}`
-            : outcome.name;
+          let baseName = outcome.name.trim();
+          if (outcome.point !== undefined) {
+            const absStr = Math.abs(outcome.point).toString().replace(".", "\\.");
+            baseName = baseName
+              .replace(new RegExp(`\\s+[+-]?${absStr}\\s*$`), "")
+              .trim();
+          }
+          const outcomeName = ptStr ? `${baseName} ${ptStr}` : baseName;
 
           if (!outcomeMap.has(outcomeName)) {
             outcomeMap.set(outcomeName, []);

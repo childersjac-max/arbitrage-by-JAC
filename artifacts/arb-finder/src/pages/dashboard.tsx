@@ -244,7 +244,12 @@ export default function Dashboard() {
     navigator.clipboard.writeText(text).catch(() => {});
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
-    window.open(url, "_blank", "noopener,noreferrer");
+    const a = Object.assign(document.createElement("a"), {
+      href: url, target: "_blank", rel: "noopener noreferrer",
+    });
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }, []);
 
   return (
@@ -372,11 +377,7 @@ export default function Dashboard() {
                             const isCopied = copiedKey === legKey;
                             const bookUrl = getBookUrl(leg.bookmakerTitle, opp.sport);
                             const oddsStr = leg.price > 0 ? `+${leg.price}` : `${leg.price}`;
-                            const clipText = [
-                              `${leg.bookmakerTitle}: ${formatOutcome(leg.outcome, opp.market)}`,
-                              `Odds: ${oddsStr}  |  Stake: $${leg.stake.toFixed(2)}`,
-                              `Game: ${opp.homeTeam} vs ${opp.awayTeam}`,
-                            ].join("\n");
+                            const clipText = `${opp.homeTeam} vs ${opp.awayTeam}`;
                             return (
                               <div key={i}
                                 className="rounded-lg border border-border bg-secondary/20 p-4 flex flex-col sm:flex-row sm:items-center gap-4"

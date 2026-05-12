@@ -24,8 +24,8 @@ const BOOK_URLS = {
   betmgm:     { football:"https://sports.betmgm.com/en/sports/football-11/betting/usa/nfl-35", basketball:"https://sports.betmgm.com/en/sports/basketball-7/betting/usa/nba-6004", baseball:"https://sports.betmgm.com/en/sports/baseball-23/betting/usa/mlb-75", hockey:"https://sports.betmgm.com/en/sports/ice-hockey-19/betting/usa/nhl-41", soccer:"https://sports.betmgm.com/en/sports/soccer-4/betting", default:"https://sports.betmgm.com/en/sports" },
   caesars:    { football:"https://sportsbook.caesars.com/us/nc/bet/sports/american-football", basketball:"https://sportsbook.caesars.com/us/nc/bet/sports/basketball", baseball:"https://sportsbook.caesars.com/us/nc/bet/sports/baseball", hockey:"https://sportsbook.caesars.com/us/nc/bet/sports/ice-hockey", soccer:"https://sportsbook.caesars.com/us/nc/bet/sports/soccer", mma:"https://sportsbook.caesars.com/us/nc/bet/sports/mma", default:"https://sportsbook.caesars.com/us/nc/bet" },
   bet365:     { football:"https://www.bet365.com/#/AS/B4/", basketball:"https://www.bet365.com/#/AS/B6/", baseball:"https://www.bet365.com/#/AS/B18/", hockey:"https://www.bet365.com/#/AS/B17/", soccer:"https://www.bet365.com/#/AS/B1/", tennis:"https://www.bet365.com/#/AS/B13/", default:"https://www.bet365.com" },
-  fanatics:   { football:"https://sportsbook.fanatics.com/sports/football", basketball:"https://sportsbook.fanatics.com/sports/basketball", baseball:"https://sportsbook.fanatics.com/sports/baseball", hockey:"https://sportsbook.fanatics.com/sports/hockey", soccer:"https://sportsbook.fanatics.com/sports/soccer", default:"https://sportsbook.fanatics.com" },
-  thescore:   { football:"https://www.thescore.bet/sports/american-football", basketball:"https://www.thescore.bet/sports/basketball", baseball:"https://www.thescore.bet/sports/baseball", hockey:"https://www.thescore.bet/sports/ice-hockey", soccer:"https://www.thescore.bet/sports/soccer", default:"https://www.thescore.bet" },
+  fanatics:   { default:"https://sportsbook.fanatics.com" },
+  thescore:   { default:"https://www.thescore.bet" },
 };
 
 function getBookUrl(bookName: string, sportKey: string) {

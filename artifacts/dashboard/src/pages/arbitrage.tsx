@@ -85,8 +85,11 @@ function formatSide(side: string | undefined, line: number | null | undefined, m
   if (!side) return "";
   const isPlayerProp = /player/i.test(market);
   if (isPlayerProp) {
-    const cleaned = side.replace(/\s+[+-]\d+\.?\d*\s*$/, "").trim();
-    return `${cleaned} ${getStatLabel(market)}`;
+    const m = side.match(/^(.*?)\s+([+-]?\d+\.?\d*)\s*$/);
+    const base = m ? m[1]! : side.replace(/\s+[+-]?\d+\.?\d*\s*$/, "").trim();
+    const num = line ?? (m ? parseFloat(m[2]!) : null);
+    const stat = getStatLabel(market);
+    return num != null ? `${base} ${num} ${stat}` : `${base} ${stat}`;
   }
   if (line != null) return `${side} ${line > 0 ? `+${line}` : line}`;
   return side;

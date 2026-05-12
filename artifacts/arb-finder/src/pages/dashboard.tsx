@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Activity, Check, Clock, ExternalLink, Percent, TrendingUp, DollarSign } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 
 // ── Sportsbook logos ──────────────────────────────────────────────────────────
 const G = "https://www.google.com/s2/favicons?domain=";
@@ -192,15 +193,20 @@ function getStatLabel(market: string): string {
   return LABELS[key] ?? key.replace(/_/g, " ");
 }
 
-// Format a player-prop outcome: strip duplicate trailing line, append stat label
-// "Jaden McDaniels Over 2.5 +2.5" + player_rebounds → "Jaden McDaniels Over 2.5 rebounds"
+// Format a player-prop outcome: show stat line number and label
+// "Luke Kornet Over +3.5" + player_rebounds → "Luke Kornet Over 3.5 rebounds"
 function formatOutcome(outcome: string, market: string): string {
   const isPlayerProp = /player/i.test(market);
   if (!isPlayerProp) return outcome;
-  // Strip trailing ±number that duplicates the line already in the outcome string
-  const cleaned = outcome.replace(/\s+[+-]\d+\.?\d*\s*$/, "").trim();
   const stat = getStatLabel(market);
-  return `${cleaned} ${stat}`;
+  // Extract the trailing number from canonical form (e.g. "+3.5" or "3.5")
+  const m = outcome.match(/^(.*?)\s+([+-]?\d+\.?\d*)\s*$/);
+  if (m) {
+    const base = m[1]!;
+    const num = parseFloat(m[2]!);
+    return `${base} ${num} ${stat}`;
+  }
+  return `${outcome} ${stat}`;
 }
 
 // ── Bet type helpers ──────────────────────────────────────────────────────────
@@ -239,6 +245,7 @@ export default function Dashboard() {
   const { data: summary, isLoading: isLoadingSummary } = useOpportunitiesSummary();
   const { data: opportunities, isLoading: isLoadingOpps, error } = useArbitrageOpportunities();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [bankroll, setBankroll] = useState<number>(100);
 
   const copyBet = useCallback((key: string, text: string, url: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -295,13 +302,22 @@ export default function Dashboard() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Top Sport</CardTitle>
+            <CardTitle className="text-sm font-medium">Bankroll</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold truncate" data-testid="summary-top-sport">
-              {isLoadingSummary ? <Skeleton className="h-8 w-32" /> : (summary?.sportBreakdown?.[0]?.sport || "None")}
+            <div className="flex items-center gap-1">
+              <span className="text-xl font-bold text-muted-foreground">$</span>
+              <Input
+                type="number"
+                min={1}
+                step={10}
+                value={bankroll}
+                onChange={(e) => setBankroll(Math.max(1, Number(e.target.value) || 1))}
+                className="text-2xl font-bold font-mono h-9 px-2 border-0 shadow-none focus-visible:ring-0 p-0 w-full"
+              />
             </div>
+            <p className="text-xs text-muted-foreground mt-1">Total to spread across both sides</p>
           </CardContent>
         </Card>
       </div>
@@ -329,12 +345,13 @@ export default function Dashboard() {
                   const betType = getBetType(opp.market);
                   const homeLogoUrl = getTeamLogo(opp.homeTeam, opp.sport);
                   const awayLogoUrl = getTeamLogo(opp.awayTeam, opp.sport);
-                  const totalStake = opp.legs.reduce((s, l) => s + l.stake, 0);
-                  const guaranteedReturn = opp.legs[0]
+                  const scale = bankroll / 100;
+                  const totalStake = opp.legs.reduce((s, l) => s + l.stake, 0) * scale;
+                  const guaranteedReturn = (opp.legs[0]
                     ? opp.legs[0].stake * (opp.legs[0].price > 0
                         ? (opp.legs[0].price / 100 + 1)
                         : (100 / Math.abs(opp.legs[0].price) + 1))
-                    : totalStake * (1 + opp.profitPercent / 100);
+                    : (totalStake / scale) * (1 + opp.profitPercent / 100)) * scale;
 
                   return (
                     <AccordionItem key={opp.id} value={opp.id}
@@ -427,7 +444,7 @@ export default function Dashboard() {
                                   </div>
                                   <p className="text-xs text-muted-foreground">
                                     Bet{" "}
-                                    <span className="font-mono font-semibold text-foreground">${leg.stake.toFixed(2)}</span>
+                                    <span className="font-mono font-semibold text-foreground">${(leg.stake * scale).toFixed(2)}</span>
                                     {" "}at odds{" "}
                                     <span className={`font-mono font-bold text-base ${leg.price > 0 ? "text-success" : "text-foreground"}`}>
                                       {formatOdds(leg.price)}
@@ -438,7 +455,7 @@ export default function Dashboard() {
                                 {/* Stake chip */}
                                 <div className="flex flex-col items-end sm:items-center shrink-0">
                                   <span className="text-xs text-muted-foreground">Stake</span>
-                                  <span className="font-mono font-bold text-lg text-success">${leg.stake.toFixed(2)}</span>
+                                  <span className="font-mono font-bold text-lg text-success">${(leg.stake * scale).toFixed(2)}</span>
                                 </div>
                               </div>
                             );

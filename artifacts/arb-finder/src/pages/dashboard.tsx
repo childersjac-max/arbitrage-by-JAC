@@ -275,7 +275,8 @@ export default function Dashboard() {
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(opp);
     }
-    return Array.from(map.entries());
+    // Within each day, sort highest profit first
+    return Array.from(map.entries()).map(([k, v]) => [k, [...v].sort((a, b) => b.profitPercent - a.profitPercent)] as const);
   }, [opportunities]);
 
   const copyBet = useCallback((key: string, text: string, url: string) => {
@@ -292,63 +293,72 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Market Overview</h1>
-        <p className="text-muted-foreground">Live arbitrage opportunities automatically refreshed every 30s.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-3xl font-extrabold tracking-tight">Market Overview</h1>
+          <p className="text-muted-foreground text-sm">Live arb opportunities — auto-refreshes every 30s</p>
+        </div>
+        <div className="flex items-center gap-2 mt-1 shrink-0">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+          </span>
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Live</span>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="border-l-4 border-l-blue-500/70">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Opportunities</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Opportunities</CardTitle>
+            <Activity className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-primary" data-testid="summary-total-opps">
-              {isLoadingSummary ? <Skeleton className="h-8 w-16" /> : summary?.totalOpportunities || 0}
+            <div className="text-3xl font-extrabold font-mono text-foreground" data-testid="summary-total-opps">
+              {isLoadingSummary ? <Skeleton className="h-9 w-16" /> : summary?.totalOpportunities || 0}
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-violet-500/70">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Profit Margin</CardTitle>
-            <Percent className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Avg Profit</CardTitle>
+            <Percent className="h-4 w-4 text-violet-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-primary" data-testid="summary-avg-profit">
-              {isLoadingSummary ? <Skeleton className="h-8 w-24" /> : formatPercent(summary?.averageProfitPercent || 0)}
+            <div className="text-3xl font-extrabold font-mono text-foreground" data-testid="summary-avg-profit">
+              {isLoadingSummary ? <Skeleton className="h-9 w-24" /> : formatPercent(summary?.averageProfitPercent || 0)}
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-emerald-500/70">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Best Available</CardTitle>
-            <TrendingUp className="h-4 w-4 text-success" />
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Best Available</CardTitle>
+            <TrendingUp className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-success" data-testid="summary-best-profit">
-              {isLoadingSummary ? <Skeleton className="h-8 w-24" /> : formatPercent(summary?.bestProfitPercent || 0)}
+            <div className="text-3xl font-extrabold font-mono text-emerald-500" data-testid="summary-best-profit">
+              {isLoadingSummary ? <Skeleton className="h-9 w-24" /> : formatPercent(summary?.bestProfitPercent || 0)}
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-amber-500/70">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Bankroll</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bankroll</CardTitle>
+            <DollarSign className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-1">
-              <span className="text-xl font-bold text-muted-foreground">$</span>
+              <span className="text-2xl font-extrabold text-muted-foreground">$</span>
               <Input
                 type="number"
                 min={1}
                 step={10}
                 value={bankroll}
                 onChange={(e) => setBankroll(Math.max(1, Number(e.target.value) || 1))}
-                className="text-2xl font-bold font-mono h-9 px-2 border-0 shadow-none focus-visible:ring-0 p-0 w-full"
+                className="text-3xl font-extrabold font-mono h-9 px-1 border-0 shadow-none focus-visible:ring-0 p-0 w-full"
               />
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Total to spread across both sides</p>
+            <p className="text-xs text-muted-foreground mt-1">Spread across both sides</p>
           </CardContent>
         </Card>
       </div>
@@ -399,39 +409,45 @@ export default function Dashboard() {
 
                   return (
                     <AccordionItem key={opp.id} value={opp.id}
-                      className="border border-border bg-card rounded-md px-4 data-[state=open]:border-primary/50 transition-colors"
+                      className="border border-border/60 bg-card rounded-xl overflow-hidden data-[state=open]:border-emerald-500/40 data-[state=open]:shadow-sm transition-all"
                       data-testid={`arb-item-${opp.id}`}
                     >
-                      <AccordionTrigger className="hover:no-underline py-4">
-                        <div className="flex items-center justify-between w-full pr-4">
-                          <div className="flex flex-col items-start gap-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant="outline" className="font-mono text-xs">{opp.sport}</Badge>
-                              <Badge variant="outline" className={`text-xs ${betTypeColor(betType)}`}>{betType}</Badge>
+                      <AccordionTrigger className="hover:no-underline hover:bg-muted/30 px-4 py-3.5 transition-colors">
+                        <div className="flex items-center gap-3 w-full pr-2">
+                          {/* Profit pill */}
+                          <div className="flex flex-col items-center justify-center bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2 shrink-0 min-w-[72px]">
+                            <span className="text-emerald-500 font-extrabold font-mono text-lg leading-none" data-testid={`profit-${opp.id}`}>
+                              +{opp.profitPercent.toFixed(2)}%
+                            </span>
+                            <span className="text-[10px] text-emerald-600/70 font-medium mt-0.5">profit</span>
+                          </div>
+
+                          {/* Matchup */}
+                          <div className="flex-1 flex flex-col gap-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium capitalize">{opp.sport}</Badge>
+                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${betTypeColor(betType)}`}>{betType}</Badge>
                             </div>
-                            <div className="flex items-center gap-2">
-                              {homeLogoUrl && <img src={homeLogoUrl} alt={opp.homeTeam} width={24} height={24} className="object-contain shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />}
-                              {awayLogoUrl && <img src={awayLogoUrl} alt={opp.awayTeam} width={24} height={24} className="object-contain shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />}
-                              <span className="font-semibold text-left">{opp.homeTeam} vs {opp.awayTeam}</span>
+                            <div className="flex items-center gap-1.5">
+                              {homeLogoUrl && <img src={homeLogoUrl} alt={opp.homeTeam} width={20} height={20} className="object-contain shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />}
+                              {awayLogoUrl && <img src={awayLogoUrl} alt={opp.awayTeam} width={20} height={20} className="object-contain shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />}
+                              <span className="font-semibold text-sm truncate">{opp.homeTeam} vs {opp.awayTeam}</span>
                             </div>
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                               <Clock className="w-3 h-3" /> {formatDate(opp.commenceTime)}
                             </span>
                           </div>
-                          <div className="flex flex-col items-end gap-0.5">
-                            <span className="text-lg font-bold text-success font-mono" data-testid={`profit-${opp.id}`}>
-                              +{opp.profitPercent.toFixed(3)}%
-                            </span>
-                            <span className="text-xs text-muted-foreground">guaranteed profit</span>
-                            <span className="text-xs font-mono text-muted-foreground">
-                              Bet ${totalStake.toFixed(2)} → Return ${guaranteedReturn.toFixed(2)}
-                            </span>
+
+                          {/* Return summary */}
+                          <div className="hidden sm:flex flex-col items-end gap-0.5 shrink-0 text-right">
+                            <span className="text-xs text-muted-foreground">Bet <span className="font-mono font-semibold text-foreground">${totalStake.toFixed(2)}</span></span>
+                            <span className="text-xs text-muted-foreground">Return <span className="font-mono font-semibold text-emerald-500">${guaranteedReturn.toFixed(2)}</span></span>
                           </div>
                         </div>
                       </AccordionTrigger>
 
                       <AccordionContent>
-                        <div className="pt-2 pb-4 space-y-3">
+                        <div className="px-4 pt-1 pb-4 space-y-2.5 bg-muted/10">
                           {opp.legs.map((leg, i) => {
                             const teamLogo = getTeamLogo(leg.outcome, opp.sport);
                             const legKey = `${opp.id}-${i}`;
@@ -445,77 +461,64 @@ export default function Dashboard() {
                               `Market: ${cleanMarketLabel(opp.market)}`,
                             ].join("\n");
                             return (
-                              <div key={i}
-                                className="rounded-lg border border-border bg-secondary/20 p-4 flex flex-col sm:flex-row sm:items-center gap-4"
-                              >
-                                {/* Step number */}
-                                <div className="flex items-center justify-center w-9 h-9 rounded-full bg-primary/10 text-primary font-bold text-sm shrink-0 self-start sm:self-center">
+                              <div key={i} className="rounded-lg border border-border bg-card p-3 flex items-center gap-3">
+                                {/* Step badge */}
+                                <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground font-bold text-xs shrink-0">
                                   {i + 1}
                                 </div>
 
-                                {/* Sportsbook */}
-                                <div className="flex items-center gap-2 min-w-[140px]">
+                                {/* Book logo + open button */}
+                                <div className="flex items-center gap-2 shrink-0 min-w-[130px]">
                                   <BookLogo title={leg.bookmakerTitle} />
-                                  <div className="flex flex-col">
-                                    <span className="font-bold text-sm">{leg.bookmakerTitle}</span>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="font-semibold text-sm leading-none">{leg.bookmakerTitle}</span>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); copyBet(legKey, clipText, bookUrl); }}
-                                      className="inline-flex items-center gap-1 text-xs font-bold mt-0.5 transition-colors"
-                                      style={{ color: isCopied ? "var(--color-success, #22c55e)" : "var(--color-primary)" }}
+                                      className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full mt-0.5 transition-colors ${
+                                        isCopied
+                                          ? "bg-emerald-500/15 text-emerald-600"
+                                          : "bg-primary/10 text-primary hover:bg-primary/20"
+                                      }`}
                                     >
                                       {isCopied
-                                        ? <><Check className="w-3 h-3" /> Copied!</>
-                                        : <><ExternalLink className="w-3 h-3" /> Open & Bet</>}
+                                        ? <><Check className="w-2.5 h-2.5" /> Copied!</>
+                                        : <><ExternalLink className="w-2.5 h-2.5" /> Open & Bet</>}
                                     </button>
                                   </div>
                                 </div>
 
-                                <div className="hidden sm:block w-px h-10 bg-border shrink-0" />
+                                <div className="w-px h-8 bg-border shrink-0 hidden sm:block" />
 
-                                {/* Bet details */}
-                                <div className="flex-1 flex flex-col gap-1">
-                                  {/* Team logo + outcome name */}
-                                  <div className="flex items-center gap-2">
-                                    {teamLogo && (
-                                      <img
-                                        src={teamLogo}
-                                        alt={leg.outcome}
-                                        width={32}
-                                        height={32}
-                                        className="object-contain rounded"
-                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                                      />
-                                    )}
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <Badge variant="outline" className={`text-xs ${betTypeColor(betType)}`}>{betType}</Badge>
-                                      <span className="font-bold text-sm">{formatOutcome(leg.outcome, opp.market)}</span>
-                                    </div>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">
-                                    Bet{" "}
-                                    <span className="font-mono font-semibold text-foreground">${(leg.stake * scale).toFixed(2)}</span>
-                                    {" "}at odds{" "}
-                                    <span className={`font-mono font-bold text-base ${leg.price > 0 ? "text-success" : "text-foreground"}`}>
-                                      {formatOdds(leg.price)}
+                                {/* Outcome */}
+                                <div className="flex-1 min-w-0 flex items-center gap-2">
+                                  {teamLogo && (
+                                    <img src={teamLogo} alt={leg.outcome} width={28} height={28}
+                                      className="object-contain rounded shrink-0"
+                                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                                  )}
+                                  <div className="flex flex-col gap-0.5 min-w-0">
+                                    <span className="font-semibold text-sm truncate">{formatOutcome(leg.outcome, opp.market)}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      odds <span className={`font-mono font-bold ${leg.price > 0 ? "text-emerald-500" : "text-foreground"}`}>{formatOdds(leg.price)}</span>
                                     </span>
-                                  </p>
+                                  </div>
                                 </div>
 
-                                {/* Stake chip */}
-                                <div className="flex flex-col items-end sm:items-center shrink-0">
-                                  <span className="text-xs text-muted-foreground">Stake</span>
-                                  <span className="font-mono font-bold text-lg text-success">${(leg.stake * scale).toFixed(2)}</span>
+                                {/* Stake */}
+                                <div className="flex flex-col items-end shrink-0">
+                                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Stake</span>
+                                  <span className="font-mono font-extrabold text-base text-emerald-500">${(leg.stake * scale).toFixed(2)}</span>
                                 </div>
                               </div>
                             );
                           })}
 
-                          <div className="flex items-center justify-between px-1 pt-1 text-xs text-muted-foreground">
-                            <span>Detected: {formatDate(opp.detectedAt)}</span>
+                          <div className="flex items-center justify-between px-1 pt-0.5 text-[11px] text-muted-foreground">
+                            <span>Detected {formatDate(opp.detectedAt)}</span>
                             <span className="font-mono">
-                              Total bet: <span className="text-foreground font-semibold">${totalStake.toFixed(2)}</span>
-                              &nbsp;·&nbsp;
-                              Implied: <span className="text-foreground font-semibold">{(opp.totalImpliedProbability * 100).toFixed(2)}%</span>
+                              Total <span className="text-foreground font-semibold">${totalStake.toFixed(2)}</span>
+                              <span className="mx-1">·</span>
+                              Implied <span className="text-foreground font-semibold">{(opp.totalImpliedProbability * 100).toFixed(2)}%</span>
                             </span>
                           </div>
                         </div>

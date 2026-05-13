@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useArbitrageOpportunities, useOpportunitiesSummary } from "@/hooks/use-oddsjam";
 import { formatPercent, formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Activity, Check, Clock, ExternalLink, Percent, TrendingUp, DollarSign } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 // ── Sportsbook logos ──────────────────────────────────────────────────────────
 const G = "https://www.google.com/s2/favicons?domain=";
@@ -241,11 +242,41 @@ function cleanMarketLabel(raw: string): string {
   return clean.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// ── Date grouping helpers ─────────────────────────────────────────────────────
+function localDateKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function tabLabel(dateKey: string): string {
+  const now = new Date();
+  const todayKey = localDateKey(now.toISOString());
+  const tom = new Date(now); tom.setDate(now.getDate() + 1);
+  const tomorrowKey = localDateKey(tom.toISOString());
+  if (dateKey === todayKey) return "Today";
+  if (dateKey === tomorrowKey) return "Tomorrow";
+  return new Date(dateKey + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
 export default function Dashboard() {
   const { data: summary, isLoading: isLoadingSummary } = useOpportunitiesSummary();
   const { data: opportunities, isLoading: isLoadingOpps, error } = useArbitrageOpportunities();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [bankroll, setBankroll] = useState<number>(100);
+
+  const groupedByDate = useMemo(() => {
+    if (!opportunities?.length) return [];
+    const sorted = [...opportunities].sort(
+      (a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime()
+    );
+    const map = new Map<string, typeof opportunities>();
+    for (const opp of sorted) {
+      const key = localDateKey(opp.commenceTime);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(opp);
+    }
+    return Array.from(map.entries());
+  }, [opportunities]);
 
   const copyBet = useCallback((key: string, text: string, url: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -326,7 +357,7 @@ export default function Dashboard() {
         <Card className="col-span-7 lg:col-span-5">
           <CardHeader>
             <CardTitle>Live Arbitrage Finder</CardTitle>
-            <CardDescription>Sorted by guaranteed return — click a row to see exact bet instructions</CardDescription>
+            <CardDescription>Grouped by game date — click a row to see exact bet instructions</CardDescription>
           </CardHeader>
           <CardContent>
             {error ? (
@@ -335,13 +366,26 @@ export default function Dashboard() {
               </div>
             ) : isLoadingOpps ? (
               <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
-            ) : opportunities?.length === 0 ? (
+            ) : groupedByDate.length === 0 ? (
               <div className="text-center py-10 text-muted-foreground border border-dashed border-border rounded-md">
                 No arbitrage opportunities found. Markets might be tight right now.
               </div>
             ) : (
+              <Tabs defaultValue={groupedByDate[0]![0]}>
+                <TabsList className="mb-4 flex-wrap h-auto gap-1">
+                  {groupedByDate.map(([dateKey, opps]) => (
+                    <TabsTrigger key={dateKey} value={dateKey} className="gap-1.5">
+                      {tabLabel(dateKey)}
+                      <span className="text-[10px] bg-primary/10 text-primary rounded-full px-1.5 py-0.5 font-mono font-semibold">
+                        {opps.length}
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                {groupedByDate.map(([dateKey, dayOpps]) => (
+                  <TabsContent key={dateKey} value={dateKey}>
               <Accordion type="single" collapsible className="w-full space-y-2">
-                {opportunities?.map((opp) => {
+                {dayOpps.map((opp) => {
                   const betType = getBetType(opp.market);
                   const homeLogoUrl = getTeamLogo(opp.homeTeam, opp.sport);
                   const awayLogoUrl = getTeamLogo(opp.awayTeam, opp.sport);
@@ -480,6 +524,9 @@ export default function Dashboard() {
                   );
                 })}
               </Accordion>
+                  </TabsContent>
+                ))}
+              </Tabs>
             )}
           </CardContent>
         </Card>

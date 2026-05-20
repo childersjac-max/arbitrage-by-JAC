@@ -1,6 +1,10 @@
 import { logger } from "./logger";
 import { findArbitrageOpportunities, type ArbitrageOpportunity } from "./arbitrage";
 import { getOdds, OddsJamError } from "./oddsjam";
+import {
+  fetchKalshiBookmakersByEvent,
+  mergeKalshiIntoGames,
+} from "./kalshi";
 import { recordOpportunities } from "./opportunity-history";
 import { SCAN_TARGETS } from "./scan-config";
 
@@ -16,11 +20,13 @@ async function runScan(): Promise<ArbitrageOpportunity[]> {
   }
 
   const all: ArbitrageOpportunity[] = [];
+  const kalshiByTitle = await fetchKalshiBookmakersByEvent();
 
   for (const target of SCAN_TARGETS) {
     for (const league of target.leagues) {
       try {
-        const games = await getOdds({ sport: target.sport, league });
+        let games = await getOdds({ sport: target.sport, league });
+        games = mergeKalshiIntoGames(games, kalshiByTitle);
         const opps = findArbitrageOpportunities(games);
         for (const o of opps) {
           o.league = league;

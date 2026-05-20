@@ -32,7 +32,7 @@ function startOfLocalDay(d: Date): Date {
   return x;
 }
 
-function rangeWindow(range: string) {
+export function rangeWindow(range: string) {
   const now = new Date();
   if (range === "today") {
     return {

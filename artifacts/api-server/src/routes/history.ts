@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { buildHistoryChart } from "../lib/history-chart";
+import { listHistoryFromDb } from "../lib/arb-history-db";
+import { buildHistoryChart, rangeWindow } from "../lib/history-chart";
 import { listHistory } from "../lib/opportunity-history";
 import { getOpportunities } from "../lib/scanner";
 
@@ -17,7 +18,14 @@ router.get("/history/chart", async (req, res): Promise<void> => {
 
   try {
     await getOpportunities({ refresh: false }).catch(() => []);
-    const payload = buildHistoryChart(range, sport, league, listHistory());
+    const win = rangeWindow(range);
+    const dbRows = await listHistoryFromDb(win.since, win.until);
+    const memRows = listHistory().filter((o) => {
+      const t = new Date(o.firstSeenAt).getTime();
+      return t >= win.since.getTime() && t <= win.until.getTime();
+    });
+    const records = dbRows.length > 0 ? dbRows : memRows;
+    const payload = buildHistoryChart(range, sport, league, records);
     res.json(payload);
   } catch (e) {
     req.log.error({ err: e }, "Failed to build history chart");

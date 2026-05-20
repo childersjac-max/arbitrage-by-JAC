@@ -1,4 +1,5 @@
 import type { ArbitrageOpportunity } from "./arbitrage";
+import { recordOpportunitiesToDb } from "./arb-history-db";
 
 export interface HistoryRecord {
   oppId: string;
@@ -17,6 +18,7 @@ export interface HistoryRecord {
 const store = new Map<string, HistoryRecord>();
 
 export function recordOpportunities(opportunities: ArbitrageOpportunity[]): void {
+  void recordOpportunitiesToDb(opportunities).catch(() => {});
   const now = new Date().toISOString();
   for (const o of opportunities) {
     const existing = store.get(o.id);

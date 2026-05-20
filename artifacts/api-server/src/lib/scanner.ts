@@ -124,7 +124,7 @@ export function startScannerLoop(): void {
     return;
   }
 
-  const intervalMs = 30_000;
+  const intervalMs = 60_000;
   logger.info({ intervalMs }, "Scanner: background refresh started");
 
   setTimeout(() => void getOpportunities({ refresh: true }), 5_000);

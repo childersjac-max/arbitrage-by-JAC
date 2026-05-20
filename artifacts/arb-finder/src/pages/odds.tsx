@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useGetSports, useGetOdds } from "@workspace/api-client-react";
+import { useOJSports, useOJOdds } from "@/hooks/use-oddsjam";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,13 +12,13 @@ export default function Odds() {
   const [selectedSport, setSelectedSport] = useState<string>("baseball");
   const [selectedMarket, setSelectedMarket] = useState<string>("moneyline");
 
-  const { data: sports, isLoading: isLoadingSports } = useGetSports();
-  const { data: games, isLoading: isLoadingOdds } = useGetOdds(
-    { sport: selectedSport, markets: selectedMarket },
-    { query: { queryKey: ["odds", selectedSport, selectedMarket], enabled: !!selectedSport } }
+  const { data: sports, isLoading: isLoadingSports } = useOJSports();
+  const { data: games, isLoading: isLoadingOdds } = useOJOdds(
+    selectedSport,
+    selectedMarket,
   );
 
-  const activeSports = sports?.filter(s => s.active) || [];
+  const activeSports = sports?.filter((s) => s.active) || [];
 
   return (
     <div className="space-y-6">

@@ -13,6 +13,7 @@ export interface ArbitrageOpportunity {
   id: string;
   gameId: string;
   sport: string;
+  league?: string;
   homeTeam: string;
   awayTeam: string;
   commenceTime: string;

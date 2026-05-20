@@ -1,8 +1,6 @@
 import { logger } from "./logger";
-import { getOdds, getSports } from "./oddsjam";
-import { findArbitrageOpportunities, type ArbitrageOpportunity } from "./arbitrage";
-
-const MAJOR_SPORTS = ["baseball", "basketball", "football", "hockey", "soccer", "tennis", "mma"];
+import { getOpportunities } from "./scanner";
+import type { ArbitrageOpportunity } from "./arbitrage";
 const MIN_PROFIT_PCT = 1.0;
 const POLL_INTERVAL_MS = 60 * 1000;
 
@@ -43,29 +41,16 @@ async function poll(): Promise<void> {
   const topic = process.env["NTFY_TOPIC"];
   if (!topic) return;
 
-  let sports: string[];
   try {
-    const all = await getSports();
-    const major = all.filter((s) => s.active && MAJOR_SPORTS.includes(s.key));
-    sports = major.length > 0 ? major.map((s) => s.key) : MAJOR_SPORTS;
-  } catch {
-    sports = MAJOR_SPORTS;
-  }
-
-  for (const sport of sports) {
-    try {
-      const games = await getOdds({ sport });
-      const opps = findArbitrageOpportunities(games);
-
-      for (const opp of opps) {
-        if (opp.profitPercent >= MIN_PROFIT_PCT && !seenIds.has(opp.id)) {
-          seenIds.add(opp.id);
-          await sendNtfyAlert(topic, opp);
-        }
+    const opps = await getOpportunities({ refresh: true });
+    for (const opp of opps) {
+      if (opp.profitPercent >= MIN_PROFIT_PCT && !seenIds.has(opp.id)) {
+        seenIds.add(opp.id);
+        await sendNtfyAlert(topic, opp);
       }
-    } catch {
-      // Skip sports that fail — don't block others
     }
+  } catch {
+    // Scanner failed this cycle
   }
 
   // Prevent unbounded growth — keep only the most recent 500 IDs

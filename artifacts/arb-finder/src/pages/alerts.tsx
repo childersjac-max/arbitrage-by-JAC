@@ -1,9 +1,12 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useQueryClient } from "@tanstack/react-query";
-import { useGetAlerts, useCreateAlert, useDeleteAlert, getGetAlertsQueryKey } from "@workspace/api-client-react";
-import { useOJSports } from "@/hooks/use-oddsjam";
+import {
+  useAlerts,
+  useCreateAlert,
+  useDeleteAlert,
+  useOJSports,
+} from "@/hooks/use-oddsjam";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -26,11 +29,10 @@ type AlertFormValues = z.infer<typeof alertSchema>;
 
 export default function Alerts() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  
-  const { data: alerts, isLoading: isLoadingAlerts } = useGetAlerts();
+
+  const { data: alerts, isLoading: isLoadingAlerts } = useAlerts();
   const { data: sports } = useOJSports();
-  
+
   const createAlert = useCreateAlert();
   const deleteAlert = useDeleteAlert();
   
@@ -44,13 +46,18 @@ export default function Alerts() {
   });
 
   const onSubmit = (data: AlertFormValues) => {
-    createAlert.mutate({ data }, {
+    createAlert.mutate(
+      {
+        minProfitPercent: data.minProfitPercent,
+        sport: data.sport,
+        market: data.market,
+      },
+      {
       onSuccess: () => {
         toast({
           title: "Alert created",
           description: "You will be notified of opportunities matching these criteria.",
         });
-        queryClient.invalidateQueries({ queryKey: getGetAlertsQueryKey() });
         form.reset({
           minProfitPercent: 1.0,
           sport: "all",
@@ -63,19 +70,19 @@ export default function Alerts() {
           description: "Failed to create alert.",
           variant: "destructive",
         });
-      }
-    });
+      },
+    },
+    );
   };
 
-  const handleDelete = (id: number) => {
-    deleteAlert.mutate({ id }, {
+  const handleDelete = (id: string) => {
+    deleteAlert.mutate(id, {
       onSuccess: () => {
         toast({
           title: "Alert deleted",
           description: "The alert has been removed.",
         });
-        queryClient.invalidateQueries({ queryKey: getGetAlertsQueryKey() });
-      }
+      },
     });
   };
 

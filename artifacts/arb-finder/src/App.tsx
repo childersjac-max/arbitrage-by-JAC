@@ -7,6 +7,7 @@ import Dashboard from "@/pages/dashboard";
 import Odds from "@/pages/odds";
 import Alerts from "@/pages/alerts";
 import Sports from "@/pages/sports";
+import HistoryPage from "@/pages/history";
 import Shell from "@/components/layout/Shell";
 
 const queryClient = new QueryClient({
@@ -26,6 +27,7 @@ function Router() {
         <Route path="/odds" component={Odds} />
         <Route path="/alerts" component={Alerts} />
         <Route path="/sports" component={Sports} />
+        <Route path="/history" component={HistoryPage} />
         <Route component={NotFound} />
       </Switch>
     </Shell>

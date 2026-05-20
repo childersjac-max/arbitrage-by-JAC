@@ -1,6 +1,19 @@
 export {
-  useGetSports as useOJSports,
-  useGetOdds as useOJOdds,
-  useGetArbitrageOpportunities as useArbitrageOpportunities,
-  useGetOpportunitiesSummary as useOpportunitiesSummary,
-} from "@workspace/api-client-react";
+  useArbitrageOpportunities,
+  useOpportunitiesSummary,
+  useHistoryChart,
+  useOJSports,
+  useOJOdds,
+  useAlerts,
+  useCreateAlert,
+  useDeleteAlert,
+} from "./use-arb-api";
+
+export type {
+  ArbOpportunity,
+  ArbLeg,
+  OpportunitiesSummary,
+  HistoryChartResponse,
+  OJSport,
+  OJGame,
+} from "./use-arb-api";

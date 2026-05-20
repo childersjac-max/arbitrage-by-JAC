@@ -1,4 +1,4 @@
-import type { OJGame } from "./oddsjam-client";
+import type { OJGame } from "@/hooks/use-arb-api";
 
 export interface ArbLeg {
   bookmaker: string;

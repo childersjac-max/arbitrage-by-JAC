@@ -144,7 +144,7 @@ export async function getSports(): Promise<OJSport[]> {
   }));
 }
 
-const SPORT_LEAGUES: Record<string, string> = {
+const DEFAULT_LEAGUE: Record<string, string> = {
   basketball: "nba",
   baseball: "mlb",
   football: "nfl",
@@ -153,6 +153,7 @@ const SPORT_LEAGUES: Record<string, string> = {
 
 export async function getOdds(params: {
   sport: string;
+  league?: string;
   markets?: string;
   bookmakers?: string;
 }): Promise<OJGame[]> {
@@ -161,7 +162,7 @@ export async function getOdds(params: {
     sport: params.sport,
     is_live: "false",
   };
-  const league = SPORT_LEAGUES[params.sport];
+  const league = params.league ?? DEFAULT_LEAGUE[params.sport];
   if (league) fixtureParams["league"] = league;
 
   const fixtureRes = await ojFetch<{ data: OJFixtureRaw[] }>("/fixtures/active", fixtureParams);
@@ -291,7 +292,7 @@ export async function getOdds(params: {
     return {
       id: f.id,
       sport_key: fixture?.sport?.id ?? params.sport,
-      sport_title: fixture?.sport?.name ?? params.sport,
+      sport_title: fixture?.league?.name ?? fixture?.sport?.name ?? params.sport,
       home_team: homeTeam,
       away_team: awayTeam,
       commence_time: fixture?.start_date ?? f.start_date,

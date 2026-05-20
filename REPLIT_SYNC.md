@@ -21,6 +21,13 @@ e13281e  Add Replit sync guide
 Commit `8e89b3f` is **not** on GitHub. Commit `a491af6` was **never** pulled into the Repl before you published.  
 So **Publish** kept shipping the old Repl tree.
 
+### Critical: production is *richer* than GitHub `main`
+
+Live Replit (`8e89b3f`) includes **Kalshi**, **Polymarket**, **`arb_history` (Postgres)**, and **`/api/tracked-games`**.  
+GitHub `a491af6` does **not**. **Do not Pull GitHub over Replit** — you would break prediction markets and history DB.
+
+**Correct direction:** Replit **Push → GitHub** first, then apply patches in `docs/MERGE_PLAN.md`.
+
 ## How to tell you're on the old build
 
 | Check | Old (current live) | New (commit `a491af6`) |

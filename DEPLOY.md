@@ -10,7 +10,7 @@ Matches the app at [arbitrage-sports-bot.replit.app](https://arbitrage-sports-bo
    - **Root Directory:** leave empty (repository root — not `artifacts/arb-finder`)
    - **Install:** `pnpm install --no-frozen-lockfile` (full monorepo — not `-w`, which skips workspace packages)
    - **Build:** `pnpm -w run vercel-build`
-   - **Output:** `artifacts/arb-finder/dist/public`
+   - **Output:** `public` (copied from `artifacts/arb-finder/dist/public` during build)
 4. Add environment variables (Production):
 
 | Variable | Required | Notes |

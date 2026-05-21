@@ -1,6 +1,12 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { setCors } from "./_lib/cors";
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
-  const hasKey = !!process.env.ODDSJAM_API_KEY;
-  res.json({ status: 'ok', apiConnected: hasKey });
+  setCors(res);
+  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  return res.status(200).json({ status: "ok" });
 }

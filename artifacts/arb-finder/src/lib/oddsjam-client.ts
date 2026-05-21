@@ -27,9 +27,10 @@ async function getApiKey(): Promise<string> {
         if (!res.ok) throw new Error(`/api/config returned ${res.status}`);
         return res.json();
       })
-      .then((data: { apiKey: string }) => {
-        if (!data.apiKey) throw new Error('ODDSJAM_API_KEY is not configured on the server.');
-        return data.apiKey;
+      .then((data: { apiKey?: string; oddsjamApiKey?: string }) => {
+        const key = data.apiKey ?? data.oddsjamApiKey;
+        if (!key) throw new Error('ODDSJAM_API_KEY is not configured on the server.');
+        return key;
       })
       .catch((err) => {
         // Reset so the next call retries instead of caching the failure

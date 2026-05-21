@@ -9,7 +9,7 @@ router.get("/config", async (req, res): Promise<void> => {
     res.status(503).json({ error: "OddsJam API key not configured" });
     return;
   }
-  res.json({ oddsjamApiKey: apiKey });
+  res.json({ apiKey, oddsjamApiKey: apiKey });
 });
 
 export default router;

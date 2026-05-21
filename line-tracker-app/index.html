@@ -1,0 +1,1896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Line Tracker Model</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#080c10; --surface:#0d1117; --border:#1c2333; --border2:#253047;
+  --text:#cdd9e5; --muted:#636e7b; --dim:#3d4b5c;
+  --green:#3fb950; --green-dim:#1a3d22; --red:#f85149; --red-dim:#3d1a1a;
+  --yellow:#d29922; --yellow-dim:#3d2e0a; --blue:#58a6ff; --blue-dim:#0d2447;
+  --purple:#bc8cff; --cyan:#39c5cf;
+  --font-mono:'Space Mono',monospace; --font-body:'DM Sans',sans-serif;
+  --radius:6px; --radius-lg:10px;
+}
+html { font-size:14px; }
+body { background:var(--bg); color:var(--text); font-family:var(--font-body); min-height:100vh; overflow-x:hidden; }
+body::before { content:''; position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.012) 2px,rgba(255,255,255,0.012) 4px); pointer-events:none; z-index:9999; }
+header { background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:56px; position:sticky; top:0; z-index:100; }
+.logo { font-family:var(--font-mono); font-size:13px; font-weight:700; letter-spacing:0.15em; color:var(--blue); display:flex; align-items:center; gap:10px; }
+.logo-dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); animation:pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.header-right { display:flex; align-items:center; gap:12px; }
+.live-badge { display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; border:1px solid var(--green); color:var(--green); font-family:var(--font-mono); font-size:11px; }
+.live-dot { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; background:rgba(88,166,255,0.1); border:1px solid rgba(88,166,255,0.3); border-radius:var(--radius); color:var(--blue); font-family:var(--font-mono); font-size:11px; font-weight:700; cursor:pointer; transition:all 0.15s; }
+.btn:hover { background:rgba(88,166,255,0.18); }
+nav { display:flex; gap:2px; padding:0 24px; background:var(--surface); border-bottom:1px solid var(--border); overflow-x:auto; }
+.tab { padding:12px 18px; font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); cursor:pointer; border:none; background:none; border-bottom:2px solid transparent; transition:all 0.15s; position:relative; top:1px; white-space:nowrap; }
+.tab:hover { color:var(--text); }
+.tab.active { color:var(--blue); border-bottom-color:var(--blue); }
+main { padding:24px; max-width:1400px; margin:0 auto; }
+.page { display:none; }
+.page.active { display:block; }
+.stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:24px; }
+.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 18px; position:relative; overflow:hidden; }
+.stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--accent,var(--blue)); opacity:0.7; }
+.stat-label { font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.stat-value { font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--text); line-height:1; }
+.stat-sub { font-size:11px; color:var(--muted); margin-top:4px; }
+.pos { color:var(--green)!important; }
+.neg { color:var(--red)!important; }
+.neu { color:var(--yellow)!important; }
+.panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:20px; }
+.panel-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--border); }
+.panel-title { font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue); }
+.panel-meta { font-family:var(--font-mono); font-size:10px; color:var(--muted); }
+.panel-body { padding:20px 24px; }
+.bet-table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:12.5px; }
+thead tr { background:rgba(255,255,255,0.02); }
+th { font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); text-align:left; padding:10px 14px; border-bottom:1px solid var(--border); white-space:nowrap; }
+td { padding:11px 14px; border-bottom:1px solid rgba(28,35,51,0.6); vertical-align:middle; white-space:nowrap; }
+tbody tr:hover { background:rgba(88,166,255,0.04); }
+tbody tr:last-child td { border-bottom:none; }
+.conf { display:inline-block; padding:2px 8px; border-radius:4px; font-family:var(--font-mono); font-size:10px; font-weight:700; }
+.conf-HIGH   { background:var(--green-dim); color:var(--green); border:1px solid rgba(63,185,80,0.3); }
+.conf-MEDIUM { background:var(--yellow-dim); color:var(--yellow); border:1px solid rgba(210,153,34,0.3); }
+.conf-LOW    { background:rgba(255,255,255,0.04); color:var(--muted); border:1px solid var(--border); }
+.signals { display:flex; gap:4px; flex-wrap:wrap; }
+.sig { display:inline-block; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-size:9px; font-weight:700; }
+.sig-SHARP { background:var(--blue-dim); color:var(--blue); border:1px solid rgba(88,166,255,0.25); }
+.sig-RLM   { background:rgba(188,140,255,0.1); color:var(--purple); border:1px solid rgba(188,140,255,0.25); }
+.sig-FADE  { background:rgba(57,197,207,0.1); color:var(--cyan); border:1px solid rgba(57,197,207,0.25); }
+.sig-CLV   { background:rgba(255,255,255,0.05); color:var(--muted); border:1px solid var(--border); }
+.sig-INJURY { background:rgba(248,81,73,0.1); color:var(--red); border:1px solid rgba(248,81,73,0.3); }
+.sig-OPP-INJ { background:rgba(63,185,80,0.1); color:var(--green); border:1px solid rgba(63,185,80,0.3); }
+.inj-note { margin-top:6px; padding:5px 8px; background:rgba(248,81,73,0.07); border-left:2px solid var(--red); border-radius:3px; font-size:10px; color:var(--red); line-height:1.4; font-family:var(--font-mono); }
+.opp-inj-note { margin-top:6px; padding:5px 8px; background:rgba(63,185,80,0.07); border-left:2px solid var(--green); border-radius:3px; font-size:10px; color:var(--green); line-height:1.4; font-family:var(--font-mono); }
+/* ── Bankroll input in header ─────────────────────────────── */
+.bankroll-wrap { display:flex; align-items:center; gap:5px; padding:4px 10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--bg); }
+.bankroll-wrap label { font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:0.1em; color:var(--muted); white-space:nowrap; }
+.bankroll-wrap input { background:none; border:none; color:var(--text); font-family:var(--font-mono); font-size:13px; font-weight:700; width:76px; outline:none; text-align:right; }
+/* ── Filter bar ────────────────────────────────────────────── */
+.filter-bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; padding:12px 16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:16px; }
+.filter-group { display:flex; flex-direction:column; gap:4px; }
+.filter-label { font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); }
+.filter-select { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); padding:5px 8px; font-family:var(--font-mono); font-size:11px; cursor:pointer; }
+.filter-select:focus { outline:none; border-color:var(--blue); }
+.filter-count { font-family:var(--font-mono); font-size:10px; color:var(--muted); align-self:flex-end; margin-left:auto; }
+/* ── Urgency badges ────────────────────────────────────────── */
+.htg { display:inline-block; padding:1px 6px; border-radius:3px; font-family:var(--font-mono); font-size:9px; font-weight:700; }
+.htg-fire { background:rgba(248,81,73,0.15); color:var(--red); border:1px solid rgba(248,81,73,0.3); }
+.htg-warn { background:rgba(210,153,34,0.12); color:var(--yellow); border:1px solid rgba(210,153,34,0.25); }
+.htg-ok   { background:rgba(255,255,255,0.04); color:var(--dim); border:1px solid var(--border); }
+/* ── ARB partner block ────────────────────────────────────── */
+.arb-leg2 { margin-top:4px; padding:4px 8px; background:rgba(57,197,207,0.06); border-left:2px solid var(--cyan); border-radius:0 3px 3px 0; font-family:var(--font-mono); font-size:10px; color:var(--cyan); line-height:1.5; }
+/* ── Copy button ──────────────────────────────────────────── */
+.copy-btn { background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:var(--radius); color:var(--muted); font-family:var(--font-mono); font-size:10px; padding:4px 9px; cursor:pointer; transition:all 0.15s; flex-shrink:0; }
+.copy-btn:hover { background:rgba(88,166,255,0.1); color:var(--blue); border-color:rgba(88,166,255,0.3); }
+.copy-btn.copied { background:rgba(63,185,80,0.12); color:var(--green); border-color:rgba(63,185,80,0.3); }
+/* ── Matchup subtitle ─────────────────────────────────────── */
+.matchup-sub { font-size:10px; color:var(--dim); margin-top:2px; font-family:var(--font-mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px; }
+/* ── Data freshness ───────────────────────────────────────── */
+.fresh-ok   { color:var(--green) !important; }
+.fresh-warn { color:var(--yellow) !important; }
+.fresh-old  { color:var(--red) !important; }
+.market-tag { display:inline-block; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-size:9px; font-weight:700; background:rgba(255,255,255,0.05); color:var(--dim); border:1px solid var(--border); text-transform:uppercase; }
+.odds-tag { font-family:var(--font-mono); font-size:13px; font-weight:700; }
+.charts-grid { display:grid; grid-template-columns:2fr 1fr; gap:16px; margin-bottom:20px; }
+.chart-wrap { position:relative; padding:18px; height:280px; }
+.chart-wrap canvas { max-height:240px; }
+.signal-bars { padding:16px 18px; display:flex; flex-direction:column; gap:14px; }
+.sig-row { display:flex; flex-direction:column; gap:6px; }
+.sig-row-header { display:flex; justify-content:space-between; align-items:center; }
+.sig-name { font-family:var(--font-mono); font-size:10px; font-weight:700; color:var(--text); }
+.sig-stats { font-family:var(--font-mono); font-size:10px; color:var(--muted); }
+.bar-track { height:6px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:3px; transition:width 0.8s cubic-bezier(0.4,0,0.2,1); }
+.loading { display:flex; align-items:center; justify-content:center; padding:60px; color:var(--muted); font-family:var(--font-mono); font-size:12px; gap:10px; }
+.spinner { width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--blue); border-radius:50%; animation:spin 0.7s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg)} }
+.empty { padding:48px; text-align:center; color:var(--muted); font-family:var(--font-mono); font-size:12px; line-height:2.5; }
+.empty-icon { font-size:32px; display:block; margin-bottom:12px; }
+.metrics-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
+.market-row { display:flex; align-items:center; justify-content:space-between; padding:10px 18px; border-bottom:1px solid rgba(28,35,51,0.5); font-size:12.5px; }
+.market-row:last-child { border-bottom:none; }
+.market-name { font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--text); text-transform:uppercase; }
+.market-stats { display:flex; gap:20px; font-family:var(--font-mono); font-size:11px; color:var(--muted); }
+
+/* ── Info page styles ─────────────────────────────────────── */
+.info-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:20px; }
+.info-section { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+.info-section-header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+.info-section-icon { font-size:16px; }
+.info-section-title { font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue); }
+.info-section-body { padding:18px 20px; line-height:1.8; font-size:13px; color:var(--text); }
+.info-section-body p { margin-bottom:12px; color:var(--muted); }
+.info-section-body p:last-child { margin-bottom:0; }
+.info-section-body strong { color:var(--text); }
+.indicator-list { display:flex; flex-direction:column; gap:10px; }
+.indicator-row { display:flex; align-items:flex-start; gap:12px; padding:10px 12px; background:rgba(255,255,255,0.02); border-radius:var(--radius); border:1px solid rgba(255,255,255,0.04); }
+.indicator-rank { font-family:var(--font-mono); font-size:10px; font-weight:700; color:var(--muted); min-width:24px; padding-top:2px; }
+.indicator-content { flex:1; }
+.indicator-name { font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--text); margin-bottom:3px; }
+.indicator-desc { font-size:12px; color:var(--muted); line-height:1.5; }
+.indicator-badge { display:inline-block; padding:1px 6px; border-radius:3px; font-family:var(--font-mono); font-size:9px; font-weight:700; margin-left:6px; }
+.badge-high   { background:var(--green-dim); color:var(--green); border:1px solid rgba(63,185,80,0.3); }
+.badge-med    { background:var(--yellow-dim); color:var(--yellow); border:1px solid rgba(210,153,34,0.3); }
+.badge-low    { background:rgba(255,255,255,0.04); color:var(--muted); border:1px solid var(--border); }
+.step-list { display:flex; flex-direction:column; gap:12px; }
+.step-row { display:flex; gap:14px; align-items:flex-start; }
+.step-num { width:26px; height:26px; border-radius:50%; background:var(--blue-dim); border:1px solid rgba(88,166,255,0.3); color:var(--blue); font-family:var(--font-mono); font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+.step-content { flex:1; }
+.step-title { font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--text); margin-bottom:3px; }
+.step-desc { font-size:12px; color:var(--muted); line-height:1.5; }
+.blindspot-list { display:flex; flex-direction:column; gap:8px; }
+.blindspot-row { display:flex; gap:10px; align-items:flex-start; padding:8px 10px; background:rgba(248,81,73,0.04); border-radius:var(--radius); border:1px solid rgba(248,81,73,0.1); }
+.blindspot-icon { color:var(--red); font-size:13px; flex-shrink:0; padding-top:1px; }
+.blindspot-content { flex:1; }
+.blindspot-title { font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--text); margin-bottom:2px; }
+.blindspot-desc { font-size:12px; color:var(--muted); line-height:1.5; }
+.improve-list { display:flex; flex-direction:column; gap:8px; }
+.improve-row { display:flex; gap:10px; align-items:flex-start; padding:8px 10px; background:rgba(63,185,80,0.04); border-radius:var(--radius); border:1px solid rgba(63,185,80,0.1); }
+.improve-icon { color:var(--green); font-size:13px; flex-shrink:0; padding-top:1px; }
+.source-list { display:flex; flex-direction:column; gap:8px; }
+.source-row { display:flex; gap:12px; align-items:flex-start; padding:10px 12px; background:rgba(255,255,255,0.02); border-radius:var(--radius); border:1px solid rgba(255,255,255,0.04); }
+.source-icon { font-size:18px; flex-shrink:0; }
+.source-content { flex:1; }
+.source-name { font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--text); margin-bottom:3px; }
+.source-desc { font-size:12px; color:var(--muted); line-height:1.5; }
+.predict-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px; }
+.predict-card { padding:12px 14px; background:rgba(88,166,255,0.05); border:1px solid rgba(88,166,255,0.15); border-radius:var(--radius); text-align:center; }
+.predict-sport { font-family:var(--font-mono); font-size:12px; font-weight:700; color:var(--blue); margin-bottom:4px; }
+.predict-markets { font-size:11px; color:var(--muted); line-height:1.6; }
+/* ── Info page — new components ──────────────────────────── */
+.warn-banner { display:flex; gap:14px; align-items:flex-start; background:rgba(210,153,34,0.07); border:1px solid rgba(210,153,34,0.25); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:24px; }
+.warn-banner-icon { font-size:20px; flex-shrink:0; line-height:1.3; }
+.warn-banner-body { flex:1; }
+.warn-banner-title { font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--yellow); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px; }
+.warn-banner-text { font-size:12px; color:var(--muted); line-height:1.6; }
+.worked-example { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:24px; }
+.worked-example-header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+.worked-example-body { padding:20px; }
+.example-row-mock { display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:1px; background:var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:20px; }
+.example-cell { background:var(--bg); padding:10px 12px; }
+.example-cell-label { font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+.example-cell-value { font-family:var(--font-mono); font-size:13px; font-weight:700; color:var(--text); }
+.example-cell-note { font-size:10px; color:var(--muted); margin-top:2px; line-height:1.3; }
+.example-annotations { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:10px; }
+.annotation { display:flex; gap:10px; align-items:flex-start; padding:10px 12px; background:rgba(88,166,255,0.04); border-left:2px solid var(--blue); border-radius:0 var(--radius) var(--radius) 0; }
+.annotation-label { font-family:var(--font-mono); font-size:10px; font-weight:700; color:var(--blue); min-width:60px; flex-shrink:0; padding-top:1px; }
+.annotation-text { font-size:12px; color:var(--muted); line-height:1.5; }
+.signal-decoder { display:flex; flex-direction:column; gap:10px; }
+.sig-decode-row { display:flex; gap:12px; align-items:flex-start; padding:12px 14px; background:rgba(255,255,255,0.02); border-radius:var(--radius); border:1px solid rgba(255,255,255,0.04); }
+.sig-decode-tag { flex-shrink:0; width:80px; }
+.sig-decode-body { flex:1; }
+.sig-decode-title { font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--text); margin-bottom:3px; }
+.sig-decode-desc { font-size:12px; color:var(--muted); line-height:1.5; }
+.sig-decode-action { font-size:11px; color:var(--green); margin-top:3px; }
+.conf-tier-list { display:flex; flex-direction:column; gap:8px; }
+.conf-tier-row { display:flex; gap:14px; align-items:center; padding:12px 14px; border-radius:var(--radius); }
+.conf-tier-row.tier-high { background:rgba(63,185,80,0.05); border:1px solid rgba(63,185,80,0.15); }
+.conf-tier-row.tier-med  { background:rgba(210,153,34,0.05); border:1px solid rgba(210,153,34,0.15); }
+.conf-tier-row.tier-low  { background:rgba(255,255,255,0.02); border:1px solid var(--border); }
+.conf-tier-badge { flex-shrink:0; width:64px; }
+.conf-tier-body { flex:1; }
+.conf-tier-rule { font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--text); margin-bottom:3px; }
+.conf-tier-advice { font-size:12px; color:var(--muted); line-height:1.5; }
+.redflag-list { display:flex; flex-direction:column; gap:8px; }
+.redflag-row { display:flex; gap:10px; align-items:flex-start; padding:10px 12px; background:rgba(248,81,73,0.04); border-radius:var(--radius); border:1px solid rgba(248,81,73,0.12); }
+.redflag-icon { color:var(--red); font-size:14px; flex-shrink:0; line-height:1.4; }
+.redflag-body { flex:1; }
+.redflag-title { font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--text); margin-bottom:2px; }
+.redflag-desc { font-size:12px; color:var(--muted); line-height:1.5; }
+.health-list { display:flex; flex-direction:column; gap:8px; }
+.health-row { display:flex; gap:14px; align-items:center; padding:10px 14px; background:rgba(255,255,255,0.02); border-radius:var(--radius); border:1px solid rgba(255,255,255,0.04); }
+.health-metric { font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--blue); min-width:100px; flex-shrink:0; }
+.health-good { font-size:12px; color:var(--green); }
+.health-warn { font-size:12px; color:var(--yellow); }
+.health-body { flex:1; font-size:12px; color:var(--muted); line-height:1.5; }
+.info-full-width { grid-column: 1 / -1; }
+.sig-arb { background:rgba(57,197,207,0.1); color:var(--cyan); border:1px solid rgba(57,197,207,0.3); }
+
+/* ── Bet card (mobile slate) ──────────────────────────────── */
+.bet-card-list { display:none; flex-direction:column; gap:10px; padding:12px; }
+.bet-card { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
+.bet-card-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
+.bet-card-sport { display:flex; align-items:center; gap:8px; }
+.bet-card-sport-name { font-family:var(--font-mono); font-size:12px; font-weight:700; color:var(--text); }
+.bet-card-right { display:flex; align-items:center; gap:8px; }
+.bet-card-side { padding:12px 14px; font-size:14px; font-weight:600; color:var(--text); border-bottom:1px solid var(--border); }
+.bet-card-side-sub { font-size:11px; color:var(--muted); margin-top:2px; }
+.bet-card-metrics { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid var(--border); }
+.bet-card-metric { padding:10px 12px; border-right:1px solid var(--border); }
+.bet-card-metric:last-child { border-right:none; }
+.bet-card-metric:nth-child(3) { border-right:none; }
+.bet-card-metric:nth-child(4) { border-top:1px solid var(--border); }
+.bet-card-metric:nth-child(5) { border-top:1px solid var(--border); border-right:1px solid var(--border); }
+.bet-card-metric:nth-child(6) { border-top:1px solid var(--border); }
+.bet-card-metric-label { font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
+.bet-card-metric-value { font-family:var(--font-mono); font-size:13px; font-weight:700; }
+.bet-card-metric-sub { font-size:10px; color:var(--muted); margin-top:1px; }
+.bet-card-footer { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; }
+/* show table on desktop, cards on mobile */
+@media(max-width:700px){
+  .bet-table-wrap { display:none; }
+  .bet-card-list   { display:flex; }
+}
+@media(max-width:900px){ .charts-grid{grid-template-columns:1fr} .stat-row{grid-template-columns:repeat(2,1fr)} main{padding:16px} .info-grid{grid-template-columns:1fr} }
+@media(max-width:600px){ header{padding:0 16px} .header-right .live-badge{display:none} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-dot"></div>LINE TRACKER MODEL</div>
+  <div class="header-right">
+    <span id="last-updated" style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">—</span>
+    <div class="bankroll-wrap" title="Set your bankroll — Bet$ sizes scale automatically">
+      <label>BANKROLL $</label>
+      <input type="number" id="bankroll-input" min="100" max="10000000" step="500" value="10000"
+        onchange="setBankroll(this.value)" onblur="setBankroll(this.value)">
+    </div>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    <button class="btn" onclick="refreshAll()">↺ REFRESH</button>
+  </div>
+</header>
+
+<nav>
+  <button class="tab active" onclick="switchTab('slate',this)">Today's Slate</button>
+  <button class="tab" onclick="switchTab('charts',this)">Performance</button>
+  <button class="tab" onclick="switchTab('metrics',this)">Backtest</button>
+  <button class="tab" onclick="switchTab('patterns',this)">Patterns</button>
+  <button class="tab" onclick="switchTab('info',this)">Model Info</button>
+</nav>
+
+  <!-- PATTERNS PAGE -->
+  <div id="page-patterns" class="page">
+
+    <!-- Filter bar -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:20px;">
+      <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">FILTER PATTERNS</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+        <div>
+          <label style="font-family:var(--font-mono);font-size:10px;color:var(--muted);display:block;margin-bottom:4px;">SPORT</label>
+          <select id="pf-sport" onchange="filterPatterns()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:var(--font-mono);font-size:11px;">
+            <option value="">All Sports</option>
+            <option value="basketball_nba">NBA</option>
+            <option value="baseball_mlb">MLB</option>
+            <option value="icehockey_nhl">NHL</option>
+            <option value="americanfootball_nfl">NFL</option>
+            <option value="americanfootball_ncaaf">CFB</option>
+            <option value="basketball_ncaab">CBB</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-family:var(--font-mono);font-size:10px;color:var(--muted);display:block;margin-bottom:4px;">MARKET</label>
+          <select id="pf-market" onchange="filterPatterns()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:var(--font-mono);font-size:11px;">
+            <option value="">All Markets</option>
+            <option value="moneyline">Moneyline</option>
+            <option value="spread">Spread</option>
+            <option value="total">Total</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-family:var(--font-mono);font-size:10px;color:var(--muted);display:block;margin-bottom:4px;">PATTERN TYPE</label>
+          <select id="pf-type" onchange="filterPatterns()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:var(--font-mono);font-size:11px;">
+            <option value="">All Types</option>
+            <option value="full_combo">Full Combo (line+move+tickets+money)</option>
+            <option value="line_ticket_money">Line + Tickets + Money</option>
+            <option value="move_ticket_money">Movement + Tickets + Money</option>
+            <option value="ticket_money_combo">Tickets + Money</option>
+            <option value="sharp_side_pattern">Sharp Side Pattern</option>
+            <option value="ticket_pct">Ticket % Only</option>
+            <option value="money_pct">Money % Only</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-family:var(--font-mono);font-size:10px;color:var(--muted);display:block;margin-bottom:4px;">MIN EV%</label>
+          <select id="pf-ev" onchange="filterPatterns()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:var(--font-mono);font-size:11px;">
+            <option value="0">Any EV</option>
+            <option value="3">+3% EV</option>
+            <option value="5">+5% EV</option>
+            <option value="10">+10% EV</option>
+            <option value="15">+15% EV</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-family:var(--font-mono);font-size:10px;color:var(--muted);display:block;margin-bottom:4px;">MIN SAMPLES</label>
+          <select id="pf-samples" onchange="filterPatterns()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:var(--font-mono);font-size:11px;">
+            <option value="5">5+ samples</option>
+            <option value="10">10+ samples</option>
+            <option value="20">20+ samples</option>
+            <option value="50">50+ samples</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-family:var(--font-mono);font-size:10px;color:var(--muted);display:block;margin-bottom:4px;">SORT BY</label>
+          <select id="pf-sort" onchange="filterPatterns()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:7px 10px;font-family:var(--font-mono);font-size:11px;">
+            <option value="ev">EV% (highest first)</option>
+            <option value="ev_neg">EV% (lowest first — fade signals)</option>
+            <option value="n">Sample size</option>
+            <option value="hit">Hit rate</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-family:var(--font-mono);font-size:10px;color:var(--muted)" id="pattern-count">Loading patterns…</div>
+    </div>
+
+    <!-- Summary stat cards -->
+    <div class="stat-row" id="pattern-stats" style="margin-bottom:20px;">
+      <div class="stat-card" style="--accent:var(--green)">
+        <div class="stat-label">Best EV Pattern</div>
+        <div class="stat-value pos" id="ps-best-ev">—</div>
+        <div class="stat-sub" id="ps-best-desc">—</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--blue)">
+        <div class="stat-label">Total Patterns</div>
+        <div class="stat-value" id="ps-total">—</div>
+        <div class="stat-sub">discovered combinations</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--cyan)">
+        <div class="stat-label">Avg Hit Rate</div>
+        <div class="stat-value" id="ps-avg-hit">—</div>
+        <div class="stat-sub">across all patterns</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--purple)">
+        <div class="stat-label">Positive EV %</div>
+        <div class="stat-value" id="ps-pos-ev">—</div>
+        <div class="stat-sub">of all patterns</div>
+      </div>
+    </div>
+
+    <!-- Pattern table -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">PATTERN RESULTS</span>
+        <span class="panel-meta">ticket% + money% + line + movement → EV</span>
+      </div>
+      <div id="pattern-body">
+        <div class="loading"><div class="spinner"></div> Loading patterns…</div>
+      </div>
+    </div>
+
+    <!-- Pattern explainer -->
+    <div class="panel" style="margin-top:20px;">
+      <div class="panel-header"><span class="panel-title">HOW TO READ PATTERNS</span></div>
+      <div class="panel-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;padding:20px 24px;">
+        <div>
+          <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:8px;">EXAMPLE: SPREAD PATTERN</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.8;">
+            <strong style="color:var(--text)">Pattern:</strong> "Line: Dog (+3.5 to +7.5) | Move: Big move toward | Tickets: 30-45% | Money: 65-75%"<br>
+            <strong style="color:var(--text)">Means:</strong> When a team getting 3.5 to 7.5 points has only 30-45% of public tickets but 65-75% of the money is on them AND the line moved toward them significantly → sharp money is pouring in on the underdog while public bets the favorite.<br>
+            <strong style="color:var(--text)">EV:</strong> If this shows +14%, betting that underdog has historically returned +14% per dollar wagered.
+          </div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:8px;">EXAMPLE: MONEYLINE PATTERN</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.8;">
+            <strong style="color:var(--text)">Pattern:</strong> "Line: Slight dog (+110 to +200) | Move: Move toward (+2 to +5pts) | Tickets: 45-55% | Money: 55-65%"<br>
+            <strong style="color:var(--text)">Means:</strong> A slight underdog priced +110 to +200 where the line moved in their favor (they got cheaper to bet) while money split slightly toward them.<br>
+            <strong style="color:var(--text)">EV:</strong> Positive EV here = the market is undervaluing this team relative to where sharp money is pointing.
+          </div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:8px;">TICKET% VS MONEY%</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.8;">
+            <strong style="color:var(--text)">Key insight:</strong> Ticket % = how many bettors. Money % = how much dollar value.<br>
+            When <strong style="color:var(--green)">money% >> ticket%</strong> → a few large bets (sharp money) → follow the money.<br>
+            When <strong style="color:var(--red)">ticket% >> money%</strong> → many small bets (public squares) → consider fading.<br>
+            The pattern table shows you which combinations of these splits have historically produced positive EV.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  
+<main>
+
+  <!-- SLATE PAGE -->
+  <div id="page-slate" class="page active">
+    <div class="stat-row">
+      <div class="stat-card" style="--accent:var(--blue)">
+        <div class="stat-label">Bets Today</div>
+        <div class="stat-value" id="s-n-bets">—</div>
+        <div class="stat-sub" id="s-conf-split">—</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--green)">
+        <div class="stat-label">Avg Edge</div>
+        <div class="stat-value pos" id="s-avg-edge">—</div>
+        <div class="stat-sub">vs market no-vig</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--yellow)">
+        <div class="stat-label">Total at Risk</div>
+        <div class="stat-value" id="s-total-risk">—</div>
+        <div class="stat-sub" id="s-risk-pct">of bankroll</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--purple)">
+        <div class="stat-label">Top Signal</div>
+        <div class="stat-value" id="s-signals" style="font-size:14px;margin-top:4px">—</div>
+        <div class="stat-sub" id="s-top-signal">—</div>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar" id="slate-filters" style="display:none">
+      <div class="filter-group">
+        <div class="filter-label">Sport</div>
+        <select class="filter-select" id="f-sport" onchange="applySlateFilters()">
+          <option value="">All Sports</option>
+          <option value="NFL">NFL</option>
+          <option value="NBA">NBA</option>
+          <option value="MLB">MLB</option>
+          <option value="NHL">NHL</option>
+          <option value="CFB">CFB</option>
+          <option value="CBB">CBB</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Market</div>
+        <select class="filter-select" id="f-market" onchange="applySlateFilters()">
+          <option value="">All Markets</option>
+          <option value="h2h">Moneyline</option>
+          <option value="spreads">Spread</option>
+          <option value="totals">Total</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Confidence</div>
+        <select class="filter-select" id="f-conf" onchange="applySlateFilters()">
+          <option value="">All</option>
+          <option value="HIGH">HIGH only</option>
+          <option value="MEDIUM">HIGH + MED</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Min Edge</div>
+        <select class="filter-select" id="f-edge" onchange="applySlateFilters()">
+          <option value="0">Any</option>
+          <option value="2">2%+</option>
+          <option value="5">5%+</option>
+          <option value="10">10%+</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Signal</div>
+        <select class="filter-select" id="f-sig" onchange="applySlateFilters()">
+          <option value="">Any</option>
+          <option value="SHARP_MONEY">SHARP</option>
+          <option value="REVERSE_LINE_MOVEMENT">RLM</option>
+          <option value="ARBITRAGE">ARB</option>
+          <option value="PUBLIC_FADE">FADE</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Sort By</div>
+        <select class="filter-select" id="f-sort" onchange="applySlateFilters()">
+          <option value="conf">Confidence</option>
+          <option value="edge">Edge %</option>
+          <option value="ev">EV %</option>
+          <option value="time">Time to Game</option>
+          <option value="bet">Bet Size</option>
+        </select>
+      </div>
+      <span class="filter-count" id="f-count"></span>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">BET SLATE</span>
+        <span class="panel-meta" id="slate-ts">—</span>
+      </div>
+      <div id="slate-body">
+        <div class="loading"><div class="spinner"></div> Loading slate…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHARTS PAGE -->
+  <div id="page-charts" class="page">
+    <div class="stat-row">
+      <div class="stat-card" style="--accent:var(--green)">
+        <div class="stat-label">All-Time ROI</div>
+        <div class="stat-value" id="p-roi">—</div>
+        <div class="stat-sub" id="p-total-pnl">—</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--blue)">
+        <div class="stat-label">Hit Rate</div>
+        <div class="stat-value" id="p-hit">—</div>
+        <div class="stat-sub" id="p-bets">—</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--cyan)">
+        <div class="stat-label">CLV Mean</div>
+        <div class="stat-value" id="p-clv">—</div>
+        <div class="stat-sub">closing line value</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--yellow)">
+        <div class="stat-label">Sharpe Ratio</div>
+        <div class="stat-value" id="p-sharpe">—</div>
+        <div class="stat-sub">annualized</div>
+      </div>
+    </div>
+    <div class="charts-grid">
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">BANKROLL CURVE</span><span class="panel-meta">$10,000 start</span></div>
+        <div class="chart-wrap"><canvas id="bankroll-chart"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">SIGNAL ROI</span></div>
+        <div id="signal-bars-wrap"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">ROI BY MONTH</span></div>
+      <div class="chart-wrap" style="height:220px"><canvas id="monthly-chart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- METRICS PAGE -->
+  <div id="page-metrics" class="page">
+    <div class="stat-row">
+      <div class="stat-card" style="--accent:var(--green)">
+        <div class="stat-label">ROI</div>
+        <div class="stat-value" id="bt-roi">—</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--blue)">
+        <div class="stat-label">Profit Factor</div>
+        <div class="stat-value" id="bt-pf">—</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--red)">
+        <div class="stat-label">Max Drawdown</div>
+        <div class="stat-value neg" id="bt-dd">—</div>
+      </div>
+      <div class="stat-card" style="--accent:var(--cyan)">
+        <div class="stat-label">CLV Positive</div>
+        <div class="stat-value" id="bt-clvp">—</div>
+      </div>
+    </div>
+    <div class="metrics-grid">
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">BY MARKET</span></div>
+        <div id="by-market-wrap"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">BY SIGNAL</span></div>
+        <div id="by-signal-wrap"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><span class="panel-title">MULTI-SIGNAL CONVERGENCE</span></div>
+        <div id="multi-signal-wrap"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODEL INFO PAGE -->
+  <div id="page-info" class="page">
+
+    <!-- Hero banner -->
+    <div style="background:linear-gradient(135deg,rgba(88,166,255,0.08) 0%,rgba(188,140,255,0.05) 100%);border:1px solid rgba(88,166,255,0.15);border-radius:var(--radius-lg);padding:28px 32px;margin-bottom:20px;">
+      <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:var(--blue);margin-bottom:10px;">LINE TRACKER MODEL — v2.0</div>
+      <div style="font-size:20px;font-weight:600;color:var(--text);margin-bottom:10px;">A machine learning system that finds edges over sportsbooks by detecting when sharp money has moved a line and public books haven't caught up yet.</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.8;">Every day at 3 PM ET, the model scrapes lines across 9 books (3 sharp, 6 public) via OddsJam, extracts 30+ movement features, runs them through a sport-specific XGBoost classifier, and outputs a ranked list of positive-EV bets sized for your bankroll. The pipeline runs fully automatically on GitHub's servers — no action needed from you.</div>
+    </div>
+
+    <!-- Bootstrap warning -->
+    <div class="warn-banner">
+      <div class="warn-banner-icon">⚠️</div>
+      <div class="warn-banner-body">
+        <div class="warn-banner-title">Edge numbers look huge right now — here's why</div>
+        <div class="warn-banner-text">Until the model has 80+ real game outcomes per sport, it trains on <strong style="color:var(--text);">synthetic data</strong> (injected noise around historical odds). That means edges like "36%" are an artifact of the bootstrap process — not real. The model will retrain on real outcomes automatically as games complete. Once a sport's AUC on the Backtest tab consistently exceeds 0.55, those edges are meaningful. Until then: treat LOW/CLV-only bets as informational, and focus on bets with multiple signal tags (SHARP, RLM, ARB).</div>
+      </div>
+    </div>
+
+    <!-- Worked example — full width -->
+    <div class="worked-example">
+      <div class="worked-example-header">
+        <span class="info-section-icon">📖</span>
+        <span class="info-section-title">How to Read a Bet — Worked Example</span>
+      </div>
+      <div class="worked-example-body">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">This is what a row in the Today's Slate tab looks like. Each column is explained below.</p>
+        <div class="example-row-mock">
+          <div class="example-cell">
+            <div class="example-cell-label">Sport / Mkt</div>
+            <div class="example-cell-value" style="color:var(--blue);">NFL</div>
+            <div class="example-cell-note"><span class="market-tag">SPD</span></div>
+          </div>
+          <div class="example-cell">
+            <div class="example-cell-label">Side</div>
+            <div class="example-cell-value">Chiefs -3.5</div>
+            <div class="example-cell-note">team &amp; line to bet</div>
+          </div>
+          <div class="example-cell">
+            <div class="example-cell-label">Odds · Book</div>
+            <div class="example-cell-value" style="color:var(--red);">-108</div>
+            <div class="example-cell-note">DraftKings</div>
+          </div>
+          <div class="example-cell">
+            <div class="example-cell-label">Model%</div>
+            <div class="example-cell-value" style="color:var(--green);">56.4%</div>
+            <div class="example-cell-note">model win prob</div>
+          </div>
+          <div class="example-cell">
+            <div class="example-cell-label">Fair%</div>
+            <div class="example-cell-value" style="color:var(--muted);">51.8%</div>
+            <div class="example-cell-note">Pinnacle no-vig</div>
+          </div>
+          <div class="example-cell">
+            <div class="example-cell-label">Edge</div>
+            <div class="example-cell-value" style="color:var(--green);">+4.6%</div>
+            <div class="example-cell-note">Model% − Fair%</div>
+          </div>
+          <div class="example-cell">
+            <div class="example-cell-label">EV%</div>
+            <div class="example-cell-value" style="color:var(--green);">+4.1%</div>
+            <div class="example-cell-note">profit per $1 staked</div>
+          </div>
+          <div class="example-cell">
+            <div class="example-cell-label">Bet$</div>
+            <div class="example-cell-value">$148</div>
+            <div class="example-cell-note">for $10K bankroll</div>
+          </div>
+          <div class="example-cell">
+            <div class="example-cell-label">Conf</div>
+            <div class="example-cell-value"><span class="conf conf-MEDIUM">MED</span></div>
+            <div class="example-cell-note">tier</div>
+          </div>
+          <div class="example-cell">
+            <div class="example-cell-label">Signals</div>
+            <div class="example-cell-value" style="font-size:10px;"><span class="sig sig-SHARP">SHARP</span></div>
+            <div class="example-cell-note">why the model likes it</div>
+          </div>
+        </div>
+        <div class="example-annotations">
+          <div class="annotation">
+            <div class="annotation-label">Sport/Market</div>
+            <div class="annotation-text">Which sport and bet type. <strong style="color:var(--text);">h2h</strong> = moneyline (who wins outright). <strong style="color:var(--text);">spreads</strong> = cover a points handicap. <strong style="color:var(--text);">totals</strong> = over/under on combined score.</div>
+          </div>
+          <div class="annotation">
+            <div class="annotation-label">Side</div>
+            <div class="annotation-text">The specific bet to place — team name plus the spread or total line. The number after the team is the handicap for spreads, or the game total for over/unders.</div>
+          </div>
+          <div class="annotation">
+            <div class="annotation-label">Odds</div>
+            <div class="annotation-text">American-format price at the listed book at scrape time. <strong style="color:var(--text);">Always verify the current price before placing</strong> — this number may be stale. If the current odds are worse than shown, re-check the edge.</div>
+          </div>
+          <div class="annotation">
+            <div class="annotation-label">Model%</div>
+            <div class="annotation-text">The XGBoost classifier's estimated probability that this bet wins, after calibration. This is derived from how the line moved — not from team stats or injury reports.</div>
+          </div>
+          <div class="annotation">
+            <div class="annotation-label">Fair%</div>
+            <div class="annotation-text">Pinnacle's no-vig (no margin) implied probability — the most accurate publicly-available estimate of the true odds. This is the benchmark the model competes against.</div>
+          </div>
+          <div class="annotation">
+            <div class="annotation-label">Edge</div>
+            <div class="annotation-text"><strong style="color:var(--text);">The core number.</strong> Model% minus Fair%. A +4.6% edge means the model believes this bet is underpriced by 4.6 percentage points. In early bootstrap, this number is inflated — see warning above.</div>
+          </div>
+          <div class="annotation">
+            <div class="annotation-label">EV%</div>
+            <div class="annotation-text">Expected value as a percent of your stake. +4.1% means that for every $100 you bet, you'd expect to profit $4.10 over many bets. Positive EV is the whole goal.</div>
+          </div>
+          <div class="annotation">
+            <div class="annotation-label">Bet$</div>
+            <div class="annotation-text">Kelly-sized bet for a $10,000 bankroll. <strong style="color:var(--text);">Scale for your actual bankroll:</strong> if you have $5,000, bet half the listed amount; $2,000 bankroll → bet 20% of the listed amount.</div>
+          </div>
+          <div class="annotation">
+            <div class="annotation-label">Conf</div>
+            <div class="annotation-text">HIGH = edge ≥ 7% and Kelly ≥ 2.5% — model's strongest tier. MEDIUM = edge ≥ 4% and Kelly ≥ 1.2% — solid bet. LOW = below those thresholds — smaller size or skip.</div>
+          </div>
+          <div class="annotation">
+            <div class="annotation-label">Signals</div>
+            <div class="annotation-text">The reason(s) the model flagged this bet. The more signal tags shown, the more evidence stacked behind the pick. See the Signal Decoder below for what each one means.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-grid">
+
+      <!-- Signal Decoder -->
+      <div class="info-section">
+        <div class="info-section-header">
+          <span class="info-section-icon">📡</span>
+          <span class="info-section-title">Signal Decoder</span>
+        </div>
+        <div class="info-section-body">
+          <p>Signals tell you <em>why</em> the model likes the bet. More signals stacked = stronger conviction. A bet with only CLV_MODEL is the weakest; SHARP + RLM together is the strongest.</p>
+          <div class="signal-decoder">
+
+            <div class="sig-decode-row">
+              <div class="sig-decode-tag"><span class="sig sig-SHARP">SHARP</span></div>
+              <div class="sig-decode-body">
+                <div class="sig-decode-title">Sharp Money Movement</div>
+                <div class="sig-decode-desc">Pinnacle's line moved significantly while public books stayed flat. This gap means smart money hit the sharp book but the public books haven't adjusted — that's your window to bet at the public book's stale price.</div>
+                <div class="sig-decode-action">→ Strongest real-world signal. Prioritize when present.</div>
+              </div>
+            </div>
+
+            <div class="sig-decode-row">
+              <div class="sig-decode-tag"><span class="sig sig-RLM">RLM</span></div>
+              <div class="sig-decode-body">
+                <div class="sig-decode-title">Reverse Line Movement</div>
+                <div class="sig-decode-desc">65%+ of public tickets are on one side, but the line moved the other way. When the crowd is betting Team A but the line moves toward Team B, sharp bettors are hammering Team B and the books are responding to them — not the public.</div>
+                <div class="sig-decode-action">→ Classic sharp-vs-public indicator. Strong when paired with SHARP.</div>
+              </div>
+            </div>
+
+            <div class="sig-decode-row">
+              <div class="sig-decode-tag"><span class="sig sig-FADE">FADE</span></div>
+              <div class="sig-decode-body">
+                <div class="sig-decode-title">Fade the Public</div>
+                <div class="sig-decode-desc">The public has heavily bet one side (80%+ of tickets) with no corresponding sharp action. Books haven't needed to move the line because sharp money hasn't confirmed it — fading the public crowd here has historically positive EV.</div>
+                <div class="sig-decode-action">→ Weakest of the three; only use with edge above 3%.</div>
+              </div>
+            </div>
+
+            <div class="sig-decode-row">
+              <div class="sig-decode-tag"><span class="sig sig-arb">ARB</span></div>
+              <div class="sig-decode-body">
+                <div class="sig-decode-title">Arbitrage Opportunity</div>
+                <div class="sig-decode-desc">Both sides of the same game are priced such that you can bet opposing outcomes across two books and guarantee a profit regardless of the result. The margin % shown is the guaranteed return. Requires accounts at both listed books and fast execution — arbs close within minutes.</div>
+                <div class="sig-decode-action">→ Risk-free if executed correctly. Act immediately.</div>
+              </div>
+            </div>
+
+            <div class="sig-decode-row">
+              <div class="sig-decode-tag"><span class="sig sig-CLV">CLV</span></div>
+              <div class="sig-decode-body">
+                <div class="sig-decode-title">Model Edge Only (CLV)</div>
+                <div class="sig-decode-desc">The model's XGBoost output shows a positive edge vs Pinnacle's fair price, but no movement-based signal fired. This means the model detected a statistical pattern in the features but there's no independent confirmation from line movement or splits data.</div>
+                <div class="sig-decode-action">→ Lowest conviction. Treat as informational during bootstrap.</div>
+              </div>
+            </div>
+
+            <div class="sig-decode-row">
+              <div class="sig-decode-tag"><span class="sig sig-INJURY">⚕ RISK</span></div>
+              <div class="sig-decode-body">
+                <div class="sig-decode-title">Injury Risk — Bet Side Affected</div>
+                <div class="sig-decode-desc">A key player (QB, SP, PG, G, etc.) on the team you're betting is listed as Out or Doubtful on ESPN's injury report. The model's edge was calculated on historical data that may not reflect this roster change — the current line may already be adjusted, or may not be yet. Check the injury note for the specific player.</div>
+                <div class="sig-decode-action">→ Reduce bet size or pass. Verify the line moved since the injury was announced.</div>
+              </div>
+            </div>
+
+            <div class="sig-decode-row">
+              <div class="sig-decode-tag"><span class="sig sig-OPP-INJ">⚕ OPP</span></div>
+              <div class="sig-decode-body">
+                <div class="sig-decode-title">Opponent Injured — Edge Booster</div>
+                <div class="sig-decode-desc">A key player on the opposing team is Out or Doubtful. This is a positive signal for the side you're betting — the opponent is weakened and the model's edge may be understated if the injury isn't fully priced in yet. Public books are often slow to adjust for opponent injuries.</div>
+                <div class="sig-decode-action">→ Positive signal. Consider full-size or slight oversize within your Kelly limit.</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Confidence Tiers -->
+      <div class="info-section">
+        <div class="info-section-header">
+          <span class="info-section-icon">🎯</span>
+          <span class="info-section-title">Confidence Tiers &amp; How to Size</span>
+        </div>
+        <div class="info-section-body">
+          <p>The confidence tier combines edge size and Kelly fraction into a single actionable label. Use it to prioritize which bets to place when time or book limits are a constraint.</p>
+          <div class="conf-tier-list">
+
+            <div class="conf-tier-row tier-high">
+              <div class="conf-tier-badge"><span class="conf conf-HIGH">HIGH</span></div>
+              <div class="conf-tier-body">
+                <div class="conf-tier-rule">Edge ≥ 7%  ·  Kelly ≥ 2.5%</div>
+                <div class="conf-tier-advice">Bet the full listed Bet$ amount. These are the model's strongest outputs — place these first before the line moves.</div>
+              </div>
+            </div>
+
+            <div class="conf-tier-row tier-med">
+              <div class="conf-tier-badge"><span class="conf conf-MEDIUM">MED</span></div>
+              <div class="conf-tier-body">
+                <div class="conf-tier-rule">Edge ≥ 4%  ·  Kelly ≥ 1.2%</div>
+                <div class="conf-tier-advice">Bet the listed amount or scale down to 50–75% if you want to be conservative. Good bets with solid backing.</div>
+              </div>
+            </div>
+
+            <div class="conf-tier-row tier-low">
+              <div class="conf-tier-badge"><span class="conf conf-LOW">LOW</span></div>
+              <div class="conf-tier-body">
+                <div class="conf-tier-rule">Edge &lt; 4%  ·  Kelly &lt; 1.2%</div>
+                <div class="conf-tier-advice">During bootstrap, skip these entirely — the edge is likely synthetic noise. Once AUC &gt; 0.55, you can bet 25–50% of the listed amount on LOW bets with multiple signal tags.</div>
+              </div>
+            </div>
+
+          </div>
+
+          <p style="margin-top:16px;"><strong>Scaling for your bankroll:</strong> The Bet$ column assumes $10,000. Divide your actual bankroll by 10,000, then multiply: $5K bankroll → bet 50% of the listed amount. $2K → bet 20%.</p>
+
+          <p style="margin-top:12px;"><strong>Book selection:</strong> The Book column shows the best available price at scrape time. Always check the current price before placing — if the line has moved against you by more than 1–2 points (spreads) or 10+ cents (moneylines), recalculate whether the edge still exists.</p>
+        </div>
+      </div>
+
+      <!-- How to use the slate -->
+      <div class="info-section">
+        <div class="info-section-header">
+          <span class="info-section-icon">✅</span>
+          <span class="info-section-title">Your Daily Routine</span>
+        </div>
+        <div class="info-section-body">
+          <div class="step-list">
+            <div class="step-row">
+              <div class="step-num">1</div>
+              <div class="step-content">
+                <div class="step-title">Check this page after 3 PM ET</div>
+                <div class="step-desc">The pipeline runs at 3 PM ET every day. Hit ↺ Refresh in the header to load the latest slate. Games starting before 3 PM won't be on it — the model only outputs bets it has time to act on.</div>
+              </div>
+            </div>
+            <div class="step-row">
+              <div class="step-num">2</div>
+              <div class="step-content">
+                <div class="step-title">Filter for HIGH + MEDIUM confidence first</div>
+                <div class="step-desc">Sort or scan for HIGH bets, then MEDIUM. Skip LOW bets until the model has real outcome data (AUC &gt; 0.55 on the Backtest tab). Look for bets with multiple signal tags — SHARP + RLM together is the strongest possible combination.</div>
+              </div>
+            </div>
+            <div class="step-row">
+              <div class="step-num">3</div>
+              <div class="step-content">
+                <div class="step-title">Cross-check injury reports</div>
+                <div class="step-desc">The model cannot see injury news. If a key player was announced as out within the last few hours, that's likely why the line moved — and the model will misread it as sharp action. Always verify on RotowWire or ESPN before placing.</div>
+              </div>
+            </div>
+            <div class="step-row">
+              <div class="step-num">4</div>
+              <div class="step-content">
+                <div class="step-title">Verify the current odds at the listed book</div>
+                <div class="step-desc">Open the listed sportsbook and confirm the current price. If the spread has moved from -3.5 to -4.5, or the moneyline has shifted by 20+ cents, the edge may be gone. For ARB signals, act within minutes — gaps close fast.</div>
+              </div>
+            </div>
+            <div class="step-row">
+              <div class="step-num">5</div>
+              <div class="step-content">
+                <div class="step-title">Size the bet using your bankroll ratio</div>
+                <div class="step-desc">Bet$ is sized for $10,000. Multiply the listed amount by (your bankroll ÷ 10,000). Never bet more than 4% of your bankroll on a single bet regardless of what the model says — that cap is built in, but verify it holds after scaling.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Red Flags -->
+      <div class="info-section">
+        <div class="info-section-header">
+          <span class="info-section-icon">🚩</span>
+          <span class="info-section-title">When to Skip a Bet</span>
+        </div>
+        <div class="info-section-body">
+          <p>The model outputs every edge it finds — but not every edge is worth betting. Here are situations to skip even if the numbers look good.</p>
+          <div class="redflag-list">
+
+            <div class="redflag-row">
+              <div class="redflag-icon">✕</div>
+              <div class="redflag-body">
+                <div class="redflag-title">Edge &gt; 15% with only CLV_MODEL signal</div>
+                <div class="redflag-desc">During bootstrap, edges above 15% with no movement signals are synthetic noise. The model hasn't seen enough real outcomes to trust its own probability estimates this much. Skip.</div>
+              </div>
+            </div>
+
+            <div class="redflag-row">
+              <div class="redflag-icon">✕</div>
+              <div class="redflag-body">
+                <div class="redflag-title">Key injury announced in the last 2–4 hours</div>
+                <div class="redflag-desc">The model will read an injury-driven line move as sharp action. If you see a sudden line move and a star player is in the injury report, the "edge" is fake — the market is correcting for news, not inefficiency.</div>
+              </div>
+            </div>
+
+            <div class="redflag-row">
+              <div class="redflag-icon">✕</div>
+              <div class="redflag-body">
+                <div class="redflag-title">Game starts in under 30 minutes</div>
+                <div class="redflag-desc">Lines are extremely settled close to tip-off/kickoff. Edges that appear in the final 30 minutes are usually stale data artifacts from the scraper — not real opportunities. Verify the live line manually before acting.</div>
+              </div>
+            </div>
+
+            <div class="redflag-row">
+              <div class="redflag-icon">✕</div>
+              <div class="redflag-body">
+                <div class="redflag-title">Price at your book is already gone</div>
+                <div class="redflag-desc">If the current odds are worse than the model's listed odds by more than 5 cents (moneylines) or 0.5 points (spreads), recalculate the edge from scratch using the current price. A +4% edge at -110 can become 0% if the line moves to -120.</div>
+              </div>
+            </div>
+
+            <div class="redflag-row">
+              <div class="redflag-icon">✕</div>
+              <div class="redflag-body">
+                <div class="redflag-title">CFB or CBB in the off-season</div>
+                <div class="redflag-desc">College markets outside of their regular season have thin action and abnormal line movement. The model's patterns don't apply. CFB: trust Sept–Jan only. CBB: Nov–Mar only.</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- How the model works -->
+      <div class="info-section">
+        <div class="info-section-header">
+          <span class="info-section-icon">⚙️</span>
+          <span class="info-section-title">How the Model Works</span>
+        </div>
+        <div class="info-section-body">
+          <div class="step-list">
+            <div class="step-row">
+              <div class="step-num">1</div>
+              <div class="step-content">
+                <div class="step-title">Data Collection — OddsJam API</div>
+                <div class="step-desc">Every day at 3 PM ET, the pipeline pulls up to 365 days of historical odds plus today's live lines from OddsJam across 9 books and 6 sports (NFL, NBA, MLB, NHL, CFB, CBB). Each game gets a full timeline of price snapshots from opening line to close.</div>
+              </div>
+            </div>
+            <div class="step-row">
+              <div class="step-num">2</div>
+              <div class="step-content">
+                <div class="step-title">Feature Engineering — 30+ movement signals</div>
+                <div class="step-desc">For each game and bet side, 30+ features are calculated: how much Pinnacle moved (in full and in each time window), how fast it moved, whether public books followed or diverged, sharp vs public price gap, reverse line movement flag, number of directional reversals, time to game start, and more. These features capture the "story" of how the market moved.</div>
+              </div>
+            </div>
+            <div class="step-row">
+              <div class="step-num">3</div>
+              <div class="step-content">
+                <div class="step-title">XGBoost Classification — one model per sport per market</div>
+                <div class="step-desc">A separate XGBoost decision-tree classifier is trained for each combination of sport and market type (e.g. "NFL spreads", "NBA moneylines"). It learns which movement patterns historically resulted in a winning bet. Outputs are calibrated with Platt scaling to produce reliable probabilities.</div>
+              </div>
+            </div>
+            <div class="step-row">
+              <div class="step-num">4</div>
+              <div class="step-content">
+                <div class="step-title">Edge Detection — beat Pinnacle's no-vig price</div>
+                <div class="step-desc">The model's win probability is compared to Pinnacle's no-vig fair price (the market's sharpest estimate). If the model says 56% and Pinnacle's fair price implies 51%, that's a +5% edge. Any edge above the minimum threshold (currently 0.5%) is included on the slate.</div>
+              </div>
+            </div>
+            <div class="step-row">
+              <div class="step-num">5</div>
+              <div class="step-content">
+                <div class="step-title">Kelly Criterion Sizing — fractional, capped</div>
+                <div class="step-desc">Each bet is sized using the Kelly Criterion — a formula that maximizes long-run bankroll growth given the edge and odds. The model uses 25% of full Kelly (conservative) and caps individual bets at 4% of bankroll. Total portfolio exposure is capped at 20%.</div>
+              </div>
+            </div>
+            <div class="step-row">
+              <div class="step-num">6</div>
+              <div class="step-content">
+                <div class="step-title">Arbitrage Detection — cross-book scan</div>
+                <div class="step-desc">After generating the slate, the model scans all books for arbitrage: games where betting both sides (Team A at Book X, Team B at Book Y) guarantees a profit regardless of the outcome. When found, an ARB signal is added with the guaranteed margin percentage.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Model health guide -->
+      <div class="info-section">
+        <div class="info-section-header">
+          <span class="info-section-icon">📊</span>
+          <span class="info-section-title">Reading the Model's Health</span>
+        </div>
+        <div class="info-section-body">
+          <p>The Backtest tab shows the model's current AUC score and bet history. Here's how to interpret what you see there.</p>
+          <div class="health-list">
+
+            <div class="health-row">
+              <div class="health-metric">AUC = 0.50</div>
+              <div class="health-body">
+                <div class="health-warn">⚠ Bootstrap / Synthetic Data</div>
+                The model is in early training. It's using artificially generated outcomes — predictions are not reliable yet. Normal when the pipeline is new.
+              </div>
+            </div>
+
+            <div class="health-row">
+              <div class="health-metric">AUC 0.51–0.54</div>
+              <div class="health-body">
+                <div class="health-warn">⚠ Still building — real data accumulating</div>
+                Some real game outcomes have been logged. The model is learning but needs more data. Treat HIGH bets with SHARP/RLM signals as tentative.
+              </div>
+            </div>
+
+            <div class="health-row">
+              <div class="health-metric">AUC ≥ 0.55</div>
+              <div class="health-body">
+                <div class="health-good">✓ Model is reliable for this sport</div>
+                The model has seen enough real outcomes to make meaningful predictions. Edge percentages in the 3–10% range are credible. Time to raise MIN_EDGE_TO_BET to 2.5% in config.
+              </div>
+            </div>
+
+            <div class="health-row">
+              <div class="health-metric">CLV &gt; 0</div>
+              <div class="health-body">
+                <div class="health-good">✓ Closing line value — long-run profitable</div>
+                If bets are consistently beating the closing price (CLV &gt; 0), the model is finding real edges before the market corrects. This is the gold standard for confirming the approach works.
+              </div>
+            </div>
+
+            <div class="health-row">
+              <div class="health-metric">All edges &gt; 15%</div>
+              <div class="health-body">
+                <div class="health-warn">⚠ Synthetic data artifact — not real edges</div>
+                Normal at launch. Edges will compress to realistic 2–8% range as real outcome data accumulates and the model retrains. No action needed.
+              </div>
+            </div>
+
+            <div class="health-row">
+              <div class="health-metric">n_signals = 0</div>
+              <div class="health-body">
+                <div class="health-warn">⚠ Only CLV signal — weakest bets</div>
+                The movement signals (SHARP, RLM, FADE, ARB) haven't fired. The bet is based purely on the XGBoost model output with no corroborating evidence from line movement. Lowest priority.
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Data Sources -->
+      <div class="info-section">
+        <div class="info-section-header">
+          <span class="info-section-icon">🗄️</span>
+          <span class="info-section-title">Data Sources</span>
+        </div>
+        <div class="info-section-body">
+          <div class="source-list">
+            <div class="source-row">
+              <div class="source-icon">📡</div>
+              <div class="source-content">
+                <div class="source-name">OddsJam API — primary odds source</div>
+                <div class="source-desc">Pulls live and historical lines for all 9 books and 6 sports. Provides up to 365 days of historical movement data for training. Runs via GitHub Actions automatically — your API key in GitHub Secrets is the only credential needed.</div>
+              </div>
+            </div>
+            <div class="source-row">
+              <div class="source-icon">🏦</div>
+              <div class="source-content">
+                <div class="source-name">Sharp Books: Pinnacle, Circa, Bookmaker</div>
+                <div class="source-desc">Used as the sharp reference price. Pinnacle sets the global standard for efficient pricing and is used as the CLV benchmark. Movement at these books is the core signal — they move first when sharp money hits.</div>
+              </div>
+            </div>
+            <div class="source-row">
+              <div class="source-icon">🏪</div>
+              <div class="source-content">
+                <div class="source-name">Public Books: DraftKings, FanDuel, BetMGM, Bovada, William Hill, Bet365</div>
+                <div class="source-desc">Target books where you actually place bets. The model finds windows where these books are slow to adjust to sharp movement — that lag is where positive EV exists.</div>
+              </div>
+            </div>
+            <div class="source-row">
+              <div class="source-icon">🤖</div>
+              <div class="source-content">
+                <div class="source-name">GitHub Actions — fully automated</div>
+                <div class="source-desc">The entire pipeline runs on GitHub's free servers every day at 3 PM ET. No local computer or server needed. Results are committed back to this repo automatically, and this dashboard updates within seconds of each run.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<script>
+const GITHUB_USER   = "childersjac-max";
+const GITHUB_REPO   = "Line-Tracker-Model";
+const GITHUB_BRANCH = "main";
+const RAW = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_BRANCH}`;
+const API = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents`;
+const GH_COMMITS = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/commits`;
+
+let bankrollChart = null, monthlyChart = null;
+let chartsLoaded = false, metricsLoaded = false;
+
+// ── Bankroll state ─────────────────────────────────────────────────────
+let currentBankroll = parseFloat(localStorage.getItem('ltm_bankroll') || '10000');
+(function initBankroll() {
+  const inp = document.getElementById('bankroll-input');
+  if (inp) inp.value = currentBankroll;
+})();
+
+function setBankroll(val) {
+  const n = parseFloat(val);
+  if (isNaN(n) || n < 100) return;
+  currentBankroll = n;
+  localStorage.setItem('ltm_bankroll', n);
+  // Re-render slate with new bankroll (data already loaded)
+  if (window._slateData) renderSlate(window._slateData);
+}
+
+// ── RFC 4180-compliant CSV parser (handles quoted fields with commas) ──
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = splitCSVRow(lines[0]);
+  return lines.slice(1).map(line => {
+    const vals = splitCSVRow(line);
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (vals[i] || '').trim());
+    return obj;
+  });
+}
+
+function splitCSVRow(line) {
+  const result = [];
+  let cur = '', inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuote && line[i+1] === '"') { cur += '"'; i++; }
+      else inQuote = !inQuote;
+    } else if (ch === ',' && !inQuote) {
+      result.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+async function fetchCSV(path) {
+  let text;
+  try {
+    const r = await fetch(`${RAW}/${path}?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`${r.status}`);
+    text = await r.text();
+  } catch(e) {
+    const r = await fetch(`${API}/${path}`, {
+      headers: { 'Accept': 'application/vnd.github.v3.raw' },
+      cache: 'no-store'
+    });
+    if (!r.ok) throw new Error(`${r.status}: ${path}`);
+    text = await r.text();
+  }
+  return parseCSV(text);
+}
+
+async function fetchJSON(path) {
+  try {
+    const r = await fetch(`${RAW}/${path}?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`${r.status}`);
+    return r.json();
+  } catch(e) {
+    const r = await fetch(`${API}/${path}`, {
+      headers: { 'Accept': 'application/vnd.github.v3.raw' },
+      cache: 'no-store'
+    });
+    if (!r.ok) throw new Error(`${r.status}: ${path}`);
+    return r.json();
+  }
+}
+
+// ── Fetch last pipeline commit time from GitHub API ───────────────────
+async function fetchDataFreshness() {
+  try {
+    const r = await fetch(
+      `${GH_COMMITS}?path=pipeline_output/bet_slate_latest.csv&per_page=1`,
+      { headers: { 'Accept': 'application/vnd.github.v3+json' }, cache: 'no-store' }
+    );
+    if (!r.ok) return;
+    const commits = await r.json();
+    if (!commits.length) return;
+    const ts = commits[0].commit.committer.date;
+    const d  = new Date(ts);
+    const now = new Date();
+    const hoursAgo = (now - d) / 3600000;
+    const label = hoursAgo < 1 ? 'Just now'
+                : hoursAgo < 2 ? `${Math.round(hoursAgo*60)}m ago`
+                : hoursAgo < 24 ? `${Math.round(hoursAgo)}h ago`
+                : `${Math.round(hoursAgo/24)}d ago`;
+    const cls = hoursAgo < 6 ? 'fresh-ok' : hoursAgo < 24 ? 'fresh-warn' : 'fresh-old';
+    const el = document.getElementById('last-updated');
+    el.textContent = `Pipeline: ${label}`;
+    el.className = cls;
+  } catch(e) { /* non-fatal */ }
+}
+
+function castNum(rows, fields) {
+  return rows.map(r => {
+    const o = {...r};
+    fields.forEach(f => {
+      if (o[f] !== '' && o[f] != null) {
+        const n = parseFloat(o[f]);
+        if (!isNaN(n)) o[f] = n;
+      }
+    });
+    return o;
+  });
+}
+
+const fmt    = (n,d=1) => (n==null||isNaN(n)) ? '—' : Number(n).toFixed(d);
+const fmtPct = (n,d=1) => (n==null||isNaN(n)) ? '—' : (Number(n)>=0?'+':'')+Number(n).toFixed(d)+'%';
+const fmtUSD = n => (n==null||isNaN(n)) ? '—' : '$'+Number(n).toLocaleString('en-US',{maximumFractionDigits:0});
+const cc     = n => Number(n)>0?'pos':Number(n)<0?'neg':'';
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  btn.classList.add('active');
+
+  if (name === 'charts'   && !chartsLoaded)   loadCharts();
+  if (name === 'metrics'  && !metricsLoaded)  loadMetrics();
+  if (name === 'patterns' && !patternsLoaded) loadPatterns();
+}
+
+// ── Patterns ──────────────────────────────────────────────────────────
+let allPatterns = [];
+let patternsLoaded = false;
+
+async function loadPatterns() {
+  if (patternsLoaded) return;
+  patternsLoaded = true;
+  try {
+    const data = await fetchJSON('pipeline_output/patterns.json');
+    // Flatten all patterns from all sport/market groups
+    allPatterns = [];
+    for (const [groupKey, group] of Object.entries(data)) {
+      for (const pattern of (group.patterns || [])) {
+        allPatterns.push({
+          ...pattern,
+          sport_key: group.sport_key,
+          market:    group.market,
+          sport_label: {
+            'basketball_nba':'NBA','baseball_mlb':'MLB','icehockey_nhl':'NHL',
+            'americanfootball_nfl':'NFL','americanfootball_ncaaf':'CFB',
+            'basketball_ncaab':'CBB'
+          }[group.sport_key] || group.sport_key,
+        });
+      }
+    }
+    updatePatternStats();
+    filterPatterns();
+  } catch(e) {
+    document.getElementById('pattern-body').innerHTML = `
+      <div class="empty">
+        <span class="empty-icon">🔍</span>
+        No pattern data yet.<br>
+        <span style="color:var(--dim)">Run "5. Pattern Discovery" workflow in GitHub Actions.</span><br>
+        <span style="color:var(--dim);font-size:10px">${e.message}</span>
+      </div>`;
+    document.getElementById('pattern-count').textContent = 'No patterns loaded';
+  }
+}
+
+function updatePatternStats() {
+  const n = allPatterns.length;
+  document.getElementById('ps-total').textContent = n.toLocaleString();
+
+  if (n === 0) return;
+
+  const posEv = allPatterns.filter(p => p.ev_pct > 0);
+  document.getElementById('ps-pos-ev').textContent =
+    `${((posEv.length / n) * 100).toFixed(0)}%`;
+
+  const avgHit = allPatterns.reduce((s,p) => s + (p.hit_rate||0), 0) / n;
+  document.getElementById('ps-avg-hit').textContent = `${avgHit.toFixed(1)}%`;
+
+  const best = [...allPatterns].sort((a,b) => (b.ev_pct||0) - (a.ev_pct||0))[0];
+  if (best) {
+    document.getElementById('ps-best-ev').textContent = fmtPct(best.ev_pct);
+    document.getElementById('ps-best-desc').textContent =
+      best.description.length > 40 ? best.description.slice(0,40)+'…' : best.description;
+  }
+}
+
+function filterPatterns() {
+  const sport   = document.getElementById('pf-sport').value;
+  const market  = document.getElementById('pf-market').value;
+  const type    = document.getElementById('pf-type').value;
+  const minEv   = parseFloat(document.getElementById('pf-ev').value) || 0;
+  const minN    = parseInt(document.getElementById('pf-samples').value) || 5;
+  const sortBy  = document.getElementById('pf-sort').value;
+
+  let filtered = allPatterns.filter(p => {
+    if (sport  && p.sport_key !== sport)  return false;
+    if (market && p.market    !== market) return false;
+    if (type   && p.type      !== type)   return false;
+    if ((p.ev_pct||0) < minEv)            return false;
+    if ((p.n||0) < minN)                  return false;
+    return true;
+  });
+
+  // Sort
+  if (sortBy === 'ev')     filtered.sort((a,b) => (b.ev_pct||0) - (a.ev_pct||0));
+  if (sortBy === 'ev_neg') filtered.sort((a,b) => (a.ev_pct||0) - (b.ev_pct||0));
+  if (sortBy === 'n')      filtered.sort((a,b) => (b.n||0) - (a.n||0));
+  if (sortBy === 'hit')    filtered.sort((a,b) => (b.hit_rate||0) - (a.hit_rate||0));
+
+  document.getElementById('pattern-count').textContent =
+    `Showing ${filtered.length} patterns (${allPatterns.length} total)`;
+
+  renderPatternTable(filtered);
+}
+
+function renderPatternTable(patterns) {
+  if (patterns.length === 0) {
+    document.getElementById('pattern-body').innerHTML =
+      '<div class="empty">No patterns match your filters. Try loosening the criteria.</div>';
+    return;
+  }
+
+  const typeLabels = {
+    'full_combo':        'Full Combo',
+    'line_ticket_money': 'Line+Tickets+Money',
+    'move_ticket_money': 'Move+Tickets+Money',
+    'ticket_money_combo':'Tickets+Money',
+    'sharp_side_pattern':'Sharp Side',
+    'ticket_pct':        'Ticket% Only',
+    'money_pct':         'Money% Only',
+  };
+
+  const rows = patterns.slice(0, 200).map(p => {
+    const ev      = parseFloat(p.ev_pct) || 0;
+    const evCls   = ev >= 5 ? 'pos' : ev >= 0 ? 'neu' : 'neg';
+    const evStr   = ev >= 0 ? `+${ev.toFixed(2)}%` : `${ev.toFixed(2)}%`;
+    const hit     = parseFloat(p.hit_rate) || 0;
+    const hitCls  = hit >= 55 ? 'pos' : hit >= 45 ? '' : 'neg';
+    const typeLabel = typeLabels[p.type] || p.type;
+    const mktLabel = {'moneyline':'ML','spread':'SPR','total':'TOT'}[p.market] || p.market.toUpperCase();
+
+    // Confidence based on sample size and EV
+    const conf = p.n >= 20 && Math.abs(ev) >= 5 ? 'HIGH'
+               : p.n >= 10 && Math.abs(ev) >= 3 ? 'MEDIUM' : 'LOW';
+    const confCls = conf === 'HIGH' ? 'conf-HIGH' : conf === 'MEDIUM' ? 'conf-MEDIUM' : 'conf-LOW';
+
+    return `<tr>
+      <td><strong>${p.sport_label}</strong></td>
+      <td><span class="market-tag">${mktLabel}</span></td>
+      <td style="max-width:320px;white-space:normal;font-size:11px;line-height:1.5">${p.description}</td>
+      <td style="font-family:var(--font-mono);font-size:10px;color:var(--dim)">${typeLabel}</td>
+      <td class="${evCls}"><strong>${evStr}</strong></td>
+      <td class="${hitCls}">${hit.toFixed(1)}%</td>
+      <td style="font-family:var(--font-mono)">${p.n}</td>
+      <td style="font-family:var(--font-mono);color:var(--muted)">${(p.avg_fair_prob||0).toFixed(1)}%</td>
+      <td><span class="conf ${confCls}">${conf}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('pattern-body').innerHTML = `
+    <div class="bet-table-wrap"><table>
+      <thead><tr>
+        <th>Sport</th><th>Mkt</th><th>Pattern Description</th><th>Type</th>
+        <th>EV%</th><th>Hit Rate</th><th>Samples</th><th>Avg Fair%</th><th>Conf</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    ${patterns.length > 200 ? `<div style="padding:12px 16px;font-family:var(--font-mono);font-size:10px;color:var(--muted)">Showing top 200 of ${patterns.length} matches</div>` : ''}`;
+}
+  
+// ── Slate helpers ──────────────────────────────────────────────────────
+const mktLabel = m => ({
+  'h2h':'ML','moneyline':'ML','spreads':'SPD','spread':'SPD',
+  'totals':'O/U','total':'O/U','over_under':'O/U'
+})[String(m).toLowerCase()] || String(m).toUpperCase().slice(0,3);
+
+const bookShort = raw => {
+  const map = {
+    'draftkings':'DraftKings','fanduel':'FanDuel','betmgm':'BetMGM',
+    'bovada':'Bovada','williamhill_us':'William Hill','williamhill':'William Hill',
+    'bet365':'Bet365','pinnacle':'Pinnacle','circa':'Circa',
+    'bookmaker':'Bookmaker','betrivers':'BetRivers','pointsbet':'PointsBet',
+    'caesars':'Caesars','mybookie':'MyBookie','betonline':'BetOnline',
+  };
+  const k = (raw||'').toLowerCase().replace(/[\s_]+/g,'');
+  return map[k] || (raw ? raw.charAt(0).toUpperCase()+raw.slice(1) : '');
+};
+
+const sigTag = s => {
+  if (!s) return '';
+  if (s.startsWith('ARBITRAGE')) {
+    const m = s.match(/\(([^)]+)\)/);
+    return `<span class="sig sig-arb">ARB${m ? ' '+m[1] : ''}</span>`;
+  }
+  const map = {
+    'SHARP_MONEY':['SHARP','sig-SHARP'],'SHARP':['SHARP','sig-SHARP'],
+    'REVERSE_LINE_MOVEMENT':['RLM','sig-RLM'],'RLM':['RLM','sig-RLM'],
+    'PUBLIC_FADE':['FADE','sig-FADE'],'FADE':['FADE','sig-FADE'],
+    'CLV_MODEL':['CLV','sig-CLV'],'CLV':['CLV','sig-CLV'],
+    'INJURY_RISK':['⚕ RISK','sig-INJURY'],
+    'OPP_INJURED':['⚕ OPP','sig-OPP-INJ'],
+  };
+  const [l,c] = map[s]||[s.replace(/_/g,' ').slice(0,8),'sig-CLV'];
+  return `<span class="sig ${c}">${l}</span>`;
+};
+
+const htgBadge = htg => {
+  const h = parseFloat(htg);
+  if (isNaN(h) || h <= 0) return '';
+  if (h < 2)  return `<span class="htg htg-fire">🔴 ${h < 1 ? Math.round(h*60)+'m' : h.toFixed(1)+'h'}</span>`;
+  if (h < 6)  return `<span class="htg htg-warn">🟡 ${h.toFixed(1)}h</span>`;
+  return `<span class="htg htg-ok">${h.toFixed(0)}h</span>`;
+};
+
+function scaledBet(b) {
+  // Scale the model's base bet_usd (calibrated for $10K) to current bankroll
+  const base = parseFloat(b.bet_usd) || 0;
+  return base * (currentBankroll / 10000);
+}
+
+function betCopyText(b) {
+  const book = bookShort(b.book);
+  const odds = b.american_odds_display || b.american_odds || '';
+  const betAmt = fmtUSD(scaledBet(b));
+  const mkt = mktLabel(b.market||'');
+  return `${b.sport} ${mkt} | ${b.side} | ${odds} @ ${book} | Bet: ${betAmt} | Edge: +${(parseFloat(b.edge_pct)||0).toFixed(1)}%`;
+}
+
+function copyBet(idx) {
+  const b = (window._slateFiltered || [])[idx];
+  if (!b) return;
+  navigator.clipboard.writeText(betCopyText(b)).then(() => {
+    const btn = document.querySelector(`[data-copy-idx="${idx}"]`);
+    if (btn) { btn.textContent = '✓ Copied'; btn.classList.add('copied');
+      setTimeout(()=>{ btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500); }
+  }).catch(() => {
+    prompt('Copy this bet:', betCopyText(b));
+  });
+}
+
+// ── Slate filter + render ──────────────────────────────────────────────
+function applySlateFilters() {
+  const data = window._slateData;
+  if (!data || !data.length) return;
+
+  const fSport  = document.getElementById('f-sport')?.value  || '';
+  const fMarket = document.getElementById('f-market')?.value || '';
+  const fConf   = document.getElementById('f-conf')?.value   || '';
+  const fEdge   = parseFloat(document.getElementById('f-edge')?.value  || '0');
+  const fSig    = document.getElementById('f-sig')?.value    || '';
+  const fSort   = document.getElementById('f-sort')?.value   || 'conf';
+
+  let filtered = data.filter(b => {
+    if (fSport  && b.sport   !== fSport)  return false;
+    if (fMarket && b.market  !== fMarket) return false;
+    if (fConf === 'HIGH'   && b.confidence !== 'HIGH')   return false;
+    if (fConf === 'MEDIUM' && b.confidence === 'LOW')    return false;
+    if ((parseFloat(b.edge_pct)||0) < fEdge) return false;
+    if (fSig && !(b.signals||'').includes(fSig)) return false;
+    return true;
+  });
+
+  const confOrder = {HIGH:0, MEDIUM:1, LOW:2};
+  if (fSort === 'conf')  filtered.sort((a,b) => (confOrder[a.confidence]||2) - (confOrder[b.confidence]||2));
+  if (fSort === 'edge')  filtered.sort((a,b) => (parseFloat(b.edge_pct)||0) - (parseFloat(a.edge_pct)||0));
+  if (fSort === 'ev')    filtered.sort((a,b) => (parseFloat(b.ev_pct)||0)   - (parseFloat(a.ev_pct)||0));
+  if (fSort === 'time')  filtered.sort((a,b) => (parseFloat(a.hours_to_game)||999) - (parseFloat(b.hours_to_game)||999));
+  if (fSort === 'bet')   filtered.sort((a,b) => scaledBet(b) - scaledBet(a));
+
+  const el = document.getElementById('f-count');
+  if (el) el.textContent = `${filtered.length} of ${data.length} bets`;
+
+  window._slateFiltered = filtered;
+  renderSlate(filtered);
+}
+
+function renderSlate(bets) {
+  if (!bets || bets.length === 0) {
+    document.getElementById('slate-body').innerHTML = `
+      <div class="empty">
+        <span class="empty-icon">📊</span>
+        No bets match your filters.<br>
+        <span style="color:var(--dim)">Try widening the filters above.</span>
+      </div>`;
+    return;
+  }
+
+  const rowsHtml = bets.map((b, idx) => {
+    const odds     = parseFloat(b.american_odds)||0;
+    const oddsStr  = b.american_odds_display||(odds>0?`+${Math.round(odds)}`:`${Math.round(odds)}`);
+    const oddsClr  = odds > 0 ? 'style="color:var(--green)"' : 'style="color:var(--red)"';
+    const edge     = parseFloat(b.edge_pct)||0;
+    const edgeStr  = (edge>0?'+':'')+edge.toFixed(1)+'%';
+    const ec       = edge>=5?'pos':edge>=2?'neu':'';
+    const evPct    = parseFloat(b.ev_pct)||0;
+    const evStr    = (evPct>0?'+':'')+evPct.toFixed(1)+'%';
+    const conf     = b.confidence||'LOW';
+    const book     = bookShort(b.book);
+    const betAmt   = scaledBet(b);
+    const sigs     = (b.signals||'CLV_MODEL').split(/[,;]\s*/).map(s=>s.trim()).filter(Boolean).map(sigTag).join('');
+    const htg      = parseFloat(b.hours_to_game);
+    const urgency  = htgBadge(htg);
+    const gameTime = b.game_time || '';
+    const matchup  = b.matchup  || '';
+    const arbBook2 = bookShort(b.arb_partner_book);
+    const arbPrice = b.arb_partner_price ? (parseFloat(b.arb_partner_price)>0?'+':'')+Math.round(parseFloat(b.arb_partner_price)) : '';
+    const isArb    = String(b.is_arb_side) === '1';
+
+    return `<tr>
+      <td>
+        <div style="font-family:var(--font-mono);font-size:12px;font-weight:700">${b.sport||'—'}</div>
+        <div style="margin-top:3px;display:flex;gap:4px;align-items:center">
+          <span class="market-tag">${mktLabel(b.market||'')}</span>
+          ${urgency}
+        </div>
+      </td>
+      <td style="max-width:200px;white-space:normal;line-height:1.4">
+        <div style="font-weight:600">${b.side||'—'}</div>
+        ${matchup?`<div class="matchup-sub">${matchup}</div>`:''}
+        ${gameTime?`<div style="font-size:10px;color:var(--dim);font-family:var(--font-mono);margin-top:1px">${gameTime}</div>`:''}
+      </td>
+      <td>
+        <span class="odds-tag" ${oddsClr}>${oddsStr}</span>
+        ${book?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${book}</div>`:''}
+        ${isArb && arbBook2 && arbPrice ? `<div class="arb-leg2">Leg 2: ${arbBook2} ${arbPrice}</div>` : ''}
+      </td>
+      <td style="color:var(--blue);font-family:var(--font-mono)">${((parseFloat(b.model_prob)||0)*100).toFixed(1)}%</td>
+      <td style="color:var(--muted);font-family:var(--font-mono)">${((parseFloat(b.fair_prob)||0)*100).toFixed(1)}%</td>
+      <td class="${ec}" style="font-family:var(--font-mono)"><strong>${edgeStr}</strong></td>
+      <td class="${evPct>0?'pos':''}" style="font-family:var(--font-mono)">${evStr}</td>
+      <td style="font-family:var(--font-mono)"><strong>${fmtUSD(betAmt)}</strong></td>
+      <td><span class="conf conf-${conf}">${conf}</span></td>
+      <td>
+        <div class="signals">${sigs}</div>
+        ${(()=>{
+          const inj = (b.injured_players||'').trim();
+          const ss = parseFloat(b.side_injury_score)||0;
+          const os = parseFloat(b.opp_injury_score)||0;
+          let n='';
+          if(ss>=0.5&&inj) n+=`<div class="inj-note" style="margin-top:3px">⚕ ${inj}</div>`;
+          if(os>=1.0&&inj) n+=`<div class="opp-inj-note" style="margin-top:3px">⚕ OPP: ${inj}</div>`;
+          return n;
+        })()}
+      </td>
+    </tr>`;
+  }).join('');
+
+  const cardsHtml = bets.map((b, idx) => {
+    const odds     = parseFloat(b.american_odds)||0;
+    const oddsStr  = b.american_odds_display||(odds>0?`+${Math.round(odds)}`:`${Math.round(odds)}`);
+    const oddsClr  = odds > 0 ? 'var(--green)' : 'var(--red)';
+    const edge     = parseFloat(b.edge_pct)||0;
+    const edgeClr  = edge>=5?'var(--green)':edge>=2?'var(--yellow)':'var(--muted)';
+    const evPct    = parseFloat(b.ev_pct)||0;
+    const conf     = b.confidence||'LOW';
+    const book     = bookShort(b.book);
+    const betAmt   = scaledBet(b);
+    const sigs     = (b.signals||'CLV_MODEL').split(/[,;]\s*/).map(s=>s.trim()).filter(Boolean).map(sigTag).join('');
+    const htg      = parseFloat(b.hours_to_game);
+    const urgency  = htgBadge(htg);
+    const gameTime = b.game_time || '';
+    const matchup  = b.matchup  || '';
+    const arbBook2 = bookShort(b.arb_partner_book);
+    const arbPrice = b.arb_partner_price ? (parseFloat(b.arb_partner_price)>0?'+':'')+Math.round(parseFloat(b.arb_partner_price)) : '';
+    const isArb    = String(b.is_arb_side) === '1';
+    const injPlayers = (b.injured_players||'').trim();
+    const ss = parseFloat(b.side_injury_score)||0;
+    const os = parseFloat(b.opp_injury_score)||0;
+
+    return `
+      <div class="bet-card">
+        <div class="bet-card-header">
+          <div class="bet-card-sport">
+            <span class="bet-card-sport-name">${b.sport||'—'}</span>
+            <span class="market-tag">${mktLabel(b.market||'')}</span>
+            ${urgency}
+          </div>
+          <div class="bet-card-right">
+            <span class="conf conf-${conf}">${conf}</span>
+          </div>
+        </div>
+        <div class="bet-card-side">
+          <div style="font-size:15px;font-weight:600">${b.side||'—'}</div>
+          ${matchup?`<div class="bet-card-side-sub">${matchup}</div>`:''}
+          ${gameTime?`<div class="bet-card-side-sub">${gameTime}</div>`:''}
+          ${book?`<div class="bet-card-side-sub">Bet at ${book}</div>`:''}
+          ${isArb && arbBook2 && arbPrice ? `<div class="arb-leg2">Leg 2: ${arbBook2} ${arbPrice}</div>` : ''}
+        </div>
+        <div class="bet-card-metrics">
+          <div class="bet-card-metric">
+            <div class="bet-card-metric-label">Odds</div>
+            <div class="bet-card-metric-value" style="color:${oddsClr}">${oddsStr}</div>
+          </div>
+          <div class="bet-card-metric">
+            <div class="bet-card-metric-label">Model%</div>
+            <div class="bet-card-metric-value" style="color:var(--blue)">${((parseFloat(b.model_prob)||0)*100).toFixed(1)}%</div>
+          </div>
+          <div class="bet-card-metric">
+            <div class="bet-card-metric-label">Fair%</div>
+            <div class="bet-card-metric-value" style="color:var(--muted)">${((parseFloat(b.fair_prob)||0)*100).toFixed(1)}%</div>
+          </div>
+          <div class="bet-card-metric">
+            <div class="bet-card-metric-label">Edge</div>
+            <div class="bet-card-metric-value" style="color:${edgeClr}">${(edge>0?'+':'')+edge.toFixed(1)}%</div>
+          </div>
+          <div class="bet-card-metric">
+            <div class="bet-card-metric-label">EV%</div>
+            <div class="bet-card-metric-value" style="color:${evPct>0?'var(--green)':'var(--muted)'}">${(evPct>0?'+':'')+evPct.toFixed(1)}%</div>
+          </div>
+          <div class="bet-card-metric">
+            <div class="bet-card-metric-label">Bet$</div>
+            <div class="bet-card-metric-value">${fmtUSD(betAmt)}</div>
+          </div>
+        </div>
+        <div class="bet-card-footer" style="flex-direction:column;align-items:stretch;gap:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="signals">${sigs}</div>
+            <button class="copy-btn" data-copy-idx="${idx}" onclick="copyBet(${idx})">Copy</button>
+          </div>
+          ${ss>=0.5&&injPlayers?`<div class="inj-note">⚕ INJURY RISK · ${injPlayers}</div>`:''}
+          ${os>=1.0&&injPlayers?`<div class="opp-inj-note">⚕ OPP INJURED · ${injPlayers}</div>`:''}
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('slate-body').innerHTML = `
+    <div class="bet-table-wrap">
+      <table>
+        <thead><tr>
+          <th>Sport / Time</th>
+          <th>Side · Matchup</th>
+          <th>Odds · Book</th>
+          <th>Model%</th>
+          <th>Fair%</th>
+          <th>Edge</th>
+          <th>EV%</th>
+          <th>Bet$</th>
+          <th>Conf</th>
+          <th>Signals</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+    <div class="bet-card-list">${cardsHtml}</div>`;
+}
+
+async function loadSlate() {
+  document.getElementById('slate-body').innerHTML =
+    '<div class="loading"><div class="spinner"></div> Loading slate…</div>';
+
+  // Fetch data freshness in parallel (non-blocking)
+  fetchDataFreshness();
+
+  try {
+    const rows = await fetchCSV('pipeline_output/bet_slate_latest.csv');
+    const bets = castNum(rows, [
+      'model_prob','fair_prob','edge_pct','ev_pct','bet_pct','bet_usd',
+      'american_odds','n_signals','hours_to_game','side_injury_score',
+      'opp_injury_score','has_major_injury','home_injury_score','away_injury_score',
+      'arb_margin_pct','arb_book_count',
+    ]);
+    const validBets = bets.filter(b => b.sport && b.sport.trim() !== '');
+
+    // Store data globally for filter re-renders
+    window._slateData     = validBets;
+    window._slateFiltered = validBets;
+
+    document.getElementById('slate-ts').textContent =
+      new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+
+    // Stat cards
+    document.getElementById('s-n-bets').textContent = validBets.length;
+    if (validBets.length > 0) {
+      const avg = validBets.reduce((s,b)=>s+(parseFloat(b.edge_pct)||0),0)/validBets.length;
+      document.getElementById('s-avg-edge').textContent = `+${avg.toFixed(2)}%`;
+      const totalRisk = validBets.reduce((s,b)=>s+scaledBet(b),0);
+      document.getElementById('s-total-risk').textContent = fmtUSD(totalRisk);
+      document.getElementById('s-risk-pct').textContent =
+        `${((totalRisk/currentBankroll)*100).toFixed(1)}% of bankroll`;
+      const hi = validBets.filter(b=>b.confidence==='HIGH').length;
+      const md = validBets.filter(b=>b.confidence==='MEDIUM').length;
+      document.getElementById('s-conf-split').textContent = `${hi} high · ${md} medium`;
+      const counts = {};
+      validBets.flatMap(b=>(b.signals||'').split(/[,;]\s*/).filter(Boolean))
+               .forEach(s=>counts[s]=(counts[s]||0)+1);
+      const top = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+      document.getElementById('s-signals').textContent    = top ? top[0].replace(/_/g,' ') : '—';
+      document.getElementById('s-top-signal').textContent = top ? `${top[1]} bets` : '—';
+    }
+
+    if (validBets.length === 0) {
+      document.getElementById('slate-body').innerHTML = `
+        <div class="empty">
+          <span class="empty-icon">📊</span>
+          No edges found in today's slate.<br>
+          <span style="color:var(--dim)">Pipeline runs daily at 3 PM ET · Check back soon.</span>
+        </div>`;
+      return;
+    }
+
+    // Show filter bar now that we have data
+    const fb = document.getElementById('slate-filters');
+    if (fb) fb.style.display = '';
+
+    applySlateFilters();
+
+  } catch(e) {
+    document.getElementById('slate-body').innerHTML = `
+      <div class="empty">
+        <span class="empty-icon">⚙️</span>
+        Could not load slate.<br>
+        <span style="color:var(--dim);font-size:10px">${e.message}</span><br>
+        <span style="color:var(--dim)">Make Line-Tracker-Model repo public or check that workflows ran.</span>
+      </div>`;
+  }
+}
+
+async function loadCharts() {
+  chartsLoaded = true;
+  try {
+    const [records, metrics] = await Promise.all([
+      fetchCSV('pipeline_output/backtest_results.csv').then(r =>
+        castNum(r,['bet_usd','pnl','edge','model_prob','american_odds','clv','outcome'])),
+      fetchJSON('pipeline_output/backtest_metrics.json'),
+    ]);
+
+    if (metrics && metrics.roi_pct != null) {
+      const roi = metrics.roi_pct||0;
+      document.getElementById('p-roi').textContent = fmtPct(roi);
+      document.getElementById('p-roi').className = `stat-value ${cc(roi)}`;
+      document.getElementById('p-total-pnl').textContent = `P&L ${fmtUSD(metrics.total_pnl)}`;
+      document.getElementById('p-hit').textContent = `${((metrics.hit_rate||0)*100).toFixed(1)}%`;
+      document.getElementById('p-bets').textContent = `${metrics.n_bets||0} bets`;
+      const clv = metrics.clv_mean||0;
+      document.getElementById('p-clv').textContent = fmtPct(clv*100,3);
+      document.getElementById('p-clv').className = `stat-value ${cc(clv)}`;
+      document.getElementById('p-sharpe').textContent = fmt(metrics.sharpe,2);
+      document.getElementById('p-sharpe').className = `stat-value ${cc(metrics.sharpe)}`;
+    }
+
+    if (records.length > 0) {
+      const sorted = [...records].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+      let br = 10000;
+      const pts = [{x:'Start',y:br}];
+      sorted.forEach(r=>{ br+=parseFloat(r.pnl)||0; pts.push({x:r.date||'',y:Math.round(br)}); });
+      const gc = pts[pts.length-1].y>=10000?'#3fb950':'#f85149';
+      if(bankrollChart) bankrollChart.destroy();
+      const ctx1 = document.getElementById('bankroll-chart').getContext('2d');
+      const grad = ctx1.createLinearGradient(0,0,0,240);
+      grad.addColorStop(0,gc+'40'); grad.addColorStop(1,gc+'00');
+      bankrollChart = new Chart(ctx1,{
+        type:'line',
+        data:{labels:pts.map(p=>p.x),datasets:[{data:pts.map(p=>p.y),borderColor:gc,backgroundColor:grad,borderWidth:2,pointRadius:0,fill:true,tension:0.3}]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{backgroundColor:'#1c2333',borderColor:'#253047',borderWidth:1,titleColor:'#636e7b',bodyColor:'#cdd9e5',callbacks:{label:c=>`$${c.parsed.y.toLocaleString()}`}}},
+          scales:{
+            x:{ticks:{color:'#636e7b',font:{family:'Space Mono',size:9},maxTicksLimit:8},grid:{color:'rgba(255,255,255,0.04)'}},
+            y:{ticks:{color:'#636e7b',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toLocaleString()},grid:{color:'rgba(255,255,255,0.04)'}}
+          }}
+      });
+    }
+
+    if (metrics && metrics.monthly_roi && Object.keys(metrics.monthly_roi).length > 0) {
+      const labels = Object.keys(metrics.monthly_roi).sort();
+      const values = labels.map(k=>parseFloat(metrics.monthly_roi[k])||0);
+      const colors = values.map(v=>v>=0?'rgba(63,185,80,0.75)':'rgba(248,81,73,0.75)');
+      if(monthlyChart) monthlyChart.destroy();
+      const ctx2 = document.getElementById('monthly-chart').getContext('2d');
+      monthlyChart = new Chart(ctx2,{
+        type:'bar',
+        data:{labels,datasets:[{data:values,backgroundColor:colors,borderColor:colors.map(c=>c.replace('0.75','1')),borderWidth:1,borderRadius:3}]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{backgroundColor:'#1c2333',borderColor:'#253047',borderWidth:1,titleColor:'#636e7b',bodyColor:'#cdd9e5',callbacks:{label:c=>`ROI: ${c.parsed.y.toFixed(2)}%`}}},
+          scales:{
+            x:{ticks:{color:'#636e7b',font:{family:'Space Mono',size:9}},grid:{color:'rgba(255,255,255,0.04)'}},
+            y:{ticks:{color:'#636e7b',font:{family:'Space Mono',size:9},callback:v=>v.toFixed(1)+'%'},grid:{color:'rgba(255,255,255,0.04)'}}
+          }}
+      });
+    }
+
+    const bySig = (metrics&&metrics.by_signal)?metrics.by_signal:{};
+    const sigs = Object.entries(bySig);
+    if (!sigs.length) {
+      document.getElementById('signal-bars-wrap').innerHTML =
+        '<div class="empty">Run the backtest workflow to see signal data.</div>';
+    } else {
+      const maxROI = Math.max(...sigs.map(([,s])=>Math.abs(s.roi_pct||0)),1);
+      const colorMap = {'SHARP_MONEY':'var(--blue)','REVERSE_LINE_MOVEMENT':'var(--purple)','PUBLIC_FADE':'var(--cyan)','CLV_MODEL':'var(--muted)'};
+      document.getElementById('signal-bars-wrap').innerHTML =
+        '<div class="signal-bars">'+
+        sigs.map(([name,s])=>{
+          const roi=parseFloat(s.roi_pct)||0;
+          const pct=Math.min(Math.abs(roi)/maxROI*100,100);
+          const color=roi>=0?(colorMap[name]||'var(--green)'):'var(--red)';
+          return `<div class="sig-row">
+            <div class="sig-row-header">
+              <span class="sig-name">${name.replace(/_/g,' ')}</span>
+              <span class="sig-stats">${s.n_bets} bets · ${((s.hit_rate||0)*100).toFixed(1)}% HR · <span class="${cc(roi)}">${fmtPct(roi)}</span></span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+          </div>`;
+        }).join('')+'</div>';
+    }
+
+  } catch(e) {
+    document.getElementById('signal-bars-wrap').innerHTML =
+      `<div class="empty">Run the backtest workflow to see performance data.<br><small style="color:var(--dim)">${e.message}</small></div>`;
+  }
+}
+
+async function loadMetrics() {
+  metricsLoaded = true;
+  try {
+    const m = await fetchJSON('pipeline_output/backtest_metrics.json');
+    if (!m || !m.roi_pct) throw new Error('No backtest data yet');
+
+    const roi = m.roi_pct||0;
+    document.getElementById('bt-roi').textContent = fmtPct(roi);
+    document.getElementById('bt-roi').className = `stat-value ${cc(roi)}`;
+    document.getElementById('bt-pf').textContent  = fmt(m.profit_factor,2)+'x';
+    document.getElementById('bt-dd').textContent  = fmtPct(m.max_drawdown_pct);
+    document.getElementById('bt-clvp').textContent = fmt(m.clv_positive_pct,1)+'%';
+
+    document.getElementById('by-market-wrap').innerHTML =
+      Object.entries(m.by_market||{}).map(([mkt,s])=>`
+        <div class="market-row">
+          <span class="market-name">${mkt}</span>
+          <div class="market-stats">
+            <span>${s.n_bets} bets</span>
+            <span>${((s.hit_rate||0)*100).toFixed(1)}% HR</span>
+            <span class="${cc(s.roi_pct)}">${fmtPct(s.roi_pct)}</span>
+            <span class="${cc(s.clv_mean)}">CLV ${fmtPct((s.clv_mean||0)*100,3)}</span>
+          </div>
+        </div>`).join('')||'<div class="empty">No market data yet.</div>';
+
+    document.getElementById('by-signal-wrap').innerHTML =
+      Object.entries(m.by_signal||{}).map(([sig,s])=>`
+        <div class="market-row">
+          <span class="market-name" style="font-size:10px">${sig.replace(/_/g,' ')}</span>
+          <div class="market-stats">
+            <span>${s.n_bets} bets</span>
+            <span>${((s.hit_rate||0)*100).toFixed(1)}% HR</span>
+            <span class="${cc(s.roi_pct)}">${fmtPct(s.roi_pct)}</span>
+          </div>
+        </div>`).join('')||'<div class="empty">No signal data yet.</div>';
+
+    const ms = m.multi_signal||{};
+    document.getElementById('multi-signal-wrap').innerHTML = ms.n_bets ? `
+      <div class="market-row">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font-family:var(--font-mono);font-size:28px;font-weight:700;color:var(--text)">${ms.n_bets}</span>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">bets with 2+ confirming signals</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-family:var(--font-mono);font-size:11px;color:var(--muted)">
+          <span style="font-size:20px;font-weight:700" class="${cc(ms.roi_pct)}">${fmtPct(ms.roi_pct)}</span>
+          <span>${((ms.hit_rate||0)*100).toFixed(1)}% hit rate</span>
+        </div>
+      </div>` : '<div class="empty">Not enough multi-signal data yet.</div>';
+
+  } catch(e) {
+    const msg = `<div class="empty">Run the backtest workflow first.<br><small style="color:var(--dim)">Actions → 4. Backtest → Run workflow</small></div>`;
+    ['by-market-wrap','by-signal-wrap','multi-signal-wrap'].forEach(id =>
+      document.getElementById(id).innerHTML = msg);
+  }
+}
+
+function refreshAll() {
+  chartsLoaded = false;
+  metricsLoaded = false;
+  loadSlate();
+  const active = document.querySelector('.tab.active');
+  if (active?.textContent.includes('Performance')) loadCharts();
+  if (active?.textContent.includes('Backtest'))    loadMetrics();
+}
+
+setInterval(() => { loadSlate(); }, 5 * 60 * 1000);
+
+loadSlate();
+</script>
+</body>
+</html>

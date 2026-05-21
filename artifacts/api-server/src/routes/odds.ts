@@ -1,54 +1,31 @@
 import { Router, type IRouter } from "express";
 import { getOdds, OddsJamError } from "../lib/oddsjam";
-import { GetOddsQueryParams, GetOddsResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
 router.get("/odds", async (req, res): Promise<void> => {
-  const parsed = GetOddsQueryParams.safeParse(req.query);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  const { sport, markets, bookmakers } = parsed.data;
+  const sport = String(req.query.sport ?? "baseball");
+  const league = req.query.league ? String(req.query.league) : undefined;
+  const markets = req.query.market
+    ? String(req.query.market)
+    : req.query.markets
+      ? String(req.query.markets)
+      : undefined;
 
   try {
-    const raw = await getOdds({
-      sport,
-      markets: markets ?? undefined,
-      bookmakers: bookmakers ?? undefined,
-    });
-
-    const games = raw.map((g) => ({
-      id: g.id,
-      sport: g.sport_key,
-      homeTeam: g.home_team,
-      awayTeam: g.away_team,
-      commenceTime: g.commence_time,
-      bookmakerOdds: g.bookmakers.flatMap((bm) =>
-        bm.markets.flatMap((mkt) =>
-          mkt.outcomes.map((outcome) => ({
-            bookmaker: bm.key,
-            bookmakerTitle: bm.title,
-            market: mkt.key,
-            outcome: outcome.name,
-            price: outcome.price,
-            point: outcome.point ?? null,
-            lastUpdate: mkt.last_update,
-          }))
-        )
-      ),
-    }));
-
-    res.json(GetOddsResponse.parse(games));
-  } catch (err) {
-    if (err instanceof OddsJamError) {
-      req.log.error({ status: err.status }, "OddsJam error fetching odds");
-      res.status(502).json({ error: `OddsJam API error: ${err.body}` });
+    const games = await getOdds({ sport, league, markets });
+    res.json(games);
+  } catch (e) {
+    req.log.error({ err: e }, "Failed to fetch odds");
+    if (e instanceof OddsJamError) {
+      res.status(e.status >= 400 ? e.status : 502).json({ error: e.message });
       return;
     }
-    throw err;
+    if (e instanceof Error && e.message.includes("ODDSJAM_API_KEY")) {
+      res.status(503).json({ error: "OddsJam API key not configured" });
+      return;
+    }
+    res.status(500).json({ error: "Failed to fetch odds" });
   }
 });
 

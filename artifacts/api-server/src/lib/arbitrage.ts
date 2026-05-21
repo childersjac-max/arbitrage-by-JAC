@@ -13,6 +13,7 @@ export interface ArbitrageOpportunity {
   id: string;
   gameId: string;
   sport: string;
+  league?: string;
   homeTeam: string;
   awayTeam: string;
   commenceTime: string;
@@ -21,6 +22,11 @@ export interface ArbitrageOpportunity {
   totalImpliedProbability: number;
   legs: ArbLeg[];
   detectedAt: string;
+}
+
+// American odds must be ≥ +100 or ≤ -100. Values in [-99, 99] are invalid.
+function isValidAmericanOdds(price: number): boolean {
+  return price >= 100 || price <= -100;
 }
 
 function americanToDecimal(american: number): number {
@@ -32,18 +38,9 @@ function impliedProbability(decimalOdds: number): number {
   return 1 / decimalOdds;
 }
 
-function calculateStakes(
-  legs: Array<{ decimalOdds: number }>,
-  totalBankroll = 1000
-): number[] {
-  // Kelly-style equal-profit stake calculation
-  const totalImplied = legs.reduce((s, l) => s + 1 / l.decimalOdds, 0);
-  return legs.map((l) => (totalBankroll / l.decimalOdds) / totalImplied * totalImplied / legs.length * (1 / l.decimalOdds / totalImplied) * totalBankroll);
-}
-
+// stake_i = bankroll × (1/odds_i) / Σ(1/odds_j)
+// Guarantees equal absolute profit regardless of which outcome wins.
 function calculateOptimalStakes(legs: Array<{ decimalOdds: number }>, bankroll = 1000): number[] {
-  // For guaranteed profit: stake_i = bankroll * (1/odds_i) / sum(1/odds_j)
-  // This ensures equal profit regardless of which outcome wins
   const implied = legs.map((l) => 1 / l.decimalOdds);
   const totalImplied = implied.reduce((a, b) => a + b, 0);
   return implied.map((imp) => (bankroll * imp) / totalImplied);
@@ -60,14 +57,14 @@ export function findArbitrageOpportunities(
     // Collect all markets to analyze
     const marketMap = new Map<
       string,
-      Map<string, Array<{ bookmaker: string; bookmakerTitle: string; price: number; point?: number }>>
+      Map<string, Array<{ bookmaker: string; bookmakerTitle: string; price: number }>>
     >();
 
     for (const bookmaker of game.bookmakers) {
       for (const market of bookmaker.markets) {
         if (marketFilter && market.key !== marketFilter) continue;
 
-        // For totals/spreads, group by market+point to compare same lines
+        // Group by market key + line value so we only compare like-for-like
         const marketKey = market.outcomes.some((o) => o.point !== undefined)
           ? `${market.key}_${market.outcomes[0]?.point ?? ""}`
           : market.key;
@@ -78,9 +75,23 @@ export function findArbitrageOpportunities(
         const outcomeMap = marketMap.get(marketKey)!;
 
         for (const outcome of market.outcomes) {
-          const outcomeName = outcome.point !== undefined
-            ? `${outcome.name} ${outcome.point > 0 ? "+" : ""}${outcome.point}`
-            : outcome.name;
+          // Reject any price that is not valid American odds
+          if (!isValidAmericanOdds(outcome.price)) continue;
+
+          // Normalize outcome name to a canonical form so the same prop line
+          // matches across books regardless of how they embed the point value.
+          // e.g. "Over 11.5", "Over +11.5", "Over" (point:11.5) → "Over +11.5"
+          const ptStr = outcome.point !== undefined
+            ? `${outcome.point > 0 ? "+" : ""}${outcome.point}`
+            : "";
+          let baseName = outcome.name.trim();
+          if (outcome.point !== undefined) {
+            const absStr = Math.abs(outcome.point).toString().replace(".", "\\.");
+            baseName = baseName
+              .replace(new RegExp(`\\s+[+-]?${absStr}\\s*$`), "")
+              .trim();
+          }
+          const outcomeName = ptStr ? `${baseName} ${ptStr}` : baseName;
 
           if (!outcomeMap.has(outcomeName)) {
             outcomeMap.set(outcomeName, []);
@@ -98,28 +109,34 @@ export function findArbitrageOpportunities(
     for (const [marketKey, outcomeMap] of marketMap) {
       const outcomes = Array.from(outcomeMap.entries());
 
-      // Only analyze markets with 2 or 3 outcomes (moneyline, spread, totals)
+      // Only analyze markets with exactly 2 or 3 mutually exclusive outcomes
       if (outcomes.length < 2 || outcomes.length > 3) continue;
 
-      // Find best (highest decimal) odds for each outcome
+      // Find best (highest decimal) odds for each outcome across all sportsbooks
       const bestLegs = outcomes.map(([outcomeName, bets]) => {
         let best = bets[0]!;
         for (const b of bets) {
-          const decB = b.price >= 100 || b.price <= -100 ? americanToDecimal(b.price) : b.price;
-          const decBest = best.price >= 100 || best.price <= -100 ? americanToDecimal(best.price) : best.price;
-          if (decB > decBest) best = b;
+          if (americanToDecimal(b.price) > americanToDecimal(best.price)) best = b;
         }
-        const decimalOdds = best.price >= 100 || best.price <= -100
-          ? americanToDecimal(best.price)
-          : best.price > 1 ? best.price : americanToDecimal(best.price);
         return {
           outcome: outcomeName,
           bookmaker: best.bookmaker,
           bookmakerTitle: best.bookmakerTitle,
           price: best.price,
-          decimalOdds,
+          decimalOdds: americanToDecimal(best.price),
         };
       });
+
+      // ── REAL-ARB GUARD ────────────────────────────────────────────────────
+      // All legs must be at distinct sportsbooks. If the same book appears on
+      // every leg it means one book is offering all sides — that is not an
+      // executable cross-book arbitrage regardless of the math.
+      const uniqueBooks = new Set(bestLegs.map((l) => l.bookmaker));
+      if (uniqueBooks.size < 2) continue;
+
+      // Each leg's decimal odds must be > 1 (sanity check)
+      if (bestLegs.some((l) => l.decimalOdds <= 1)) continue;
+      // ─────────────────────────────────────────────────────────────────────
 
       // Calculate total implied probability
       const totalImplied = bestLegs.reduce(
@@ -127,13 +144,13 @@ export function findArbitrageOpportunities(
         0
       );
 
-      // Arbitrage exists when totalImplied < 1
+      // True arbitrage: totalImplied strictly < 1.0
       if (totalImplied < 1) {
         const profitPercent = ((1 / totalImplied) - 1) * 100;
-        const bankroll = 1000;
+        const bankroll = 100;
         const stakes = calculateOptimalStakes(bestLegs, bankroll);
 
-        const baseMkt = marketKey.includes("_") ? marketKey.split("_")[0]! : marketKey;
+        const baseMkt = marketKey.includes("::") ? marketKey.split("::")[0]! : marketKey;
 
         opportunities.push({
           id: `${game.id}_${marketKey}`,

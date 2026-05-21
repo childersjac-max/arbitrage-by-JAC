@@ -14,10 +14,7 @@ runButton = "Project"
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
-
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 20000
+integrations = ["github:1.0.0"]
 
 [[ports]]
 localPort = 8080
@@ -28,5 +25,17 @@ localPort = 8081
 externalPort = 80
 
 [[ports]]
-localPort = 22040
+localPort = 8082
+externalPort = 3001
+
+[[ports]]
+localPort = 23183
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+ODDSJAM_API_BASE = "https://api-dev.oddsjam.com/api/v2"
+
+[nix]
+channel = "stable-25_05"

@@ -1,0 +1,948 @@
+diff --git a/bootstrap_history.py b/bootstrap_history.py
+index 3520897..3c9bf9f 100644
+--- a/bootstrap_history.py
++++ b/bootstrap_history.py
+@@ -17,10 +17,21 @@ import requests
+ from datetime import datetime, timezone, timedelta
+ from pathlib import Path
+ 
+-ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")
++from data.sources import get_source
++
++ODDS_API_KEY     = os.environ.get("ODDS_API_KEY", "")
++ODDSJAM_API_KEY  = os.environ.get("ODDSJAM_API_KEY", "")
++ODDS_DATA_SOURCE = os.environ.get("ODDS_DATA_SOURCE", "the_odds_api").strip().lower()
+ LINE_HISTORY_DIR = Path("./line_history")
+ LINE_HISTORY_DIR.mkdir(exist_ok=True)
+ 
++_SOURCE = None
++def _src():
++    global _SOURCE
++    if _SOURCE is None:
++        _SOURCE = get_source(ODDS_DATA_SOURCE)
++    return _SOURCE
++
+ SPORTS = {
+     "basketball_nba":      "NBA",
+     "baseball_mlb":        "MLB",
+@@ -37,20 +48,11 @@ def fetch_historical_odds(sport_key, date_str, markets="h2h,spreads,totals"):
+     Fetch historical odds snapshot for a specific date.
+     date_str format: 2024-01-15T12:00:00Z
+     """
+-    url = f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
+-    params = {
+-        "apiKey":      ODDS_API_KEY,
+-        "regions":     "us,eu",
+-        "markets":     markets,
+-        "oddsFormat":  "american",
+-        "date":        date_str,
+-    }
+-    r = requests.get(url, params=params, timeout=20)
+-    if r.status_code != 200:
+-        print(f"  [{sport_key}] {date_str} → HTTP {r.status_code}")
+-        return []
+-    data = r.json()
+-    return data.get("data", [])
++    return _src().fetch_historical_odds(
++        sport_key, date_str,
++        markets=[m.strip() for m in markets.split(",") if m.strip()],
++        regions="us,eu",
++    )
+ 
+ 
+ def extract_book_odds(event):
+@@ -108,9 +110,13 @@ def save_history(history):
+ def bootstrap():
+     print(f"\n=== BOOTSTRAP HISTORICAL ODDS ===\n")
+ 
+-    if not ODDS_API_KEY:
++    if ODDS_DATA_SOURCE == "the_odds_api" and not ODDS_API_KEY:
+         print("Set ODDS_API_KEY env var first.")
+         return
++    if ODDS_DATA_SOURCE == "oddsjam" and not ODDSJAM_API_KEY:
++        print("Set ODDSJAM_API_KEY env var first.")
++        return
++    print(f"  [data source] {_src().name}")
+ 
+     # Pull snapshots from the past 3 days at 6-hour intervals
+     # This gives ~12 movement snapshots per event
+diff --git a/data/historical.py b/data/historical.py
+index e3b7fa6..392dda2 100644
+--- a/data/historical.py
++++ b/data/historical.py
+@@ -22,10 +22,22 @@ import requests
+ from datetime import datetime, timezone, timedelta
+ from pathlib import Path
+ 
++from data.sources import get_source
++
+ ODDS_API_KEY     = os.environ.get("ODDS_API_KEY", "")
++ODDSJAM_API_KEY  = os.environ.get("ODDSJAM_API_KEY", "")
++ODDS_DATA_SOURCE = os.environ.get("ODDS_DATA_SOURCE", "the_odds_api").strip().lower()
+ LINE_HISTORY_DIR = Path("./line_history")
+ OUTCOMES_FILE    = Path("./outcomes.json")
+ 
++# Lazy source instance
++_SOURCE = None
++def _src():
++    global _SOURCE
++    if _SOURCE is None:
++        _SOURCE = get_source(ODDS_DATA_SOURCE)
++    return _SOURCE
++
+ LINE_HISTORY_DIR.mkdir(exist_ok=True)
+ 
+ # Sports to pull historical data for
+@@ -49,41 +61,17 @@ def fetch_historical_odds(sport_key, timestamp_str):
+     """
+     Fetch historical odds snapshot for a specific timestamp.
+     timestamp_str: ISO format e.g. "2024-03-15T13:00:00Z"
+-    Returns list of event dicts.
++    Returns list of event dicts in canonical (Odds API) shape.
+     """
+-    url = f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
+-    params = {
+-        "apiKey":      ODDS_API_KEY,
+-        "regions":     "us,eu",
+-        "markets":     "h2h,spreads,totals",
+-        "oddsFormat":  "american",
+-        "date":        timestamp_str,
+-    }
+-    r = requests.get(url, params=params, timeout=20)
+-    if r.status_code == 422:
+-        # No data available for this timestamp
+-        return []
+-    if r.status_code != 200:
+-        print(f"    [{sport_key}] {timestamp_str} → HTTP {r.status_code}: {r.text[:100]}")
+-        return []
+-
+-    data = r.json()
+-    remaining = r.headers.get("x-requests-remaining", "?")
+-    print(f"    {timestamp_str} → {len(data.get('data', []))} events | {remaining} requests remaining")
+-    return data.get("data", [])
++    return _src().fetch_historical_odds(
++        sport_key, timestamp_str,
++        markets=["h2h", "spreads", "totals"], regions="us,eu",
++    )
+ 
+ 
+ def fetch_historical_scores(sport_key, days_from):
+     """Fetch completed scores for the past N days."""
+-    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/scores"
+-    params = {
+-        "apiKey":    ODDS_API_KEY,
+-        "daysFrom":  days_from,
+-    }
+-    r = requests.get(url, params=params, timeout=15)
+-    if r.status_code != 200:
+-        return []
+-    return r.json()
++    return _src().fetch_scores(sport_key, days_from=days_from)
+ 
+ 
+ # ── Line history helpers ──────────────────────────────────────────────
+@@ -296,9 +284,13 @@ def pull_historical_scores(days_back=30):
+ 
+ def run_historical_pull(days_back=30):
+     """Full historical pull: odds snapshots + scores."""
+-    if not ODDS_API_KEY:
++    if ODDS_DATA_SOURCE == "the_odds_api" and not ODDS_API_KEY:
+         print("ERROR: ODDS_API_KEY not set")
+         return
++    if ODDS_DATA_SOURCE == "oddsjam" and not ODDSJAM_API_KEY:
++        print("ERROR: ODDSJAM_API_KEY not set")
++        return
++    print(f"  [data source] {_src().name}")
+ 
+     # Pull odds history
+     n_events, n_snaps = pull_historical_odds(days_back=days_back)
+diff --git a/data/results.py b/data/results.py
+index e4638c4..88b6988 100644
+--- a/data/results.py
++++ b/data/results.py
+@@ -3,19 +3,22 @@
+ import json
+ import os
+ from pathlib import Path
+-import requests
+ from configs.config import SPORTS, OUTCOMES_FILE
++from data.sources import get_source
+ 
+-ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")
++ODDS_DATA_SOURCE = os.environ.get("ODDS_DATA_SOURCE", "the_odds_api").strip().lower()
++
++# Lazy source instance
++_SOURCE = None
++def _src():
++    global _SOURCE
++    if _SOURCE is None:
++        _SOURCE = get_source(ODDS_DATA_SOURCE)
++    return _SOURCE
+ 
+ 
+ def fetch_scores(sport_key, days_from=3):
+-    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/scores"
+-    r = requests.get(url, params={"apiKey": ODDS_API_KEY, "daysFrom": days_from}, timeout=15)
+-    if r.status_code != 200:
+-        print(f"  [{sport_key}] HTTP {r.status_code}")
+-        return []
+-    return r.json()
++    return _src().fetch_scores(sport_key, days_from=days_from)
+ 
+ 
+ def load_outcomes():
+diff --git a/data/sources/__init__.py b/data/sources/__init__.py
+new file mode 100644
+index 0000000..42a41fa
+--- /dev/null
++++ b/data/sources/__init__.py
+@@ -0,0 +1,74 @@
++"""
++Pluggable odds-data-source layer.
++
++Switch providers by setting the env var ODDS_DATA_SOURCE:
++  - "the_odds_api"  (default) -> data.sources.the_odds_api.TheOddsApiSource
++  - "oddsjam"                  -> data.sources.oddsjam.OddsJamSource
++
++Every adapter normalizes its responses to the canonical "Odds API" event shape
++that the rest of the codebase already expects:
++
++  {
++    "id":            str,
++    "sport_key":     str,
++    "sport_title":   str,
++    "commence_time": str (ISO 8601 UTC, e.g. "2026-04-30T19:00:00Z"),
++    "home_team":     str,
++    "away_team":     str,
++    "bookmakers": [
++      {
++        "key":   str,
++        "title": str,
++        "last_update": str,
++        "markets": [
++          {
++            "key": "h2h" | "spreads" | "totals" | "<player_prop_key>",
++            "outcomes": [
++              {"name": str, "price": int (american), "point": float|None,
++               "description": str|None  (player name for props)},
++              ...
++            ]
++          },
++          ...
++        ]
++      },
++      ...
++    ]
++  }
++
++Scores are normalized to:
++  {
++    "id": str,
++    "sport_key": str,
++    "commence_time": str,
++    "completed": bool,
++    "home_team": str,
++    "away_team": str,
++    "scores": [{"name": team, "score": "<int as str>"}]
++  }
++"""
++
++import os
++from .base import OddsSource
++
++
++def get_source(name: str | None = None) -> OddsSource:
++    """Factory. Reads ODDS_DATA_SOURCE env var if `name` is None."""
++    if name is None:
++        name = os.environ.get("ODDS_DATA_SOURCE", "the_odds_api").strip().lower()
++
++    if name in ("the_odds_api", "theoddsapi", "odds_api"):
++        from .the_odds_api import TheOddsApiSource
++        return TheOddsApiSource()
++
++    if name == "oddsjam":
++        from .oddsjam import OddsJamSource
++        return OddsJamSource()
++
++    raise ValueError(
++        f"Unknown ODDS_DATA_SOURCE={name!r}. "
++        f"Valid: 'the_odds_api', 'oddsjam'."
++    )
++
++
++__all__ = ["OddsSource", "get_source"]
+diff --git a/data/sources/base.py b/data/sources/base.py
+new file mode 100644
+index 0000000..ee91583
+--- /dev/null
++++ b/data/sources/base.py
+@@ -0,0 +1,60 @@
++"""Abstract base class for an odds-data source."""
++
++from abc import ABC, abstractmethod
++from typing import Iterable
++
++
++class OddsSource(ABC):
++    """All providers must return data in the canonical Odds-API JSON shape.
++    See data/sources/__init__.py for the schema."""
++
++    name: str = "base"
++
++    # ---------- live / pre-match odds ----------
++    @abstractmethod
++    def fetch_current_odds(
++        self,
++        sport_key: str,
++        markets: Iterable[str] | None = None,
++        regions: str = "us,eu",
++    ) -> list[dict]:
++        """Return list of events with bookmakers/markets/outcomes."""
++        ...
++
++    @abstractmethod
++    def fetch_player_props_for_event(
++        self,
++        sport_key: str,
++        event_id: str,
++        markets: Iterable[str] | None = None,
++    ) -> dict:
++        """Return a single event payload populated with player-prop markets.
++        Should return {} if the provider has no props for that event."""
++        ...
++
++    # ---------- historical ----------
++    @abstractmethod
++    def fetch_historical_odds(
++        self,
++        sport_key: str,
++        timestamp_iso: str,
++        markets: Iterable[str] | None = None,
++        regions: str = "us,eu",
++    ) -> list[dict]:
++        """Return list of events as they appeared at `timestamp_iso`
++        (ISO 8601, UTC, e.g. '2026-03-15T13:00:00Z')."""
++        ...
++
++    # ---------- scores / results ----------
++    @abstractmethod
++    def fetch_scores(self, sport_key: str, days_from: int = 3) -> list[dict]:
++        """Return completed-game score records (canonical shape)."""
++        ...
++
++    # ---------- optional ----------
++    def fetch_injuries(self, sport_key: str) -> list[dict]:
++        """Optional. Default = empty list. Implement if the provider supports it."""
++        return []
++
++    def __repr__(self) -> str:
++        return f"<OddsSource name={self.name!r}>"
+diff --git a/data/sources/oddsjam.py b/data/sources/oddsjam.py
+new file mode 100644
+index 0000000..8297c2a
+--- /dev/null
++++ b/data/sources/oddsjam.py
+@@ -0,0 +1,407 @@
++"""
++OddsJam adapter (api-external.oddsjam.com).
++
++Reads ODDSJAM_API_KEY from the environment. Activate by setting:
++    ODDS_DATA_SOURCE=oddsjam
++    ODDSJAM_API_KEY=<your key>
++
++==================================================================
++ONE-TIME 5-MINUTE SETUP STEP
++==================================================================
++OddsJam's developer portal is gated behind a paid subscription, so
++the exact endpoint paths and JSON field names below were written
++against OddsJam's publicly documented v2 API surface plus
++community-known conventions. After you sign up, open
++https://docs.oddsjam.com/ and confirm:
++
++  1) BASE_URL (we use https://api-external.oddsjam.com/api/v2)
++  2) Authentication style (we use ?key=<key> query param;
++     some accounts use header X-API-Key instead -- toggle USE_HEADER_AUTH).
++  3) Endpoint paths in PATHS below.
++  4) Field names in the _normalize_* helpers (especially how OddsJam
++     names: home_team, away_team, sportsbook, market, bet_name, line,
++     price). If anything differs, edit the constants/helpers below;
++     the rest of the codebase doesn't need to change.
++
++If something is misnamed, fetch_current_odds() will return [] and
++print the HTTP body. That's your debugging hook.
++==================================================================
++"""
++
++import os
++import requests
++from typing import Iterable
++from .base import OddsSource
++
++
++# ---------- constants you may need to tweak after signup ------------
++BASE_URL = "https://api-external.oddsjam.com/api/v2"
++USE_HEADER_AUTH = False           # set True if your account uses X-API-Key header
++HEADER_AUTH_NAME = "X-API-Key"
++
++PATHS = {
++    "games":            "/games",                # current/upcoming games for a sport
++    "game_odds":        "/game-odds",            # odds (mainlines + props) for given games
++    "historical_odds":  "/historical-odds",      # historical snapshot at a timestamp
++    "scores":           "/scores",               # completed-game scores
++    "injuries":         "/injuries",             # injury reports (optional)
++}
++
++# Map our internal Odds-API sport_keys -> OddsJam league identifiers.
++# Confirm these against /sports in your dashboard. Any league name OddsJam
++# returns for these sports should work; the strings below are the conventional
++# ones in their public materials.
++SPORT_TO_LEAGUE = {
++    "americanfootball_nfl":   "NFL",
++    "americanfootball_ncaaf": "NCAAF",
++    "basketball_nba":         "NBA",
++    "basketball_ncaab":       "NCAAB",
++    "baseball_mlb":           "MLB",
++    "icehockey_nhl":          "NHL",
++}
++SPORT_TO_SPORT = {                    # OddsJam top-level "sport" param
++    "americanfootball_nfl":   "football",
++    "americanfootball_ncaaf": "football",
++    "basketball_nba":         "basketball",
++    "basketball_ncaab":       "basketball",
++    "baseball_mlb":           "baseball",
++    "icehockey_nhl":          "hockey",
++}
++
++# Maps our market names to OddsJam's. Confirm against your dashboard.
++MARKET_NAME = {
++    "h2h":     "Moneyline",
++    "spreads": "Point Spread",
++    "totals":  "Total Points",
++}
++# Reverse lookup for normalization
++MARKET_KEY_FROM_ODDSJAM = {v: k for k, v in MARKET_NAME.items()}
++
++# Maps OddsJam sportsbook keys -> our internal canonical book keys
++# (the ones used in PUBLIC_BOOKS / SHARP_BOOKS in scraper.py & configs).
++BOOK_REMAP = {
++    "DraftKings":     "draftkings",
++    "FanDuel":        "fanduel",
++    "BetMGM":         "betmgm",
++    "Bovada":         "bovada",
++    "Caesars":        "williamhill_us",   # Caesars = WilliamHill US in The Odds API world
++    "Bet365":         "bet365",
++    "Pinnacle":       "pinnacle",
++    "Circa Sports":   "circa",
++    "BookMaker":      "bookmaker",
++    "BookMaker.eu":   "bookmaker",
++}
++
++# How long to wait per request
++DEFAULT_TIMEOUT = 20
++
++
++# ---------- adapter ----------
++class OddsJamSource(OddsSource):
++    name = "oddsjam"
++
++    def __init__(self, api_key: str | None = None):
++        self.api_key = api_key or os.environ.get("ODDSJAM_API_KEY", "")
++        if not self.api_key:
++            print("[oddsjam] WARNING: ODDSJAM_API_KEY not set; all calls will fail.")
++
++    # ---------- helpers ----------
++    def _get(self, path: str, params: dict | None = None, timeout: int = DEFAULT_TIMEOUT):
++        params = dict(params or {})
++        headers = {}
++        if USE_HEADER_AUTH:
++            headers[HEADER_AUTH_NAME] = self.api_key
++        else:
++            params["key"] = self.api_key
++        try:
++            r = requests.get(f"{BASE_URL}{path}", params=params, headers=headers, timeout=timeout)
++        except requests.RequestException as e:
++            print(f"  [oddsjam] {path} -> network error: {e}")
++            return None
++        if r.status_code != 200:
++            print(f"  [oddsjam] {path} -> HTTP {r.status_code}: {r.text[:300]}")
++            return None
++        try:
++            return r.json()
++        except ValueError:
++            print(f"  [oddsjam] {path} -> non-JSON body: {r.text[:200]}")
++            return None
++
++    @staticmethod
++    def _book_key(oj_book: str) -> str:
++        return BOOK_REMAP.get(oj_book, oj_book.lower().replace(" ", "_") if oj_book else "unknown")
++
++    @staticmethod
++    def _to_iso(ts) -> str:
++        """OddsJam timestamps are usually ISO 8601 already; pass through."""
++        if not ts:
++            return ""
++        if isinstance(ts, str):
++            return ts if ts.endswith("Z") or "+" in ts else ts + "Z"
++        return str(ts)
++
++    # ---------- current odds ----------
++    def fetch_current_odds(
++        self,
++        sport_key: str,
++        markets: Iterable[str] | None = None,
++        regions: str = "us,eu",   # OddsJam ignores this, kept for interface parity
++    ) -> list[dict]:
++        markets = list(markets) if markets else ["h2h", "spreads", "totals"]
++        league = SPORT_TO_LEAGUE.get(sport_key)
++        if not league:
++            print(f"  [oddsjam] no league mapping for {sport_key}")
++            return []
++
++        # 1) list games for the league
++        games = self._get(PATHS["games"], {
++            "sport":  SPORT_TO_SPORT.get(sport_key, ""),
++            "league": league,
++            "is_live": "false",
++        })
++        if not games:
++            return []
++        games_list = games.get("data") if isinstance(games, dict) else games
++        if not games_list:
++            return []
++        game_ids = [g.get("id") or g.get("game_id") for g in games_list if (g.get("id") or g.get("game_id"))]
++        if not game_ids:
++            return []
++
++        # 2) pull odds for those games
++        oj_markets = [MARKET_NAME[m] for m in markets if m in MARKET_NAME]
++        odds_payload = self._get(PATHS["game_odds"], {
++            "sportsbook": "",                          # blank = all books on your plan
++            "market":     ",".join(oj_markets),
++            "game_id":    ",".join(game_ids[:50]),     # most plans cap batch size; chunk if needed
++        })
++        if not odds_payload:
++            return []
++        odds_rows = odds_payload.get("data") if isinstance(odds_payload, dict) else odds_payload
++
++        # 3) normalize -> canonical Odds-API event shape
++        return self._normalize_events(games_list, odds_rows or [], sport_key)
++
++    def fetch_player_props_for_event(
++        self,
++        sport_key: str,
++        event_id: str,
++        markets: Iterable[str] | None = None,
++    ) -> dict:
++        markets = list(markets) if markets else []
++        if not markets:
++            return {}
++        # OddsJam exposes player props through the same /game-odds endpoint
++        # but with prop market names instead of mainline names. Confirm exact
++        # market labels against your dashboard (e.g. "Player Points",
++        # "Player Rebounds", "Pitcher Strikeouts").
++        odds_payload = self._get(PATHS["game_odds"], {
++            "sportsbook": "",
++            "market":     ",".join(markets),
++            "game_id":    event_id,
++        })
++        if not odds_payload:
++            return {}
++        odds_rows = odds_payload.get("data") if isinstance(odds_payload, dict) else odds_payload
++        if not odds_rows:
++            return {}
++        # Reuse the per-event normalizer
++        events = self._normalize_events(
++            [{"id": event_id, "sport": SPORT_TO_SPORT.get(sport_key, ""),
++              "league": SPORT_TO_LEAGUE.get(sport_key, "")}],
++            odds_rows,
++            sport_key,
++            include_props=True,
++        )
++        return events[0] if events else {}
++
++    # ---------- historical ----------
++    def fetch_historical_odds(
++        self,
++        sport_key: str,
++        timestamp_iso: str,
++        markets: Iterable[str] | None = None,
++        regions: str = "us,eu",
++    ) -> list[dict]:
++        markets = list(markets) if markets else ["h2h", "spreads", "totals"]
++        league = SPORT_TO_LEAGUE.get(sport_key)
++        if not league:
++            return []
++        oj_markets = [MARKET_NAME[m] for m in markets if m in MARKET_NAME]
++
++        payload = self._get(PATHS["historical_odds"], {
++            "sport":     SPORT_TO_SPORT.get(sport_key, ""),
++            "league":    league,
++            "market":    ",".join(oj_markets),
++            "timestamp": timestamp_iso,
++        }, timeout=30)
++        if not payload:
++            return []
++        rows = payload.get("data") if isinstance(payload, dict) else payload
++        if not rows:
++            return []
++        # OddsJam historical typically returns rows already grouped by game.
++        # We feed them through the same normalizer; the games list is derived
++        # from the rows themselves.
++        games_seen = {}
++        for row in rows:
++            gid = row.get("game_id") or row.get("id")
++            if not gid:
++                continue
++            if gid not in games_seen:
++                games_seen[gid] = {
++                    "id":            gid,
++                    "home_team":     row.get("home_team"),
++                    "away_team":     row.get("away_team"),
++                    "start_date":    row.get("start_date") or row.get("commence_time"),
++                    "sport":         SPORT_TO_SPORT.get(sport_key, ""),
++                    "league":        league,
++                }
++        return self._normalize_events(list(games_seen.values()), rows, sport_key)
++
++    # ---------- scores ----------
++    def fetch_scores(self, sport_key: str, days_from: int = 3) -> list[dict]:
++        league = SPORT_TO_LEAGUE.get(sport_key)
++        if not league:
++            return []
++        payload = self._get(PATHS["scores"], {
++            "sport":     SPORT_TO_SPORT.get(sport_key, ""),
++            "league":    league,
++            "days_from": days_from,
++        })
++        if not payload:
++            return []
++        rows = payload.get("data") if isinstance(payload, dict) else payload
++        return self._normalize_scores(rows or [], sport_key)
++
++    # ---------- injuries (optional) ----------
++    def fetch_injuries(self, sport_key: str) -> list[dict]:
++        league = SPORT_TO_LEAGUE.get(sport_key)
++        if not league:
++            return []
++        payload = self._get(PATHS["injuries"], {
++            "sport":  SPORT_TO_SPORT.get(sport_key, ""),
++            "league": league,
++        })
++        if not payload:
++            return []
++        rows = payload.get("data") if isinstance(payload, dict) else payload
++        return rows or []
++
++    # =================================================================
++    # NORMALIZATION HELPERS
++    # If OddsJam's field names ever differ from what we assume below,
++    # this is the only place you need to fix.
++    # =================================================================
++    def _normalize_events(
++        self,
++        games: list[dict],
++        odds_rows: list[dict],
++        sport_key: str,
++        include_props: bool = False,
++    ) -> list[dict]:
++        """Group flat odds_rows by game_id, then by sportsbook, then by market."""
++        sport_title = sport_key.split("_")[-1].upper()
++
++        # Index games by id for quick lookup
++        games_by_id = {}
++        for g in games:
++            gid = g.get("id") or g.get("game_id")
++            if gid:
++                games_by_id[gid] = g
++
++        # Bucket odds by game_id -> book_key -> market_key -> outcomes[]
++        from collections import defaultdict
++        buckets: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
++
++        for row in odds_rows:
++            gid = row.get("game_id") or row.get("id")
++            if not gid:
++                continue
++            oj_book = row.get("sportsbook") or row.get("book") or ""
++            oj_mkt  = row.get("market") or row.get("market_name") or ""
++            mkey    = MARKET_KEY_FROM_ODDSJAM.get(oj_mkt)
++            if mkey is None:
++                # If it's a player prop and we want props, keep the OddsJam name.
++                if include_props and oj_mkt:
++                    mkey = oj_mkt.lower().replace(" ", "_")
++                else:
++                    continue
++            book_key = self._book_key(oj_book)
++            outcome = {
++                "name":  row.get("name") or row.get("bet_name") or row.get("selection"),
++                "price": _to_int_american(row.get("price") or row.get("odds")
++                                          or row.get("american_odds")),
++                "point": _to_float(row.get("point") or row.get("line")
++                                    or row.get("handicap")),
++                "description": row.get("player_name") or row.get("description"),
++            }
++            buckets[gid][book_key][mkey].append(outcome)
++
++        events = []
++        for gid, by_book in buckets.items():
++            g = games_by_id.get(gid, {})
++            bookmakers = []
++            for bk_key, by_market in by_book.items():
++                bookmakers.append({
++                    "key":         bk_key,
++                    "title":       bk_key.title(),
++                    "last_update": "",
++                    "markets":     [{"key": mk, "outcomes": outs} for mk, outs in by_market.items()],
++                })
++            events.append({
++                "id":            gid,
++                "sport_key":     sport_key,
++                "sport_title":   sport_title,
++                "commence_time": self._to_iso(g.get("start_date") or g.get("commence_time")),
++                "home_team":     g.get("home_team", ""),
++                "away_team":     g.get("away_team", ""),
++                "bookmakers":    bookmakers,
++            })
++        return events
++
++    def _normalize_scores(self, rows: list[dict], sport_key: str) -> list[dict]:
++        out = []
++        for row in rows:
++            gid  = row.get("id") or row.get("game_id")
++            if not gid:
++                continue
++            home = row.get("home_team", "")
++            away = row.get("away_team", "")
++            hs   = row.get("home_score") if row.get("home_score") is not None else row.get("home_team_score")
++            as_  = row.get("away_score") if row.get("away_score") is not None else row.get("away_team_score")
++            completed = bool(row.get("completed") or row.get("is_completed") or row.get("final"))
++            if hs is None or as_ is None:
++                continue
++            out.append({
++                "id":            gid,
++                "sport_key":     sport_key,
++                "commence_time": self._to_iso(row.get("start_date") or row.get("commence_time")),
++                "completed":     completed,
++                "home_team":     home,
++                "away_team":     away,
++                "scores": [
++                    {"name": home, "score": str(int(float(hs)))},
++                    {"name": away, "score": str(int(float(as_)))},
++                ],
++            })
++        return out
++
++
++# ---------- module-level coercers ----------
++def _to_int_american(v):
++    if v is None or v == "":
++        return None
++    try:
++        return int(round(float(v)))
++    except (TypeError, ValueError):
++        return None
++
++
++def _to_float(v):
++    if v is None or v == "":
++        return None
++    try:
++        return float(v)
++    except (TypeError, ValueError):
++        return None
+diff --git a/data/sources/the_odds_api.py b/data/sources/the_odds_api.py
+new file mode 100644
+index 0000000..1145713
+--- /dev/null
++++ b/data/sources/the_odds_api.py
+@@ -0,0 +1,105 @@
++"""
++The Odds API adapter (the-odds-api.com).
++
++Reads ODDS_API_KEY from the environment.
++This is the original data path the codebase has always used; the response
++shape is already the canonical shape, so no normalization is needed.
++"""
++
++import os
++import requests
++from typing import Iterable
++from .base import OddsSource
++
++
++class TheOddsApiSource(OddsSource):
++    name = "the_odds_api"
++    BASE = "https://api.the-odds-api.com/v4"
++
++    def __init__(self, api_key: str | None = None):
++        self.api_key = api_key or os.environ.get("ODDS_API_KEY", "")
++
++    # ---------- helpers ----------
++    def _get(self, path: str, params: dict, timeout: int = 15):
++        params = {**params, "apiKey": self.api_key}
++        r = requests.get(f"{self.BASE}{path}", params=params, timeout=timeout)
++        if r.status_code != 200:
++            print(f"  [the_odds_api] {path} -> HTTP {r.status_code}: {r.text[:200]}")
++            return None
++        return r
++
++    # ---------- current odds ----------
++    def fetch_current_odds(
++        self,
++        sport_key: str,
++        markets: Iterable[str] | None = None,
++        regions: str = "us,eu",
++    ) -> list[dict]:
++        markets = list(markets) if markets else ["h2h", "spreads", "totals"]
++        r = self._get(
++            f"/sports/{sport_key}/odds",
++            {
++                "regions":    regions,
++                "markets":    ",".join(markets),
++                "oddsFormat": "american",
++            },
++        )
++        if r is None:
++            return []
++        return r.json()
++
++    def fetch_player_props_for_event(
++        self,
++        sport_key: str,
++        event_id: str,
++        markets: Iterable[str] | None = None,
++    ) -> dict:
++        if not markets:
++            return {}
++        r = self._get(
++            f"/sports/{sport_key}/events/{event_id}/odds",
++            {
++                "regions":    "us",
++                "markets":    ",".join(markets),
++                "oddsFormat": "american",
++            },
++        )
++        if r is None:
++            return {}
++        return r.json()
++
++    # ---------- historical ----------
++    def fetch_historical_odds(
++        self,
++        sport_key: str,
++        timestamp_iso: str,
++        markets: Iterable[str] | None = None,
++        regions: str = "us,eu",
++    ) -> list[dict]:
++        markets = list(markets) if markets else ["h2h", "spreads", "totals"]
++        r = self._get(
++            f"/historical/sports/{sport_key}/odds",
++            {
++                "regions":    regions,
++                "markets":    ",".join(markets),
++                "oddsFormat": "american",
++                "date":       timestamp_iso,
++            },
++            timeout=20,
++        )
++        if r is None:
++            return []
++        data = r.json()
++        # The Odds API wraps historical responses in {"data": [...], ...}
++        if isinstance(data, dict):
++            remaining = r.headers.get("x-requests-remaining", "?")
++            print(f"    {timestamp_iso} -> {len(data.get('data', []))} events | {remaining} requests remaining")
++            return data.get("data", [])
++        return data or []
++
++    # ---------- scores ----------
++    def fetch_scores(self, sport_key: str, days_from: int = 3) -> list[dict]:
++        r = self._get(f"/sports/{sport_key}/scores", {"daysFrom": days_from})
++        if r is None:
++            return []
++        return r.json()
+diff --git a/scraper.py b/scraper.py
+index 3129c09..c2f4a30 100644
+--- a/scraper.py
++++ b/scraper.py
+@@ -8,10 +8,22 @@ from pathlib import Path
+ import requests
+ from bs4 import BeautifulSoup
+ 
+-ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "YOUR_KEY_HERE")
++from data.sources import get_source
++
++ODDS_API_KEY     = os.environ.get("ODDS_API_KEY", "YOUR_KEY_HERE")
++ODDSJAM_API_KEY  = os.environ.get("ODDSJAM_API_KEY", "")
++ODDS_DATA_SOURCE = os.environ.get("ODDS_DATA_SOURCE", "the_odds_api").strip().lower()
+ OUTPUT_DIR = Path("./jlab_data")
+ OUTPUT_DIR.mkdir(exist_ok=True)
+ 
++# Lazy-instantiate at first use (so an unset key doesn't crash imports)
++_SOURCE = None
++def _src():
++    global _SOURCE
++    if _SOURCE is None:
++        _SOURCE = get_source(ODDS_DATA_SOURCE)
++    return _SOURCE
++
+ USER_AGENT = (
+     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+@@ -74,37 +86,15 @@ VSIN_PROPS_CONFIG = {
+ 
+ 
+ def fetch_odds(sport_key, markets=None):
+-    if markets is None:
+-        markets = ["h2h", "spreads", "totals"]
+-    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
+-    params = {
+-        "regions": "us,eu",
+-        "markets": ",".join(markets),
+-        "oddsFormat": "american",
+-        "apiKey": ODDS_API_KEY,
+-    }
+-    r = requests.get(url, params=params, timeout=15)
+-    if r.status_code != 200:
+-        print(f"  [odds] {sport_key} -> HTTP {r.status_code}: {r.text[:200]}")
+-        return []
+-    return r.json()
++    return _src().fetch_current_odds(sport_key, markets=markets)
+ 
+ 
+ def fetch_player_props_for_event(sport_key, event_id):
+     if sport_key not in PROP_MARKETS:
+         return {}
+-    markets = ",".join(PROP_MARKETS[sport_key])
+-    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/events/{event_id}/odds"
+-    params = {
+-        "regions": "us",
+-        "markets": markets,
+-        "oddsFormat": "american",
+-        "apiKey": ODDS_API_KEY,
+-    }
+-    r = requests.get(url, params=params, timeout=15)
+-    if r.status_code != 200:
+-        return {}
+-    return r.json()
++    return _src().fetch_player_props_for_event(
++        sport_key, event_id, markets=PROP_MARKETS[sport_key]
++    )
+ 
+ 
+ def parse_props_payload(payload):
+@@ -363,9 +353,13 @@ def run():
+     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+     print(f"\n=== J LAB Data Pull — {timestamp} ===\n")
+ 
+-    if ODDS_API_KEY in (None, "", "YOUR_KEY_HERE"):
++    if ODDS_DATA_SOURCE == "the_odds_api" and ODDS_API_KEY in (None, "", "YOUR_KEY_HERE"):
+         print("Set ODDS_API_KEY env var first.")
+         return
++    if ODDS_DATA_SOURCE == "oddsjam" and not ODDSJAM_API_KEY:
++        print("Set ODDSJAM_API_KEY env var first (and ODDS_DATA_SOURCE=oddsjam).")
++        return
++    print(f"  [data source] {_src().name}")
+ 
+     combined = {"timestamp_utc": timestamp, "sports": {}}
+ 

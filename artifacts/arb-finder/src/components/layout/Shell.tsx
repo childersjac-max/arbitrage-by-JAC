@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Activity, Bell, ListTree, TrendingUp, Zap } from "lucide-react";
-import { useHealthCheck } from "@workspace/api-client-react";
+import { Activity, Bell, History, ListTree, TrendingUp, Zap } from "lucide-react";
+import { useHealthCheck } from "@/hooks/use-arb-api";
 import { cn } from "@/lib/utils";
 
 interface ShellProps {
@@ -10,18 +10,14 @@ interface ShellProps {
 
 export default function Shell({ children }: ShellProps) {
   const [location] = useLocation();
-  const { data: health } = useHealthCheck({
-    query: {
-      queryKey: ["health-check"],
-      refetchInterval: 30000,
-    }
-  });
+  const { data: health } = useHealthCheck();
 
   const isHealthy = health?.status === "ok";
 
   const navItems = [
     { href: "/", label: "Arbitrage", icon: TrendingUp },
     { href: "/odds", label: "Live Odds", icon: Activity },
+    { href: "/history", label: "History", icon: History },
     { href: "/alerts", label: "Alerts", icon: Bell },
     { href: "/sports", label: "Sports", icon: ListTree },
   ];

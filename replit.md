@@ -1,44 +1,67 @@
-# Sports Arbitrage Finder — OddsJam
+# BPR Model Dashboard
 
-A sports betting arbitrage detection tool powered by the OddsJam API. Finds guaranteed profit opportunities across multiple bookmakers using live odds data.
+A sports betting analytics dashboard for sharp bettors. Data-dense, terminal-style UI with three tabs:
+
+## Tabs
+
+- **Line Tracker** (`/`) — Live bet slate from `childersjac-max/Line-Tracker-Model` (GitHub CSV). Shows matchup, book, odds, edge %, EV %, and recommended wager. Filterable by sport. Highlights urgency by hours to game, ARB partner legs, and injured players.
+- **NBA Model** (`/nba`) — NBA predictions, bankroll equity curve (recharts), recent bet log, and backtest KPIs (ROI, win rate, Sharpe, max drawdown) from `childersjac-max/nba-betting-model` (GitHub JSON).
+- **Arbitrage** (`/arbitrage`) — Live arbitrage opportunities from OddsJam API (requires `ODDSJAM_API_KEY` secret). Auto-refreshes every 30s. Shows margin %, books, and optimal stakes. Gracefully handles missing key.
 
 ## Architecture
 
-- **Frontend** (`artifacts/arb-finder`): React + Vite app. Fetches OddsJam API key from `/api/config`, then calls OddsJam directly from the browser. Arbitrage calculations run client-side.
-- **API Server** (`artifacts/api-server`): Express 5 + Node. Handles alerts CRUD (PostgreSQL), serves config, and acts as proxy for OddsJam.
-- **Database** (`lib/db`): PostgreSQL via Drizzle ORM. Stores user alerts.
+### Monorepo (pnpm workspaces)
 
-## Network Note
+| Package | Path | Purpose |
+|---|---|---|
+| `@workspace/api-server` | `artifacts/api-server` | Express 5 API, port 8080, serves `/api` |
+| `@workspace/dashboard` | `artifacts/dashboard` | React + Vite frontend, port 23183, serves `/` |
+| `@workspace/api-spec` | `lib/api-spec` | OpenAPI spec + Orval codegen |
+| `@workspace/api-client-react` | `lib/api-client-react` | Generated React Query hooks |
+| `@workspace/api-zod` | `lib/api-zod` | Generated Zod schemas |
 
-OddsJam's API (`api.oddsjam.com`) is not resolvable in Replit's development sandbox. **The app works correctly when deployed to production** where the server has full internet access. In development, odds data will return empty.
+### API Routes
 
-## Pages
+All routes live under `/api`:
 
-- `/` — Dashboard: Live arbitrage opportunities, summary stats (auto-refreshes every 30s)
-- `/odds` — Live Odds: Browse live game odds by sport and market type
-- `/alerts` — Alerts: Create/delete saved arbitrage alerts with profit thresholds
-- `/sports` — Sports: Directory of all OddsJam-supported sports
+- `GET /api/healthz` — health check
+- `GET /api/line-tracker/slate` — fetches + parses `pipeline_output/bet_slate_latest.csv` from GitHub
+- `GET /api/line-tracker/patterns` — fetches `pipeline_output/patterns.json` from GitHub
+- `GET /api/nba-model/predictions` — fetches `predictions.json` from NBA model GitHub repo
+- `GET /api/nba-model/bet-log` — fetches `bet_log.json` from NBA model GitHub repo
+- `GET /api/nba-model/backtest` — fetches `backtest.json` from NBA model GitHub repo
+- `GET /api/arbitrage/opportunities?sport=&market=` — calls OddsJam API v2
 
-## Key Files
+### Route files
 
-- `artifacts/arb-finder/src/lib/oddsjam-client.ts` — Browser-side OddsJam API client
-- `artifacts/arb-finder/src/lib/arbitrage.ts` — Arbitrage detection algorithm (client-side)
-- `artifacts/arb-finder/src/hooks/use-oddsjam.ts` — React Query hooks wrapping OddsJam
-- `artifacts/api-server/src/routes/config.ts` — Serves API key to frontend
-- `artifacts/api-server/src/routes/alerts.ts` — Alerts CRUD
-- `lib/db/src/schema/alerts.ts` — Alerts table schema
+- `artifacts/api-server/src/routes/line-tracker.ts` — CSV parser, RFC4180 compliant
+- `artifacts/api-server/src/routes/nba-model.ts` — NBA JSON pass-through
+- `artifacts/api-server/src/routes/arbitrage.ts` — OddsJam integration, stake calc
 
-## Secrets
+### Data Sources
 
-- `ODDSJAM_API_KEY` — OddsJam API key (required)
-- `SESSION_SECRET` — Session secret
-- `DATABASE_URL` — PostgreSQL connection string (auto-provisioned)
+- Line Tracker: `https://raw.githubusercontent.com/childersjac-max/Line-Tracker-Model/main/pipeline_output/bet_slate_latest.csv`
+- NBA Model: `https://raw.githubusercontent.com/childersjac-max/nba-betting-model/main/{predictions,bet_log,backtest}.json`
+- Arbitrage: `https://api.oddsjam.com/api/v2/arbitrage` (requires `ODDSJAM_API_KEY`)
 
-## Arbitrage Algorithm
+## Key Implementation Notes
 
-For each game and market:
-1. Find the best (highest) decimal odds for each outcome across all bookmakers
-2. Calculate total implied probability: sum(1/odds_i)
-3. If total implied < 1.0: arbitrage exists
-4. Profit % = (1/total_implied - 1) × 100
-5. Optimal stakes: stake_i = bankroll × (1/odds_i) / total_implied
+- **No database** — all data is fetched live from external sources on each request
+- **Native fetch** — Node 24 global fetch, no `node-fetch` polyfill needed
+- **CSV parsing** — RFC4180-compliant parser handles quoted fields, embedded commas, and CRLF
+- **`edge_pct` / `ev_pct`** — already in percentage form in the CSV (e.g. `9.19` = 9.19%), NOT 0-1 scale
+- **`model_prob`** — 0-1 decimal scale (e.g. `0.48` = 48%)
+- **Percentage formatting**: use `formatPct()` for pre-scaled values; use `formatPercent()` for 0-1 scale values
+- **Arbitrage margin**: OddsJam returns some margins as 0.012 (normalized to 1.2% in the route handler)
+
+## Environment Secrets
+
+| Secret | Required | Purpose |
+|---|---|---|
+| `ODDSJAM_API_KEY` | Optional | Enables live arbitrage tab |
+| `SESSION_SECRET` | Yes | Express session signing |
+
+## Workflows
+
+- `artifacts/api-server: API Server` — `pnpm run dev` (builds then starts)
+- `artifacts/dashboard: web` — `vite --host 0.0.0.0`

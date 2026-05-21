@@ -2,14 +2,11 @@ import { Router, type IRouter } from "express";
 
 const router: IRouter = Router();
 
-router.get("/config", async (req, res): Promise<void> => {
-  const apiKey = process.env["ODDSJAM_API_KEY"];
-  if (!apiKey) {
-    req.log.warn("ODDSJAM_API_KEY is not configured");
-    res.status(503).json({ error: "OddsJam API key not configured" });
-    return;
-  }
-  res.json({ apiKey, oddsjamApiKey: apiKey });
+router.get("/config", (_req, res) => {
+  res.json({
+    configured: !!process.env["ODDSJAM_API_KEY"],
+    ntfyEnabled: !!process.env["NTFY_TOPIC"],
+  });
 });
 
 export default router;

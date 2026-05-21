@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "installCommand": "pnpm -w install --no-frozen-lockfile",
+  "installCommand": "pnpm install --no-frozen-lockfile",
   "buildCommand": "pnpm -w run vercel-build",
   "outputDirectory": "artifacts/arb-finder/dist/public",
   "framework": null,

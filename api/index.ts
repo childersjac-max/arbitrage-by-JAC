@@ -1,14 +1,7 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 import serverless from "serverless-http";
-import app from "../artifacts/api-server/src/app";
+// Pre-built by `pnpm --filter @workspace/api-server run build` (see build.mjs → dist/serverless.mjs)
+import app from "../artifacts/api-server/dist/serverless.mjs";
 
-const handler = serverless(app, {
-  binary: false,
-});
+const handler = serverless(app, { binary: false });
 
-export default async function (
-  req: VercelRequest,
-  res: VercelResponse,
-): Promise<unknown> {
-  return handler(req, res);
-}
+export default handler;

@@ -7,7 +7,7 @@ Matches the app at [arbitrage-sports-bot.replit.app](https://arbitrage-sports-bo
 1. Go to [vercel.com](https://vercel.com) → **Add New** → **Project**.
 2. Import **`childersjac-max/arbitrage-by-JAC`**.
 3. Confirm settings (from `vercel.json`):
-   - **Root Directory:** leave empty (repository root — not `artifacts/arb-finder`)
+   - **Root Directory:** empty (repo root) **or** `artifacts/arb-finder` (both supported)
    - **Install:** `pnpm install --no-frozen-lockfile` (full monorepo — not `-w`, which skips workspace packages)
    - **Build:** `pnpm -w run vercel-build`
    - **Output:** `public` (copied from `artifacts/arb-finder/dist/public` during build)

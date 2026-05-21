@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "installCommand": "cd ../.. && pnpm install --no-frozen-lockfile",
+  "buildCommand": "cd ../.. && pnpm -w run vercel-build",
+  "outputDirectory": "public",
+  "framework": null,
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 60,
+      "includeFiles": "../api-server/dist/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

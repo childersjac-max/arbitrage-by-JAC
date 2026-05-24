@@ -2,8 +2,7 @@
 
 # compiled output
 dist
-public
-artifacts/arb-finder/public
+# Do not gitignore `public/` — Vercel uses it as the deployment output directory after build.
 tmp
 out-tsc
 *.tsbuildinfo

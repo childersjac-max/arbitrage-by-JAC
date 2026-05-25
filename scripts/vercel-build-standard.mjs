@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { cpSync, rmSync, existsSync } from "node:fs";
+import { cpSync, rmSync, existsSync, writeFileSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,7 +26,28 @@ if (!existsSync(handlerSrc)) {
 function copyPublic(dest) {
   if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
   cpSync(staticSrc, dest, { recursive: true });
-  console.log(`▶ Static → ${dest}`);
+
+  let buildId = "local";
+  try {
+    buildId = execSync("git rev-parse --short HEAD", { cwd: repoRoot, encoding: "utf8" }).trim();
+  } catch {
+    buildId = String(Date.now());
+  }
+  writeFileSync(join(dest, "build-id.txt"), `${buildId}\n`);
+
+  const indexPath = join(dest, "index.html");
+  if (existsSync(indexPath)) {
+    const html = readFileSync(indexPath, "utf8");
+    const meta = `<meta name="x-build-id" content="${buildId}" />`;
+    writeFileSync(
+      indexPath,
+      html.includes("x-build-id")
+        ? html.replace(/<meta name="x-build-id" content="[^"]*" \/>/, meta)
+        : html.replace("</head>", `  ${meta}\n  </head>`),
+    );
+  }
+
+  console.log(`▶ Static → ${dest} (build ${buildId})`);
 }
 
 copyPublic(join(apiServerRoot, "public"));

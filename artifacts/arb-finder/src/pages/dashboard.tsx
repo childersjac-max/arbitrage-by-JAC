@@ -243,24 +243,21 @@ function cleanMarketLabel(raw: string): string {
   return clean.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ── Date grouping helpers ─────────────────────────────────────────────────────
-function localDateKey(iso: string): string {
-  const d = new Date(iso);
+// ── Date grouping helpers (local calendar days — never use toISOString for "today") ──
+function localDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function getTodayTomorrowKeys(): { todayKey: string; tomorrowKey: string } {
   const now = new Date();
-  const todayKey = localDateKey(now.toISOString());
-  const tom = new Date(now);
-  tom.setDate(now.getDate() + 1);
-  const tomorrowKey = localDateKey(tom.toISOString());
-  return { todayKey, tomorrowKey };
+  const todayKey = localDateKey(now);
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return { todayKey, tomorrowKey: localDateKey(tomorrow) };
 }
 
 function isWithinNextTwoDays(commenceTime: string): boolean {
   const { todayKey, tomorrowKey } = getTodayTomorrowKeys();
-  const key = localDateKey(commenceTime);
+  const key = localDateKey(new Date(commenceTime));
   return key === todayKey || key === tomorrowKey;
 }
 
@@ -296,7 +293,7 @@ export default function Dashboard() {
       [tomorrowKey]: [],
     };
     for (const opp of filteredOpportunities) {
-      const key = localDateKey(opp.commenceTime);
+      const key = localDateKey(new Date(opp.commenceTime));
       if (key in byDay) byDay[key]!.push(opp);
     }
     return ([todayKey, tomorrowKey] as const).map(

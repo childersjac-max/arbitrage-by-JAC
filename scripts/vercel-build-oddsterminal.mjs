@@ -3,16 +3,16 @@ import { mkdirSync, cpSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 console.log("▶ Building api-server + arb-finder...");
 execSync(
   "pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/arb-finder run build",
-  { stdio: "inherit", cwd: root },
+  { stdio: "inherit", cwd: repoRoot },
 );
 
-const staticSrc = join(root, "artifacts", "arb-finder", "dist", "public");
-const handlerSrc = join(root, "artifacts", "api-server", "dist", "handler.mjs");
+const staticSrc = join(repoRoot, "artifacts", "arb-finder", "dist", "public");
+const handlerSrc = join(repoRoot, "artifacts", "api-server", "dist", "handler.mjs");
 
 if (!existsSync(staticSrc)) {
   console.error(`Missing frontend build: ${staticSrc}`);
@@ -23,49 +23,74 @@ if (!existsSync(handlerSrc)) {
   process.exit(1);
 }
 
-const vercelOut = join(root, ".vercel", "output");
-if (existsSync(vercelOut)) rmSync(vercelOut, { recursive: true, force: true });
+function writeBuildOutput(vercelOut) {
+  if (existsSync(vercelOut)) rmSync(vercelOut, { recursive: true, force: true });
 
-// Static SPA
-const staticOut = join(vercelOut, "static");
-mkdirSync(staticOut, { recursive: true });
-cpSync(staticSrc, staticOut, { recursive: true });
-console.log("▶ Static files → .vercel/output/static");
+  const staticOut = join(vercelOut, "static");
+  mkdirSync(staticOut, { recursive: true });
+  cpSync(staticSrc, staticOut, { recursive: true });
 
-// Routing: API first, then SPA fallback
-writeFileSync(
-  join(vercelOut, "config.json"),
-  JSON.stringify(
-    {
-      version: 3,
-      routes: [
-        { src: "/api(?:/(.*))?", dest: "/api" },
-        { handle: "filesystem" },
-        { src: "/(.*)", dest: "/index.html" },
-      ],
-    },
-    null,
-    2,
-  ),
-);
+  writeFileSync(
+    join(vercelOut, "config.json"),
+    JSON.stringify(
+      {
+        version: 3,
+        routes: [
+          { src: "/api(?:/(.*))?", dest: "/api" },
+          { handle: "filesystem" },
+          { src: "/(.*)", dest: "/index.html" },
+        ],
+      },
+      null,
+      2,
+    ),
+  );
 
-// Express API (all /api/* routes)
-const funcDir = join(vercelOut, "functions", "api.func");
-mkdirSync(funcDir, { recursive: true });
-cpSync(handlerSrc, join(funcDir, "index.mjs"));
-writeFileSync(
-  join(funcDir, ".vc-config.json"),
-  JSON.stringify(
-    {
-      runtime: "nodejs24.x",
-      handler: "index.mjs",
-      launcherType: "Nodejs",
-      maxDuration: 60,
-    },
-    null,
-    2,
-  ),
-);
+  const funcDir = join(vercelOut, "functions", "api.func");
+  mkdirSync(funcDir, { recursive: true });
+  cpSync(handlerSrc, join(funcDir, "index.mjs"));
+  writeFileSync(
+    join(funcDir, ".vc-config.json"),
+    JSON.stringify(
+      {
+        runtime: "nodejs24.x",
+        handler: "index.mjs",
+        launcherType: "Nodejs",
+        maxDuration: 60,
+      },
+      null,
+      2,
+    ),
+  );
+}
 
-console.log("▶ API handler → .vercel/output/functions/api.func");
-console.log("✓ Vercel Build Output ready");
+function copyPublic(destPublic) {
+  if (existsSync(destPublic)) rmSync(destPublic, { recursive: true, force: true });
+  cpSync(staticSrc, destPublic, { recursive: true });
+  console.log(`▶ Static files → ${destPublic}`);
+}
+
+// Vercel resolves output relative to Project Root Directory (often artifacts/api-server).
+const outputTargets = [
+  join(repoRoot, ".vercel", "output"),
+  join(repoRoot, "artifacts", "api-server", ".vercel", "output"),
+  join(repoRoot, "artifacts", "arb-finder", ".vercel", "output"),
+];
+
+const publicTargets = [
+  join(repoRoot, "public"),
+  join(repoRoot, "artifacts", "api-server", "public"),
+  join(repoRoot, "artifacts", "arb-finder", "public"),
+];
+
+for (const out of outputTargets) {
+  writeBuildOutput(out);
+  console.log(`▶ Build Output API → ${out}`);
+}
+
+for (const pub of publicTargets) {
+  mkdirSync(dirname(pub), { recursive: true });
+  copyPublic(pub);
+}
+
+console.log("✓ Vercel deploy artifacts ready");

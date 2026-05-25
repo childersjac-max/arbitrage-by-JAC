@@ -10,7 +10,8 @@
   ],
   "functions": {
     "api/index.mjs": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "dist/handler.mjs"
     }
   }
 }

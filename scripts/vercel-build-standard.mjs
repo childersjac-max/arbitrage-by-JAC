@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { mkdirSync, cpSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { cpSync, rmSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,26 +29,5 @@ function copyPublic(dest) {
   console.log(`▶ Static → ${dest}`);
 }
 
-// Vercel api/ route: re-export bundled Express app (works with @vercel/node)
-const apiDirs = [
-  join(apiServerRoot, "api"),
-  join(repoRoot, "api"),
-];
-
-for (const apiDir of apiDirs) {
-  mkdirSync(apiDir, { recursive: true });
-  const relHandler =
-    apiDir === join(apiServerRoot, "api")
-      ? "../dist/handler.mjs"
-      : "../artifacts/api-server/dist/handler.mjs";
-  writeFileSync(
-    join(apiDir, "index.mjs"),
-    `export { default } from "${relHandler}";\n`,
-  );
-  console.log(`▶ API entry → ${join(apiDir, "index.mjs")}`);
-}
-
 copyPublic(join(apiServerRoot, "public"));
-copyPublic(join(repoRoot, "public"));
-
-console.log("✓ Vercel standard build ready (public/ + api/index.mjs)");
+console.log("✓ Vercel standard build ready (public/)");

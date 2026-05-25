@@ -9,18 +9,24 @@ Matches the app at [arbitrage-sports-bot.replit.app](https://arbitrage-sports-bo
 3. Confirm settings (from `vercel.json`):
    - **Root Directory:** **empty** (repository root — not `artifacts/api-server` or `artifacts/arb-finder`)
    - **Install:** `pnpm install --no-frozen-lockfile` (or leave blank — uses `vercel.json`)
-   - **Build Command:** leave blank or `node scripts/vercel-build-oddsterminal.mjs`
-   - **Output Directory:** leave **empty** (Build Output API writes `.vercel/output` automatically)
+   - **Build Command:** leave blank (uses `vercel.json` → `vercel-build-standard.mjs`)
+   - **Output Directory:** `public` (or leave blank — `vercel.json` sets it)
    - Do **not** set a custom “Build Command” that runs only from a subfolder without `cd ../..`
 4. Add environment variables (Production):
 
 | Variable | Required | Notes |
 |----------|----------|--------|
-| `ODDSJAM_API_KEY` | Yes | Optic Odds API key |
+| `ODDSJAM_API_KEY` | Yes | Optic Odds API key — **never commit this**; paste only in Vercel → Project → Settings → Environment Variables → Production |
 | `NTFY_TOPIC` | No | Push notifications for alerts |
 | `DATABASE_URL` | No | Neon URL if you add Postgres-backed alerts later |
 
 5. Deploy. Future pushes to **`main`** auto-update the same URL.
+
+### If you use project `arbitrage-by-jac-api-server` (Root Directory = `artifacts/api-server`)
+
+1. **Settings → Environment Variables → Production** → add `ODDSJAM_API_KEY` = your Optic Odds key (do not paste keys in chat or git).
+2. **Settings → General** → **Output Directory:** `public` (must match `artifacts/api-server/vercel.json`).
+3. Redeploy after pushing the API fix (Express export without `serverless-http`).
 
 ## 2. Optional: Neon (Postgres)
 
@@ -40,4 +46,4 @@ The live app stores alerts **in memory** on the server. Neon is only needed if y
 ## Architecture on Vercel
 
 - Static SPA: `artifacts/arb-finder`
-- All `/api/*` routes: one serverless function (`api/index.ts`) running the Express app from `artifacts/api-server`
+- All `/api/*` routes: one serverless function (`api/index.mjs`) running the Express app from `artifacts/api-server`

@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
-import { useArbitrageOpportunities, useOpportunitiesSummary } from "@/hooks/use-oddsjam";
+import { useArbitrageOpportunities } from "@/hooks/use-oddsjam";
+import { computeSummary } from "@/lib/arbitrage";
 import { formatPercent, formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -248,36 +249,64 @@ function localDateKey(iso: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function tabLabel(dateKey: string): string {
+function getTodayTomorrowKeys(): { todayKey: string; tomorrowKey: string } {
   const now = new Date();
   const todayKey = localDateKey(now.toISOString());
-  const tom = new Date(now); tom.setDate(now.getDate() + 1);
+  const tom = new Date(now);
+  tom.setDate(now.getDate() + 1);
   const tomorrowKey = localDateKey(tom.toISOString());
+  return { todayKey, tomorrowKey };
+}
+
+function isWithinNextTwoDays(commenceTime: string): boolean {
+  const { todayKey, tomorrowKey } = getTodayTomorrowKeys();
+  const key = localDateKey(commenceTime);
+  return key === todayKey || key === tomorrowKey;
+}
+
+function tabLabel(dateKey: string): string {
+  const { todayKey, tomorrowKey } = getTodayTomorrowKeys();
   if (dateKey === todayKey) return "Today";
   if (dateKey === tomorrowKey) return "Tomorrow";
-  return new Date(dateKey + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  return dateKey;
 }
 
 export default function Dashboard() {
-  const { data: summary, isLoading: isLoadingSummary } = useOpportunitiesSummary();
   const { data: opportunities, isLoading: isLoadingOpps, error } = useArbitrageOpportunities();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [bankroll, setBankroll] = useState<number>(100);
+  const { todayKey, tomorrowKey } = getTodayTomorrowKeys();
+
+  const filteredOpportunities = useMemo(() => {
+    if (!opportunities?.length) return [];
+    return opportunities.filter((o) => isWithinNextTwoDays(o.commenceTime));
+  }, [opportunities]);
+
+  const summary = useMemo(
+    () =>
+      computeSummary(
+        [...filteredOpportunities].sort((a, b) => b.profitPercent - a.profitPercent),
+      ),
+    [filteredOpportunities],
+  );
 
   const groupedByDate = useMemo(() => {
-    if (!opportunities?.length) return [];
-    const sorted = [...opportunities].sort(
-      (a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime()
-    );
-    const map = new Map<string, typeof opportunities>();
-    for (const opp of sorted) {
+    const byDay: Record<string, typeof filteredOpportunities> = {
+      [todayKey]: [],
+      [tomorrowKey]: [],
+    };
+    for (const opp of filteredOpportunities) {
       const key = localDateKey(opp.commenceTime);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(opp);
+      if (key in byDay) byDay[key]!.push(opp);
     }
-    // Within each day, sort highest profit first
-    return Array.from(map.entries()).map(([k, v]) => [k, [...v].sort((a, b) => b.profitPercent - a.profitPercent)] as const);
-  }, [opportunities]);
+    return ([todayKey, tomorrowKey] as const).map(
+      (k) =>
+        [k, [...byDay[k]!].sort((a, b) => b.profitPercent - a.profitPercent)] as const,
+    );
+  }, [filteredOpportunities, todayKey, tomorrowKey]);
+
+  const defaultDateTab =
+    groupedByDate.find(([, opps]) => opps.length > 0)?.[0] ?? todayKey;
 
   const copyBet = useCallback((key: string, text: string, url: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -315,7 +344,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold font-mono text-foreground" data-testid="summary-total-opps">
-              {isLoadingSummary ? <Skeleton className="h-9 w-16" /> : summary?.totalOpportunities || 0}
+              {isLoadingOpps ? <Skeleton className="h-9 w-16" /> : summary.totalOpportunities}
             </div>
           </CardContent>
         </Card>
@@ -326,7 +355,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold font-mono text-foreground" data-testid="summary-avg-profit">
-              {isLoadingSummary ? <Skeleton className="h-9 w-24" /> : formatPercent(summary?.averageProfitPercent || 0)}
+              {isLoadingOpps ? <Skeleton className="h-9 w-24" /> : formatPercent(summary.averageProfitPercent)}
             </div>
           </CardContent>
         </Card>
@@ -337,7 +366,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold font-mono text-emerald-500" data-testid="summary-best-profit">
-              {isLoadingSummary ? <Skeleton className="h-9 w-24" /> : formatPercent(summary?.bestProfitPercent || 0)}
+              {isLoadingOpps ? <Skeleton className="h-9 w-24" /> : formatPercent(summary.bestProfitPercent)}
             </div>
           </CardContent>
         </Card>
@@ -367,7 +396,7 @@ export default function Dashboard() {
         <Card className="col-span-7 lg:col-span-5">
           <CardHeader>
             <CardTitle>Live Arbitrage Finder</CardTitle>
-            <CardDescription>Grouped by game date — click a row to see exact bet instructions</CardDescription>
+            <CardDescription>Tap any row to open the bet slip — showing today and tomorrow only</CardDescription>
           </CardHeader>
           <CardContent>
             {error ? (
@@ -376,17 +405,17 @@ export default function Dashboard() {
               </div>
             ) : isLoadingOpps ? (
               <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
-            ) : groupedByDate.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground border border-dashed border-border rounded-md">
-                No arbitrage opportunities found. Markets might be tight right now.
-              </div>
             ) : (
-              <Tabs defaultValue={groupedByDate[0]![0]}>
-                <TabsList className="mb-4 flex-wrap h-auto gap-1">
+              <Tabs defaultValue={defaultDateTab}>
+                <TabsList className="mb-4 w-full sm:w-auto h-auto p-1 rounded-lg bg-muted/40 gap-0">
                   {groupedByDate.map(([dateKey, opps]) => (
-                    <TabsTrigger key={dateKey} value={dateKey} className="gap-1.5">
+                    <TabsTrigger
+                      key={dateKey}
+                      value={dateKey}
+                      className="gap-2 rounded-md px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                    >
                       {tabLabel(dateKey)}
-                      <span className="text-[10px] bg-primary/10 text-primary rounded-full px-1.5 py-0.5 font-mono font-semibold">
+                      <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-background/80 text-[11px] font-mono font-semibold text-foreground px-1.5">
                         {opps.length}
                       </span>
                     </TabsTrigger>
@@ -394,6 +423,11 @@ export default function Dashboard() {
                 </TabsList>
                 {groupedByDate.map(([dateKey, dayOpps]) => (
                   <TabsContent key={dateKey} value={dateKey}>
+              {dayOpps.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground border border-dashed border-border rounded-md">
+                  No opportunities for {tabLabel(dateKey).toLowerCase()}.
+                </div>
+              ) : (
               <Accordion type="single" collapsible className="w-full space-y-2">
                 {dayOpps.map((opp) => {
                   const betType = getBetType(opp.market);
@@ -527,6 +561,7 @@ export default function Dashboard() {
                   );
                 })}
               </Accordion>
+              )}
                   </TabsContent>
                 ))}
               </Tabs>
@@ -538,11 +573,11 @@ export default function Dashboard() {
           <Card>
             <CardHeader><CardTitle className="text-sm">Sport Breakdown</CardTitle></CardHeader>
             <CardContent>
-              {isLoadingSummary ? (
+              {isLoadingOpps ? (
                 <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
               ) : (
                 <div className="space-y-4">
-                  {summary?.sportBreakdown?.map(sb => (
+                  {summary.sportBreakdown.map(sb => (
                     <div key={sb.sport} className="flex items-center justify-between">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium">{sb.sport}</span>
@@ -551,7 +586,7 @@ export default function Dashboard() {
                       <span className="text-sm font-mono text-success">{formatPercent(sb.avgProfit)} avg</span>
                     </div>
                   ))}
-                  {(!summary?.sportBreakdown || summary.sportBreakdown.length === 0) && <div className="text-sm text-muted-foreground">No data available</div>}
+                  {summary.sportBreakdown.length === 0 && <div className="text-sm text-muted-foreground">No data available</div>}
                 </div>
               )}
             </CardContent>
@@ -560,17 +595,17 @@ export default function Dashboard() {
           <Card>
             <CardHeader><CardTitle className="text-sm">Market Breakdown</CardTitle></CardHeader>
             <CardContent>
-              {isLoadingSummary ? (
+              {isLoadingOpps ? (
                 <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
               ) : (
                 <div className="space-y-4">
-                  {summary?.marketBreakdown?.map(mb => (
+                  {summary.marketBreakdown.map(mb => (
                     <div key={mb.market} className="flex items-center justify-between">
                       <span className="text-sm font-medium">{cleanMarketLabel(mb.market)}</span>
                       <span className="text-sm font-mono">{mb.count}</span>
                     </div>
                   ))}
-                  {(!summary?.marketBreakdown || summary.marketBreakdown.length === 0) && <div className="text-sm text-muted-foreground">No data available</div>}
+                  {summary.marketBreakdown.length === 0 && <div className="text-sm text-muted-foreground">No data available</div>}
                 </div>
               )}
             </CardContent>

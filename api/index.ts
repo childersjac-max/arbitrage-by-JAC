@@ -1,7 +1,3 @@
-import serverless from "serverless-http";
-// Pre-built by `pnpm --filter @workspace/api-server run build` (see build.mjs → dist/serverless.mjs)
-import app from "../artifacts/api-server/dist/serverless.mjs";
-
-const handler = serverless(app, { binary: false });
-
+// Legacy Vercel file-based route — production uses Build Output API (scripts/vercel-build-oddsterminal.mjs).
+import handler from "../artifacts/api-server/dist/handler.mjs";
 export default handler;

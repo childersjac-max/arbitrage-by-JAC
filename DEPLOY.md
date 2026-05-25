@@ -8,9 +8,9 @@ Matches the app at [arbitrage-sports-bot.replit.app](https://arbitrage-sports-bo
 2. Import **`childersjac-max/arbitrage-by-JAC`**.
 3. Confirm settings (from `vercel.json`):
    - **Root Directory:** empty (repo root) **or** `artifacts/arb-finder` (both supported)
-   - **Install:** `pnpm install --no-frozen-lockfile` (full monorepo — not `-w`, which skips workspace packages)
-   - **Build:** `pnpm -w run vercel-build`
-   - **Output:** `public` (copied from `artifacts/arb-finder/dist/public` during build; must not be in `.gitignore` or Vercel skips it)
+   - **Install:** `pnpm install --no-frozen-lockfile`
+   - **Build:** `node scripts/vercel-build-oddsterminal.mjs` (writes `.vercel/output` — no Output Directory field needed)
+   - **Output Directory:** leave **empty** in the Vercel UI (Build Output API supplies static + API)
 4. Add environment variables (Production):
 
 | Variable | Required | Notes |

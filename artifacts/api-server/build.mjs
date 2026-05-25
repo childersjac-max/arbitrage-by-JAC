@@ -121,13 +121,13 @@ async function buildAll() {
     banner: esbuildBanner,
   });
 
-  // Vercel serverless: bundle Express app without pino worker transports
+  // Vercel serverless: Express + serverless-http handler (no pino worker transports)
   await esbuild({
-    entryPoints: [path.resolve(artifactDir, "src/serverless-app.ts")],
+    entryPoints: [path.resolve(artifactDir, "src/serverless-handler.ts")],
     platform: "node",
     bundle: true,
     format: "esm",
-    outfile: path.resolve(distDir, "serverless.mjs"),
+    outfile: path.resolve(distDir, "handler.mjs"),
     logLevel: "info",
     external: externalPackages,
     sourcemap: "linked",

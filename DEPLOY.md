@@ -7,10 +7,11 @@ Matches the app at [arbitrage-sports-bot.replit.app](https://arbitrage-sports-bo
 1. Go to [vercel.com](https://vercel.com) → **Add New** → **Project**.
 2. Import **`childersjac-max/arbitrage-by-JAC`**.
 3. Confirm settings (from `vercel.json`):
-   - **Root Directory:** empty (repo root) **or** `artifacts/arb-finder` (both supported)
-   - **Install:** `pnpm install --no-frozen-lockfile`
-   - **Build:** `node scripts/vercel-build-oddsterminal.mjs` (writes `.vercel/output` — no Output Directory field needed)
-   - **Output Directory:** leave **empty** in the Vercel UI (Build Output API supplies static + API)
+   - **Root Directory:** **empty** (repository root — not `artifacts/api-server` or `artifacts/arb-finder`)
+   - **Install:** `pnpm install --no-frozen-lockfile` (or leave blank — uses `vercel.json`)
+   - **Build Command:** leave blank or `node scripts/vercel-build-oddsterminal.mjs`
+   - **Output Directory:** leave **empty** (Build Output API writes `.vercel/output` automatically)
+   - Do **not** set a custom “Build Command” that runs only from a subfolder without `cd ../..`
 4. Add environment variables (Production):
 
 | Variable | Required | Notes |

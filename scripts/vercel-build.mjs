@@ -52,7 +52,7 @@ const endpoints = [
 for (const ep of endpoints) {
   const funcDir = join(vercelOut, "functions", "api", ep + ".func");
   mkdirSync(funcDir, { recursive: true });
-  cpSync(join(root, "api", ep + ".js"), join(funcDir, "index.js"));
+  cpSync(join(root, "legacy-vercel-api", ep + ".js"), join(funcDir, "index.js"));
   writeFileSync(
     join(funcDir, ".vc-config.json"),
     JSON.stringify(

@@ -1,0 +1,62 @@
+"""Environment-driven settings for the local inference client."""
+
+from __future__ import annotations
+
+from enum import Enum
+from typing import Literal
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Backend(str, Enum):
+    OLLAMA = "ollama"
+    VLLM = "vllm"
+    OPENAI_COMPAT = "openai_compat"
+
+
+class LocalLLMSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    local_llm_backend: Backend = Field(default=Backend.OLLAMA, validation_alias="LOCAL_LLM_BACKEND")
+
+    ollama_host: str = Field(default="http://127.0.0.1:11434", validation_alias="OLLAMA_HOST")
+    ollama_model: str = Field(
+        default="llama3.3:70b-instruct-q4_K_M",
+        validation_alias="OLLAMA_MODEL",
+    )
+
+    vllm_base_url: str = Field(default="http://127.0.0.1:8000/v1", validation_alias="VLLM_BASE_URL")
+    vllm_model: str = Field(
+        default="meta-llama/Llama-3.3-70B-Instruct",
+        validation_alias="VLLM_MODEL",
+    )
+
+    local_llm_temperature: float = Field(default=0.0, validation_alias="LOCAL_LLM_TEMPERATURE")
+    local_llm_max_tokens: int = Field(default=512, validation_alias="LOCAL_LLM_MAX_TOKENS")
+    local_llm_timeout_sec: float = Field(default=45.0, validation_alias="LOCAL_LLM_TIMEOUT_SEC")
+    local_llm_max_retries: int = Field(default=3, validation_alias="LOCAL_LLM_MAX_RETRIES")
+
+    local_llm_max_connections: int = Field(default=32, validation_alias="LOCAL_LLM_MAX_CONNECTIONS")
+    local_llm_batch_concurrency: int = Field(
+        default=8,
+        validation_alias="LOCAL_LLM_BATCH_CONCURRENCY",
+    )
+
+    def resolved_model(self) -> str:
+        if self.local_llm_backend == Backend.OLLAMA:
+            return self.ollama_model
+        return self.vllm_model
+
+    def resolved_base_url(self) -> str:
+        if self.local_llm_backend == Backend.OLLAMA:
+            return self.ollama_host.rstrip("/")
+        return self.vllm_base_url.rstrip("/")
+
+
+def get_settings() -> LocalLLMSettings:
+    return LocalLLMSettings()

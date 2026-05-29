@@ -10,6 +10,7 @@ GitHub `main` (`a491af6`) is a **partial fork** — do not deploy it over produc
 | **Optic Odds** | `artifacts/api-server/src/lib/oddsjam.ts` → `api.opticodds.com` (v3) | `ODDSJAM_API_KEY` | Primary sportsbook odds (NC books: DK, FD, BetMGM, Caesars, bet365, Fanatics, theScore) |
 | **Kalshi** | `artifacts/api-server/src/lib/kalshi.ts` | None | Prediction market → American odds |
 | **Polymarket** | `artifacts/api-server/src/lib/prediction-markets.ts` | None | Same pattern |
+| **Harvest (Python)** | `harvest/` package | `ODDSJAM_API_KEY` + optional exchange keys | Multi-threaded collector + unified arb JSON |
 | **Manifold** | `prediction-markets.ts` | None | Same pattern |
 
 **Dev constraint:** `api.oddsjam.com` may not resolve in Replit’s dev sandbox → empty Optic Odds in dev. Production deploy works. Kalshi/Polymarket reachable in dev.

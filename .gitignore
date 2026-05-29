@@ -48,3 +48,8 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Python (arb-harvest)
+arb-harvest/.venv/
+**/__pycache__/
+*.py[cod]

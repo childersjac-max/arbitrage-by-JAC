@@ -9,6 +9,7 @@ import opportunitiesRouter from "./opportunities";
 import historyRouter from "./history";
 import alertsRouter from "./alerts";
 import monitorRouter from "./monitor";
+import harvestRouter from "./harvest";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(opportunitiesRouter);
 router.use(historyRouter);
 router.use(alertsRouter);
 router.use(monitorRouter);
+router.use(harvestRouter);
 
 export default router;

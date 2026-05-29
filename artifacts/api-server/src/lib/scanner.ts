@@ -5,6 +5,10 @@ import {
   fetchKalshiBookmakersByEvent,
   mergeKalshiIntoGames,
 } from "./kalshi";
+import {
+  fetchPolymarketBookmakersByEvent,
+  mergePolymarketIntoGames,
+} from "./prediction-markets";
 import { recordOpportunities } from "./opportunity-history";
 import { SCAN_TARGETS } from "./scan-config";
 
@@ -20,13 +24,17 @@ async function runScan(): Promise<ArbitrageOpportunity[]> {
   }
 
   const all: ArbitrageOpportunity[] = [];
-  const kalshiByTitle = await fetchKalshiBookmakersByEvent();
+  const [kalshiByTitle, polyByTitle] = await Promise.all([
+    fetchKalshiBookmakersByEvent(),
+    fetchPolymarketBookmakersByEvent(),
+  ]);
 
   for (const target of SCAN_TARGETS) {
     for (const league of target.leagues) {
       try {
         let games = await getOdds({ sport: target.sport, league });
         games = mergeKalshiIntoGames(games, kalshiByTitle);
+        games = mergePolymarketIntoGames(games, polyByTitle);
         const opps = findArbitrageOpportunities(games);
         for (const o of opps) {
           o.league = league;

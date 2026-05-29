@@ -1,0 +1,23 @@
+[project]
+name = "nc-arb-collector"
+version = "1.0.0"
+description = "NC multi-source arbitrage data collector (authorized APIs)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27.0",
+  "curl_cffi>=0.7.0",
+  "rapidfuzz>=3.9.0",
+  "python-dateutil>=2.9.0",
+]
+
+[project.scripts]
+nc-arb-collector = "nc_arb_collector.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nc_arb_collector*"]

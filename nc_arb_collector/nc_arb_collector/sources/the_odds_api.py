@@ -47,8 +47,28 @@ class TheOddsApiSource:
             return data
         return []
 
+    def fetch_all_nc_books_single_call(self, sport_key: str) -> list[dict[str, Any]]:
+        """
+        Single API request returns events with draftkings, fanduel, betmgm bookmakers.
+        This is the recommended path to conserve monthly quota.
+        """
+        if not self.enabled:
+            return []
+        markets = list(self.config.markets)
+        params = {
+            "apiKey": self.api_key,
+            "regions": "us",
+            "markets": ",".join(markets),
+            "oddsFormat": "american",
+            "bookmakers": ",".join(NC_BOOK_KEYS),
+        }
+        url = f"{self.BASE}/sports/{sport_key}/odds"
+        data = self.http.get_json(url, params=params)
+        if isinstance(data, list):
+            return data
+        return []
+
     def fetch_all_nc_books(self, sport_key: str) -> dict[str, list[dict[str, Any]]]:
-        out: dict[str, list[dict[str, Any]]] = {}
-        for book in NC_BOOK_KEYS:
-            out[book] = self.fetch_events_for_book(sport_key, book)
+        events = self.fetch_all_nc_books_single_call(sport_key)
+        out: dict[str, list[dict[str, Any]]] = {book: events for book in NC_BOOK_KEYS}
         return out

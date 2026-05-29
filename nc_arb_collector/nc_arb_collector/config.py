@@ -67,4 +67,5 @@ PLATFORM_LABELS: dict[str, str] = {
     "kalshi": "Kalshi",
     "predictit": "PredictIt",
     "forecastex": "ForecastEx",
+    "polymarket": "Polymarket",
 }

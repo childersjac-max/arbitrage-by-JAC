@@ -39,7 +39,8 @@ class PredictItSource:
             r"\b(nfl|nba|mlb|nhl|ncaa|college|football|basketball|baseball|hockey|"
             r"super bowl|world series|stanley cup|championship|playoff|mvp|"
             r"heisman|draft|ufc|mma|soccer|premier league|world cup|golf|pga|"
-            r"tennis|wimbledon|masters|olympics|sports)\b",
+            r"tennis|wimbledon|masters|olympics|sports|win the|winner|"
+            r"conference|bowl|stanley|finals|seed|bracket)\b",
             re.I,
         )
         for market in markets:

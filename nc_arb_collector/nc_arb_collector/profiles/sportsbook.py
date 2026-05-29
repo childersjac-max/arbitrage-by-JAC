@@ -1,10 +1,11 @@
-"""Shared sportsbook profile logic (The Odds API book filter)."""
+"""Shared sportsbook profile logic — reads from SportsbookCache (1 API call/sport)."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from ..models import MarketPacket, OddsLeg
+from ..sources.sportsbook_cache import SportsbookCache
 from ..sources.the_odds_api import TheOddsApiSource
 from ..utils.odds_math import american_to_implied_prob
 from .base import ExtractionProfile
@@ -68,18 +69,20 @@ class SportsbookProfile(ExtractionProfile):
         *,
         platform_key: str,
         display_name: str,
+        cache: SportsbookCache | None = None,
     ):
         super().__init__(config, http)
         self.platform_key = platform_key
         self.display_name = display_name
-        self._api = TheOddsApiSource(config, http)
+        self._cache = cache
 
     def extract(self, sport_keys: tuple[str, ...] | None = None) -> list[MarketPacket]:
         keys = sport_keys or self.config.sport_keys
-        if not self._api.enabled:
+        cache = self._cache
+        if cache is None or not cache.api.enabled:
             return []
         out: list[MarketPacket] = []
         for sport in keys:
-            events = self._api.fetch_events_for_book(sport, self.platform_key)
+            events = cache.events_for_sport(sport)
             out.extend(events_to_packets(events, self.platform_key, self.display_name))
         return out

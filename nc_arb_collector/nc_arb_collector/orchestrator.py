@@ -1,5 +1,8 @@
 """
-Orchestration loop — runs all NC profiles concurrently (sync), splices, normalizes, emits arbs.
+Orchestration loop — runs all NC profiles concurrently, splices, normalizes, emits arbs.
+
+Paid: The Odds API only (one request per sport for DK+FD+BetMGM).
+Free: Kalshi, PredictIt, ForecastEx CSV, Polymarket Gamma API.
 """
 
 from __future__ import annotations
@@ -14,7 +17,17 @@ from .config import CollectorConfig
 from .engine.arbitrage import ArbitragePipeline
 from .engine.splice import SpliceEngine
 from .http.client import ResilientHttpClient
-from .profiles import NC_PROFILES
+from .profiles import (
+    BetMGMProfile,
+    DraftKingsProfile,
+    FanDuelProfile,
+    KalshiProfile,
+    PredictionMarketsProfile,
+)
+from .profiles.base import ExtractionProfile
+from .sources.free_registry import FREE_SOURCES, PAID_SOURCES
+from .sources.sportsbook_cache import SportsbookCache
+from .sources.the_odds_api import TheOddsApiSource
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +36,36 @@ class NCOrchestrator:
     def __init__(self, config: CollectorConfig | None = None):
         self.config = config or CollectorConfig.from_env()
         self.http = ResilientHttpClient(self.config)
-        self.profiles = [cls(self.config, self.http) for cls in NC_PROFILES]
+        self._odds_api = TheOddsApiSource(self.config, self.http)
+        self._sportsbook_cache = SportsbookCache(self.config, self._odds_api)
+        self.profiles: list[ExtractionProfile] = self._build_profiles()
         self.splice = SpliceEngine()
         self.arb = ArbitragePipeline(min_yield_pct=self.config.min_arb_yield_pct)
 
+    def _build_profiles(self) -> list[ExtractionProfile]:
+        cache = self._sportsbook_cache
+        return [
+            DraftKingsProfile(self.config, self.http, cache=cache),
+            FanDuelProfile(self.config, self.http, cache=cache),
+            BetMGMProfile(self.config, self.http, cache=cache),
+            KalshiProfile(self.config, self.http),
+            PredictionMarketsProfile(self.config, self.http),
+        ]
+
     def run_once(self) -> dict[str, Any]:
+        if self._odds_api.enabled:
+            self._sportsbook_cache.prefetch()
+            logger.info(
+                "The Odds API: %s sport fetches (%s books each)",
+                self._sportsbook_cache.api_calls_made,
+                "draftkings,fanduel,betmgm",
+            )
+        else:
+            logger.warning(
+                "ODDS_API_KEY not set — sportsbook profiles empty. "
+                "Free sources (Kalshi, PredictIt, ForecastEx, Polymarket) still run."
+            )
+
         all_packets = []
         profile_stats: dict[str, int] = {}
 
@@ -51,6 +89,12 @@ class NCOrchestrator:
         arb_rows = self.arb.scan(unified)
 
         return {
+            "data_sources": {
+                "paid": PAID_SOURCES,
+                "free": FREE_SOURCES,
+                "odds_api_configured": self._odds_api.enabled,
+                "odds_api_requests_this_cycle": self._sportsbook_cache.api_calls_made,
+            },
             "profile_packet_counts": profile_stats,
             "splice_stats": self.splice.gap_fill_report(),
             "board": self.splice.snapshot(),

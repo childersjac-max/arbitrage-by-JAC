@@ -1,122 +1,68 @@
 # NC Multi-Source Arbitrage Collector
 
-Production-oriented Python package that aggregates **legal, authorized** market data for North Carolina–accessible platforms and computes cross-source arbitrage signals.
+Aggregates odds for **North Carolina–accessible** platforms using **free public APIs** plus your **The Odds API** subscription only.
+
+**No Optic Odds / OddsJam required.**
+
+## Cost model
+
+| Source | Cost | Covers |
+|--------|------|--------|
+| [The Odds API](https://the-odds-api.com) | **Your subscription** | DraftKings, FanDuel, BetMGM (US region) |
+| [Kalshi Trade API v2](https://docs.kalshi.com) | **Free** | CFTC prediction markets (sports series) |
+| [PredictIt](https://www.predictit.org/api/marketdata/all/) | **Free** | Politics/sports contracts (1 req/sec) |
+| [ForecastEx CSV](https://www.forecastex.com/data) | **Free** | Pairs/prices via `/api/download` |
+| [Polymarket Gamma](https://docs.polymarket.com) | **Free** | Sports events via public-search |
+
+### The Odds API quota saver
+
+The collector makes **one request per sport** with `bookmakers=draftkings,fanduel,betmgm` (not three separate calls). Default 7 sports → **7 requests per cycle**, not 21.
 
 ## Platforms (5 profiles)
 
-| Profile | Data path | Auth |
-|---------|-----------|------|
-| **DraftKings** | [The Odds API](https://the-odds-api.com) `bookmakers=draftkings` | `ODDS_API_KEY` |
-| **FanDuel** | The Odds API `bookmakers=fanduel` | `ODDS_API_KEY` |
-| **BetMGM** | The Odds API `bookmakers=betmgm` | `ODDS_API_KEY` |
-| **Kalshi** | [Kalshi Trade API v2](https://docs.kalshi.com) public `/markets` | None |
-| **PredictIt / ForecastEx** | PredictIt `/api/marketdata/all/`; ForecastEx CSV portal | None / optional IBKR |
-
-> **Important:** This project does **not** scrape sportsbook mobile apps or bypass operator Terms of Service, Cloudflare, Akamai, or PerimeterX. NC sportsbook lines are sourced through **The Odds API** (or your existing Optic Odds / OddsJam integration in `artifacts/api-server`). Kalshi and PredictIt use their **documented public endpoints** with rate-limit compliance.
-
-## Architecture
-
-```mermaid
-flowchart TB
-  subgraph profiles [Extraction Profiles]
-    DK[DraftKingsProfile]
-    FD[FanDuelProfile]
-    MGM[BetMGMProfile]
-    KX[KalshiProfile]
-    PM[PredictionMarketsProfile]
-  end
-
-  subgraph sources [Authorized Sources]
-    TOA[The Odds API]
-    KAPI[Kalshi REST]
-    PI[PredictIt REST]
-    FX[ForecastEx CSV]
-  end
-
-  subgraph engine [Aggregation Engine]
-    SPLICE[SpliceEngine]
-    NORM[Normalization Layer]
-    ARB[ArbitragePipeline]
-  end
-
-  DK --> TOA
-  FD --> TOA
-  MGM --> TOA
-  KX --> KAPI
-  PM --> PI
-  PM --> FX
-
-  DK --> SPLICE
-  FD --> SPLICE
-  MGM --> SPLICE
-  KX --> SPLICE
-  PM --> SPLICE
-  SPLICE --> NORM
-  NORM --> ARB
-```
-
-### 1. Target profiles (`nc_arb_collector/profiles/`)
-
-Each profile implements `extract() → list[MarketPacket]`. Packets may be **partial** (one leg, one platform); the splice engine completes the board.
-
-### 2. Splice engine (`engine/splice.py`)
-
-- Keys events with `event_match_key(home, away, market_type)` after alias normalization.
-- Fuzzy-matches Kalshi / PredictIt titles to sportsbook events (`rapidfuzz`, threshold 82).
-- Merges best implied probability per platform when duplicate packets arrive.
-
-### 3. Normalization pipe (`engine/normalize.py` + `engine/arbitrage.py`)
-
-Unified output per opportunity:
-
-```json
-{
-  "timestamp": "2026-05-29T20:00:00+00:00",
-  "normalized_event_name": "Duke vs North Carolina",
-  "market_type": "h2h",
-  "source_platform_a_odds": 145,
-  "source_platform_b_odds": -130,
-  "source_platform_a": "draftkings",
-  "source_platform_b": "kalshi",
-  "implied_probability_gap": 0.012,
-  "arbitrage_yield_percentage": 1.85
-}
-```
+1. **DraftKings** — from The Odds API  
+2. **FanDuel** — from The Odds API  
+3. **BetMGM** — from The Odds API  
+4. **Kalshi** — free API (`KXNFLGAME`, `KXNBAGAME`, etc.)  
+5. **PredictIt + ForecastEx + Polymarket** — all free  
 
 ## Setup
 
 ```bash
 cd nc_arb_collector
-python3 -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
-export ODDS_API_KEY=your_key_here   # required for DK/FD/BetMGM
-python -m nc_arb_collector.cli --once
+export ODDS_API_KEY=your_the_odds_api_key
+PYTHONPATH=. python -m nc_arb_collector.cli --once
 ```
 
-### Environment
+Without `ODDS_API_KEY`, free prediction-market sources still run; sportsbook profiles return empty until the key is set.
 
-| Variable | Description |
-|----------|-------------|
-| `ODDS_API_KEY` | The Odds API key (sportsbooks) |
-| `NC_ARB_SPORT_KEYS` | Comma-separated sport keys (default: NFL,NBA,NCAAB,MLB,NHL,MLS,MMA) |
-| `NC_ARB_MIN_YIELD_PCT` | Minimum arb yield % (default `0.5`) |
-| `NC_ARB_POLL_SEC` | Loop interval (default `45`) |
-| `KALSHI_API_BASE` | Override Kalshi base URL |
-| `HTTP_PROXY` | Optional corporate proxy (not for evasion) |
+## Environment
 
-## HTTP client (`http/client.py`)
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ODDS_API_KEY` | For DK/FD/BetMGM | The Odds API key (only paid source) |
+| `NC_ARB_SPORT_KEYS` | No | Comma sport keys (default: NFL,NBA,NCAAB,MLB,NHL,MLS,MMA) |
+| `NC_ARB_MIN_YIELD_PCT` | No | Min arb % (default `0.5`) |
+| `NC_ARB_POLL_SEC` | No | Poll interval (default `45`) |
 
-- Prefers `curl_cffi` with Chrome impersonation for APIs that reject generic Python clients.
-- Retries 429/5xx with jittered exponential backoff.
-- **Not** designed to defeat bot-management products; use only against endpoints you are permitted to access.
+## Output
 
-## Integration with this monorepo
+Each arbitrage row includes: `timestamp`, `normalized_event_name`, `market_type`, `source_platform_a_odds`, `source_platform_b_odds`, `implied_probability_gap`, `arbitrage_yield_percentage`.
 
-Production Node services already merge Optic Odds + Kalshi in `artifacts/api-server/src/lib/`. This Python package mirrors that pattern for batch/ML pipelines and can share `ODDSJAM_API_KEY` / Optic adapters from `oddsjam-adapter/`.
+## Architecture
+
+```
+Profiles → MarketPackets → SpliceEngine → ArbitragePipeline → JSON
+                ↑
+    SportsbookCache (1× The Odds API / sport)
+    Kalshi / PredictIt / ForecastEx / Polymarket (free)
+```
+
+See `nc_arb_collector/sources/free_registry.py` for endpoint catalog.
 
 ## Compliance
 
-- Respect each provider’s rate limits (PredictIt: **1 req/sec**).
+- Respect PredictIt **1 request/second** limit (enforced in code).
 - Do not redistribute PredictIt data commercially.
-- Verify NC eligibility and account rules on each platform before placing wagers.
+- The Odds API usage must follow [their terms](https://the-odds-api.com/terms-and-conditions.html).

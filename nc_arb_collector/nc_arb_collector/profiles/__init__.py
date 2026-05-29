@@ -5,7 +5,8 @@ from .fanduel import FanDuelProfile
 from .kalshi import KalshiProfile
 from .prediction_markets import PredictionMarketsProfile
 
-NC_PROFILES = (
+# Built in orchestrator with shared SportsbookCache — do not instantiate tuple directly.
+NC_PROFILE_CLASSES = (
     DraftKingsProfile,
     FanDuelProfile,
     BetMGMProfile,
@@ -20,5 +21,5 @@ __all__ = [
     "BetMGMProfile",
     "KalshiProfile",
     "PredictionMarketsProfile",
-    "NC_PROFILES",
+    "NC_PROFILE_CLASSES",
 ]

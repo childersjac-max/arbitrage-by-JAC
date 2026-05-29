@@ -33,6 +33,17 @@ US_SPORTSBOOK_KEYS = frozenset(
     }
 )
 
+EXCHANGE_BOOK_KEYS = frozenset(
+    {
+        "betfair_ex_uk",
+        "betfair_ex_eu",
+        "betfair",
+        "smarkets",
+        "matchbook",
+        "sx_bet",
+    }
+)
+
 DEFAULT_SPORT_KEYS = (
     "basketball_nba",
     "americanfootball_nfl",
@@ -40,12 +51,15 @@ DEFAULT_SPORT_KEYS = (
     "baseball_mlb",
 )
 
+# US retail + UK/EU exchanges via The Odds API regions
+DEFAULT_REGIONS = "us,us2,uk,eu"
+
 
 @dataclass(frozen=True)
 class HarvestConfig:
     odds_api_key: str
     sport_keys: tuple[str, ...] = DEFAULT_SPORT_KEYS
-    regions: str = "us"
+    regions: str = DEFAULT_REGIONS
     baseline_markets: tuple[str, ...] = ("h2h", "spreads", "totals")
     poll_interval_sec: float = 45.0
     min_arb_yield_pct: float = 0.25
@@ -53,6 +67,8 @@ class HarvestConfig:
     max_workers: int = 8
     enable_kalshi: bool = True
     enable_polymarket: bool = True
+    enable_sx_bet: bool = True
+    enable_betfair: bool = True
     enable_event_props: bool = True
     prop_markets_by_sport: dict[str, tuple[str, ...]] = field(
         default_factory=lambda: {
@@ -94,6 +110,12 @@ class HarvestConfig:
             not in ("0", "false", "False"),
             enable_polymarket=os.environ.get("ARB_ENABLE_POLYMARKET", "1").strip()
             not in ("0", "false", "False"),
+            enable_sx_bet=os.environ.get("ARB_ENABLE_SX_BET", "1").strip()
+            not in ("0", "false", "False"),
+            enable_betfair=os.environ.get("ARB_ENABLE_BETFAIR", "1").strip()
+            not in ("0", "false", "False"),
             enable_event_props=os.environ.get("ARB_ENABLE_EVENT_PROPS", "1").strip()
             not in ("0", "false", "False"),
+            regions=os.environ.get("ARB_ODDS_API_REGIONS", DEFAULT_REGIONS).strip()
+            or DEFAULT_REGIONS,
         )

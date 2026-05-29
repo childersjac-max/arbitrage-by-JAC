@@ -13,6 +13,7 @@ from typing import Any
 
 from arb_harvest.models import MarketQuote, NormalizedEvent, OutcomeQuote, SourceBook
 from arb_harvest.net import PoliteHttpClient
+from arb_harvest.normalize.sport_infer import infer_sport_key
 from arb_harvest.scrape.base import SupplementalFetcher
 
 GAMMA_BASE = "https://gamma-api.polymarket.com"
@@ -33,7 +34,27 @@ class PolymarketFetcher(SupplementalFetcher):
     def __init__(self, http: PoliteHttpClient):
         self.http = http
 
-    def _active_markets(self, limit: int = 150) -> list[dict[str, Any]]:
+    def _sports_markets(self, limit: int = 200) -> list[dict[str, Any]]:
+        """Prefer tag-filtered events, then fall back to global active markets."""
+        out: list[dict[str, Any]] = []
+        for tag in ("nba", "nfl", "nhl", "mlb", "sports"):
+            evdata = self.http.get_json(
+                f"{GAMMA_BASE}/events",
+                params={
+                    "tag_slug": tag,
+                    "active": "true",
+                    "closed": "false",
+                    "limit": 40,
+                },
+            )
+            if isinstance(evdata, list):
+                for ev in evdata:
+                    for m in ev.get("markets") or []:
+                        if isinstance(m, dict):
+                            m = {**m, "question": m.get("question") or ev.get("title")}
+                            out.append(m)
+        if out:
+            return out[:limit]
         data = self.http.get_json(
             f"{GAMMA_BASE}/markets",
             params={"active": "true", "closed": "false", "limit": limit},
@@ -83,7 +104,7 @@ class PolymarketFetcher(SupplementalFetcher):
 
     def fetch(self) -> list[NormalizedEvent]:
         events: list[NormalizedEvent] = []
-        for m in self._active_markets():
+        for m in self._sports_markets():
             question = (m.get("question") or m.get("title") or "").strip()
             if not question:
                 continue
@@ -125,10 +146,11 @@ class PolymarketFetcher(SupplementalFetcher):
                 markets=[MarketQuote(key="binary_yes_no", outcomes=outcomes)],
                 raw=m,
             )
+            sport_key = infer_sport_key(question)
             events.append(
                 NormalizedEvent(
                     event_id=str(m.get("id") or m.get("conditionId") or question),
-                    sport_key="unknown",
+                    sport_key=sport_key,
                     normalized_name="",
                     home_team=home_raw,
                     away_team=away_raw or "",

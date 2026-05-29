@@ -20,10 +20,9 @@ def splice_events(
 
     for batch in supplemental_batches:
         for cand in batch:
-            if cand.sport_key == "unknown":
-                # Infer sport from best fuzzy match
-                pass
             match = matcher.find_match(cand, index)
+            if match and cand.sport_key == "unknown":
+                cand.sport_key = match.sport_key
             if match:
                 matcher.merge_books(match, cand)
             else:

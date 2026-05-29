@@ -38,9 +38,11 @@ flowchart TB
 |----------|-------------------------|
 | DraftKings, FanDuel, BetMGM, Caesars, Fanatics, bet365, ESPN Bet / The Score | **The Odds API** `bookmakers[].key` (see `US_SPORTSBOOK_KEYS` in `config.py`) |
 | Kalshi | **Public** `api.elections.kalshi.com/trade-api/v2` |
-| Polymarket | **Public** Gamma + CLOB book endpoints |
-| DraftKings Predictions, FanDuel Prediction | Not in public free APIs — add a licensed adapter under `scrape/` |
-| Betfair Exchange, Smarkets, SportX | Official exchange APIs (credentials required) — see `scrape/registry.py` comments |
+| Polymarket | **Public** Gamma `/events` (tagged sports) + CLOB `/book` |
+| SportX / SX Bet | **Public** `api.sx.bet/markets/active` + `/orders?marketHash=` |
+| Betfair Exchange | **Official API** when `BETFAIR_*` env vars set; also via Odds API `uk,eu` regions |
+| Smarkets | Odds API `eu` region when on your plan; streaming API requires Smarkets approval |
+| DraftKings Predictions, FanDuel Prediction | No stable public API — add licensed adapter under `scrape/` |
 
 ### Output schema (arbitrage signals)
 
@@ -98,9 +100,17 @@ arb_harvest/
 3. Register in `scrape/registry.py`.
 4. Map exchange **Back/Lay** or contract prices to American odds in your adapter (see `kalshi.py` for probability → American conversion).
 
+## API server integration
+
+When `ODDS_API_KEY` is set and Python 3 is available:
+
+- `GET /harvest` — full unified payload
+- `GET /harvest/signals` — arbitrage signals only
+- `GET /harvest/health` — availability check
+
 ## Relationship to this monorepo
 
-The TypeScript API server under `artifacts/api-server/` already scans arbs via Optic Odds (`ODDSJAM_API_KEY`) and merges **Kalshi** in `src/lib/kalshi.ts`. This Python package is a parallel path centered on **The Odds API** plus public prediction markets, suitable for batch pipelines or standalone research.
+The TypeScript API server under `artifacts/api-server/` already scans arbs via Optic Odds (`ODDSJAM_API_KEY`) and merges **Kalshi** in `src/lib/kalshi.ts`. This Python package is a parallel path centered on **The Odds API** plus public prediction markets, suitable for batch pipelines or the `/harvest` routes.
 
 ## Compliance note
 

@@ -13,6 +13,7 @@ from typing import Any
 from arb_harvest.models import MarketQuote, NormalizedEvent, OutcomeQuote, SourceBook
 from arb_harvest.net import PoliteHttpClient
 from arb_harvest.normalize.matcher import normalize_team_token
+from arb_harvest.normalize.sport_infer import infer_sport_key
 from arb_harvest.scrape.base import SupplementalFetcher
 
 KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2"
@@ -80,7 +81,7 @@ class KalshiFetcher(SupplementalFetcher):
             ticker = m.get("ticker", "")
             volume = self._orderbook_depth(ticker) if ticker else None
             price = _prob_cents_to_american(float(yes_cents))
-            sport_key = "unknown"
+            sport_key = infer_sport_key(title)
             home = normalize_team_token(home_raw, sport_key)
             away = normalize_team_token(away_raw, sport_key)
             outcome = OutcomeQuote(

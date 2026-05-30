@@ -8,6 +8,7 @@ import importlib.util
 import inspect
 import json
 import sqlite3
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -135,6 +136,9 @@ class LocalLLMNormalizationBridge:
         if spec is None or spec.loader is None:
             return None
         module = importlib.util.module_from_spec(spec)
+        module_dir = str(module_path.parent)
+        if module_dir not in sys.path:
+            sys.path.insert(0, module_dir)
         spec.loader.exec_module(module)
         client_cls = getattr(module, "LocalInferenceClient", None)
         if client_cls is None:

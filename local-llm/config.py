@@ -70,6 +70,8 @@ class LocalLLMSettings(BaseSettings):
         default=5050,
         validation_alias="LOCAL_LLM_PROMPT_SERVER_PORT",
     )
+    local_llm_ui_host: str = Field(default="127.0.0.1", validation_alias="LOCAL_LLM_UI_HOST")
+    local_llm_ui_port: int = Field(default=7860, validation_alias="LOCAL_LLM_UI_PORT")
 
     def resolved_model(self) -> str:
         if self.local_llm_backend == Backend.OLLAMA:

@@ -147,6 +147,27 @@ batches = [
 results = await client.normalize_many_batches(batches)
 ```
 
+## Web app (browser UI)
+
+Local-only Gradio interface: **chat** + **name normalization**.
+
+**Windows:** double-click `scripts/run_app.bat` or in Git Bash:
+
+```bash
+cd local-llm
+pip install -r requirements-app.txt
+python web_app.py
+```
+
+Opens **http://127.0.0.1:7860** (only on your PC; not exposed to the internet).
+
+| Tab | Use |
+|-----|-----|
+| **Chat** | Ask your private AI anything |
+| **Normalize names** | Paste raw book strings + reference JSON → mapping |
+
+Set `LOCAL_LLM_UI_PORT` in `.env` if 7860 is already in use.
+
 ## Free-form prompting (custom prompts)
 
 Two modes:
@@ -285,6 +306,7 @@ curl -s http://127.0.0.1:8000/v1/chat/completions -H "Content-Type: application/
 ```
 local-llm/
 ├── README.md
+├── web_app.py             # Browser UI (Gradio) — chat + normalize
 ├── prompt_cli.py          # CLI: one-shot, file, interactive chat
 ├── prompt_server.py       # HTTP POST /prompt on localhost
 ├── prompts/               # Example prompt + system files

@@ -147,6 +147,72 @@ batches = [
 results = await client.normalize_many_batches(batches)
 ```
 
+## Free-form prompting (custom prompts)
+
+Two modes:
+
+| Mode | Tool | Use for |
+|------|------|---------|
+| **Normalize** | `normalize_batch()` / `examples/normalize_batch.py` | Messy names → JSON mapping (temperature 0, JSON forced) |
+| **Prompt** | `prompt_cli.py` / `complete()` / `prompt_server.py` | Any instruction you type (coding, planning, etc.) |
+
+### Command-line chat
+
+```bash
+# One-shot prompt
+python prompt_cli.py "Explain Python asyncio in 3 bullet points"
+
+# Read prompt from file
+python prompt_cli.py --file prompts/example.txt --system-file prompts/system_coding.txt
+
+# Stream tokens as they generate
+python prompt_cli.py --stream "Write a CSV reader in Python"
+
+# Interactive multi-turn chat
+python prompt_cli.py --interactive
+```
+
+Interactive commands: `/clear`, `/stream on`, `/save chat_log.txt`
+
+### Python API
+
+```python
+from local_inference import LocalInferenceClient
+from prompt_types import ChatMessage
+
+async with LocalInferenceClient() as client:
+    result = await client.complete("Summarize how arbitrage works in 2 sentences.")
+    print(result.content)
+
+    reply = await client.chat([
+        ChatMessage("system", "You are a Python tutor."),
+        ChatMessage("user", "What is a dict comprehension?"),
+    ])
+    print(reply.content)
+```
+
+### Localhost HTTP prompt API
+
+```bash
+python prompt_server.py
+# Listens on http://127.0.0.1:5050 by default
+```
+
+```bash
+curl -s http://127.0.0.1:5050/prompt \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Hello, respond in one sentence."}'
+```
+
+### Prompt-related `.env` settings
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `LOCAL_LLM_PROMPT_MAX_TOKENS` | `4096` | Max length for free-form replies |
+| `LOCAL_LLM_PROMPT_TEMPERATURE` | `0.7` | Creativity for prompts (normalize still uses `0`) |
+| `LOCAL_LLM_DEFAULT_SYSTEM` | (see `.env.example`) | Default system message for `prompt_cli.py` |
+| `LOCAL_LLM_PROMPT_SERVER_PORT` | `5050` | Port for `prompt_server.py` |
+
 ## Inference tuning (speed + determinism)
 
 | Variable | Default | Purpose |

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -45,6 +43,28 @@ class LocalLLMSettings(BaseSettings):
     local_llm_batch_concurrency: int = Field(
         default=8,
         validation_alias="LOCAL_LLM_BATCH_CONCURRENCY",
+    )
+
+    # Free-form prompting (prompt_cli.py, prompt_server.py, complete())
+    local_llm_prompt_max_tokens: int = Field(
+        default=4096,
+        validation_alias="LOCAL_LLM_PROMPT_MAX_TOKENS",
+    )
+    local_llm_prompt_temperature: float = Field(
+        default=0.7,
+        validation_alias="LOCAL_LLM_PROMPT_TEMPERATURE",
+    )
+    local_llm_default_system: str = Field(
+        default="You are a helpful assistant. Follow the user instructions precisely.",
+        validation_alias="LOCAL_LLM_DEFAULT_SYSTEM",
+    )
+    local_llm_prompt_server_host: str = Field(
+        default="127.0.0.1",
+        validation_alias="LOCAL_LLM_PROMPT_SERVER_HOST",
+    )
+    local_llm_prompt_server_port: int = Field(
+        default=5050,
+        validation_alias="LOCAL_LLM_PROMPT_SERVER_PORT",
     )
 
     def resolved_model(self) -> str:

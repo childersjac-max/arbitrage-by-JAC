@@ -242,15 +242,32 @@ def build_ui() -> gr.Blocks:
     return demo
 
 
+def _open_browser_when_ready(url: str, delay_sec: float = 2.0) -> None:
+    """Open default browser (works when Gradio inbrowser=True fails on Windows/Git Bash)."""
+    time.sleep(delay_sec)
+    webbrowser.open(url)
+
+
 def main() -> None:
+    host = settings.local_llm_ui_host
+    port = settings.local_llm_ui_port
+    url = f"http://{host}:{port}"
+
+    threading.Thread(
+        target=_open_browser_when_ready,
+        args=(url,),
+        daemon=True,
+    ).start()
+
     demo = build_ui()
     demo.queue(default_concurrency_limit=1)
+    print(f"\n>>> Open in your browser: {url}\n")
     demo.launch(
-        server_name=settings.local_llm_ui_host,
-        server_port=settings.local_llm_ui_port,
+        server_name=host,
+        server_port=port,
         share=False,
         show_error=True,
-        inbrowser=True,
+        inbrowser=False,
     )
 
 

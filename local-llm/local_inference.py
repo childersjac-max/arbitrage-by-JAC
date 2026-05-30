@@ -63,14 +63,19 @@ class LocalInferenceClient:
     async def __aexit__(self, *args: object) -> None:
         await self.close()
 
-    async def start(self) -> None:
+    async def start(self, *, prompt_mode: bool = False) -> None:
         if self._client is not None:
             return
         limits = httpx.Limits(
             max_connections=self.settings.local_llm_max_connections,
             max_keepalive_connections=self.settings.local_llm_max_connections,
         )
-        timeout = httpx.Timeout(self.settings.local_llm_timeout_sec)
+        seconds = (
+            self.settings.local_llm_prompt_timeout_sec
+            if prompt_mode
+            else self.settings.local_llm_timeout_sec
+        )
+        timeout = httpx.Timeout(seconds)
         self._client = httpx.AsyncClient(limits=limits, timeout=timeout)
         self._semaphore = asyncio.Semaphore(self.settings.local_llm_batch_concurrency)
 
@@ -246,7 +251,7 @@ class LocalInferenceClient:
         Does not use the normalization system prompt unless you pass system=SYSTEM_PROMPT.
         """
         if self._client is None:
-            await self.start()
+            await self.start(prompt_mode=True)
         messages = self._build_messages(prompt, system=system, history=history)
         t0 = time.perf_counter()
         content = await self._invoke_messages(
@@ -276,7 +281,7 @@ class LocalInferenceClient:
     ) -> PromptResult:
         """Multi-turn chat: pass full message list (system/user/assistant)."""
         if self._client is None:
-            await self.start()
+            await self.start(prompt_mode=True)
         api_messages = [m.to_api_dict() for m in messages]
         if not api_messages or api_messages[-1]["role"] == "assistant":
             raise ValueError("chat() requires messages ending with a user message")

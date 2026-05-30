@@ -285,11 +285,15 @@ curl -s http://127.0.0.1:8000/v1/chat/completions -H "Content-Type: application/
 ```
 local-llm/
 ├── README.md
+├── prompt_cli.py          # CLI: one-shot, file, interactive chat
+├── prompt_server.py       # HTTP POST /prompt on localhost
+├── prompts/               # Example prompt + system files
 ├── docker-compose.yml
 ├── requirements.txt
 ├── config.py
 ├── local_inference.py
 ├── normalization_prompt.py
+├── prompt_types.py
 ├── scripts/setup.sh
 ├── scripts/verify_gpu.sh
 └── examples/normalize_batch.py

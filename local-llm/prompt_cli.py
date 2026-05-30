@@ -57,9 +57,10 @@ async def _run_once(args: argparse.Namespace) -> int:
     if not await _preflight():
         return 1
 
+    print("Generating... (first reply after startup can take 1-3 minutes)", flush=True)
+
     try:
         async with LocalInferenceClient() as client:
-            await client.start(prompt_mode=True)
             if args.stream:
 
                 def on_token(t: str) -> None:

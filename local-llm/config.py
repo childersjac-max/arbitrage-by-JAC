@@ -38,7 +38,7 @@ class LocalLLMSettings(BaseSettings):
     local_llm_max_tokens: int = Field(default=512, validation_alias="LOCAL_LLM_MAX_TOKENS")
     local_llm_timeout_sec: float = Field(default=45.0, validation_alias="LOCAL_LLM_TIMEOUT_SEC")
     local_llm_prompt_timeout_sec: float = Field(
-        default=300.0,
+        default=600.0,
         validation_alias="LOCAL_LLM_PROMPT_TIMEOUT_SEC",
     )
     local_llm_max_retries: int = Field(default=3, validation_alias="LOCAL_LLM_MAX_RETRIES")

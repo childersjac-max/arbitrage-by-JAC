@@ -55,34 +55,47 @@ class LocalInferenceClient:
     settings: LocalLLMSettings = field(default_factory=get_settings)
     _client: httpx.AsyncClient | None = field(default=None, repr=False)
     _semaphore: asyncio.Semaphore | None = field(default=None, repr=False)
+    _read_timeout_sec: float | None = field(default=None, repr=False)
 
     async def __aenter__(self) -> LocalInferenceClient:
-        await self.start()
+        await self.start(prompt_mode=True)
         return self
 
     async def __aexit__(self, *args: object) -> None:
         await self.close()
 
     async def start(self, *, prompt_mode: bool = False) -> None:
-        if self._client is not None:
-            return
-        limits = httpx.Limits(
-            max_connections=self.settings.local_llm_max_connections,
-            max_keepalive_connections=self.settings.local_llm_max_connections,
-        )
-        seconds = (
+        read_seconds = (
             self.settings.local_llm_prompt_timeout_sec
             if prompt_mode
             else self.settings.local_llm_timeout_sec
         )
-        timeout = httpx.Timeout(seconds)
+        if self._client is not None and self._read_timeout_sec == read_seconds:
+            return
+        if self._client is not None:
+            await self.close()
+
+        limits = httpx.Limits(
+            max_connections=self.settings.local_llm_max_connections,
+            max_keepalive_connections=self.settings.local_llm_max_connections,
+        )
+        # Explicit read timeout: Ollama can take minutes on first load (esp. CPU/Windows).
+        timeout = httpx.Timeout(
+            connect=30.0,
+            read=read_seconds,
+            write=120.0,
+            pool=30.0,
+        )
+        self._read_timeout_sec = read_seconds
         self._client = httpx.AsyncClient(limits=limits, timeout=timeout)
-        self._semaphore = asyncio.Semaphore(self.settings.local_llm_batch_concurrency)
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(self.settings.local_llm_batch_concurrency)
 
     async def close(self) -> None:
         if self._client is not None:
             await self._client.aclose()
             self._client = None
+        self._read_timeout_sec = None
 
     def _ensure_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -250,8 +263,7 @@ class LocalInferenceClient:
 
         Does not use the normalization system prompt unless you pass system=SYSTEM_PROMPT.
         """
-        if self._client is None:
-            await self.start(prompt_mode=True)
+        await self.start(prompt_mode=True)
         messages = self._build_messages(prompt, system=system, history=history)
         t0 = time.perf_counter()
         content = await self._invoke_messages(
@@ -280,8 +292,7 @@ class LocalInferenceClient:
         on_token: Callable[[str], None] | None = None,
     ) -> PromptResult:
         """Multi-turn chat: pass full message list (system/user/assistant)."""
-        if self._client is None:
-            await self.start(prompt_mode=True)
+        await self.start(prompt_mode=True)
         api_messages = [m.to_api_dict() for m in messages]
         if not api_messages or api_messages[-1]["role"] == "assistant":
             raise ValueError("chat() requires messages ending with a user message")
@@ -322,8 +333,7 @@ class LocalInferenceClient:
         extra_hints: str | None = None,
     ) -> InferenceResult:
         """Normalize raw strings to canonical reference values (JSON mapping)."""
-        if self._semaphore is None:
-            await self.start()
+        await self.start(prompt_mode=False)
         assert self._semaphore is not None
 
         async with self._semaphore:

@@ -10,6 +10,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from paths import ENV_FILE
 
+# Used only if prompts/system_default.txt is missing
+_FALLBACK_SYSTEM = "You are a helpful assistant. Follow the user instructions precisely."
+
 
 class Backend(str, Enum):
     OLLAMA = "ollama"
@@ -63,7 +66,7 @@ class LocalLLMSettings(BaseSettings):
         validation_alias="LOCAL_LLM_PROMPT_TEMPERATURE",
     )
     local_llm_default_system: str = Field(
-        default="You are a helpful assistant. Follow the user instructions precisely.",
+        default=_FALLBACK_SYSTEM,
         validation_alias="LOCAL_LLM_DEFAULT_SYSTEM",
     )
     local_llm_prompt_server_host: str = Field(
@@ -96,3 +99,7 @@ def get_settings() -> LocalLLMSettings:
 def reload_settings() -> LocalLLMSettings:
     get_settings.cache_clear()
     return get_settings()
+
+
+# Fallback only when prompts/system_default.txt is missing
+_FALLBACK_SYSTEM = "You are a helpful assistant. Follow the user instructions precisely."

@@ -20,6 +20,7 @@ import httpx
 
 from config import Backend, LocalLLMSettings, get_settings
 from ollama_check import get_effective_ollama_model
+from prompt_loader import get_default_system_prompt
 from normalization_prompt import (
     SYSTEM_PROMPT,
     build_retry_user_message,
@@ -125,7 +126,7 @@ class LocalInferenceClient:
         history: Sequence[ChatMessage] | None = None,
     ) -> list[dict[str, str]]:
         messages: list[dict[str, str]] = []
-        sys_content = system if system is not None else self.settings.local_llm_default_system
+        sys_content = system if system is not None else get_default_system_prompt()
         if sys_content:
             messages.append({"role": "system", "content": sys_content})
         if history:

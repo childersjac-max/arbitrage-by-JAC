@@ -25,6 +25,7 @@ from config import get_settings, reload_settings
 from paths import ENV_FILE, PACKAGE_DIR
 from local_inference import LocalInferenceClient
 from ollama_check import check_ollama_reachable, format_connection_help
+from prompt_loader import get_default_system_prompt, get_system_prompt_info, system_prompt_path
 from prompt_types import ChatMessage
 
 logging.basicConfig(level=logging.INFO)
@@ -148,11 +149,18 @@ def build_ui() -> gr.Blocks:
                     "First message after startup may take 1–3 minutes."
                 )
                 chatbot = gr.Chatbot(height=420, label="Conversation")
-                with gr.Accordion("Advanced", open=False):
+                with gr.Accordion("Advanced", open=True):
+                    system_prompt_source = gr.Markdown(
+                        f"Edit **`{system_prompt_path()}`** in Notepad, save, then click **Reload system prompt from file**."
+                    )
+                    load_prompt_btn = gr.Button(
+                        "Reload system prompt from file",
+                        variant="secondary",
+                    )
                     system_prompt = gr.Textbox(
                         label="System prompt",
-                        value=get_settings().local_llm_default_system,
-                        lines=3,
+                        value=get_default_system_prompt(),
+                        lines=14,
                     )
                     with gr.Row():
                         temperature = gr.Slider(
@@ -236,15 +244,35 @@ def build_ui() -> gr.Blocks:
                     outputs=[norm_out, norm_meta],
                 )
 
-        async def reload_config() -> tuple[str, str]:
+        def reload_system_prompt_ui() -> tuple[str, str]:
+            text, source = get_system_prompt_info()
+            return text, f"**System prompt:** {source}"
+
+        async def reload_config() -> tuple[str, str, str, str]:
             reload_settings()
             ok, msg = await check_ollama_reachable()
             health = f"✅ {msg}\n\n{_status_markdown()}" if ok else f"❌ {msg}"
-            return _status_markdown(), health
+            prompt_text, prompt_src = reload_system_prompt_ui()
+            return _status_markdown(), health, prompt_text, prompt_src
 
         health_btn.click(check_connection, outputs=health_out)
-        refresh_btn.click(reload_config, outputs=[status_md, health_out])
-        demo.load(check_connection, outputs=health_out)
+        refresh_btn.click(
+            reload_config,
+            outputs=[status_md, health_out, system_prompt, system_prompt_source],
+        )
+        load_prompt_btn.click(
+            reload_system_prompt_ui,
+            outputs=[system_prompt, system_prompt_source],
+        )
+        async def on_page_load() -> tuple[str, str, str]:
+            health = await check_connection()
+            prompt_text, prompt_src = reload_system_prompt_ui()
+            return health, prompt_text, prompt_src
+
+        demo.load(
+            on_page_load,
+            outputs=[health_out, system_prompt, system_prompt_source],
+        )
 
         gr.Markdown(
             "---\n"

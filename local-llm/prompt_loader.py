@@ -3,20 +3,20 @@
 from __future__ import annotations
 
 import os
-from functools import lru_cache
 
 from paths import PACKAGE_DIR
 
 
-@lru_cache
+def system_prompt_path() -> str:
+    rel = os.getenv("LOCAL_LLM_SYSTEM_PROMPT_FILE", "prompts/system_default.txt")
+    return str((PACKAGE_DIR / rel).resolve())
+
+
 def get_default_system_prompt() -> str:
     """
     Default system prompt for chat / prompt_cli / web_app.
 
-    Priority:
-      1. File at LOCAL_LLM_SYSTEM_PROMPT_FILE (relative to local-llm/)
-      2. prompts/system_default.txt
-      3. LOCAL_LLM_DEFAULT_SYSTEM from .env / config fallback
+    Always reads the file fresh (no cache) so edits in Notepad apply after Reload.
     """
     from config import get_settings
 
@@ -26,6 +26,21 @@ def get_default_system_prompt() -> str:
         return path.read_text(encoding="utf-8").strip()
 
     return get_settings().local_llm_default_system
+
+
+def get_system_prompt_info() -> tuple[str, str]:
+    """Return (prompt text, human-readable source description)."""
+    rel = os.getenv("LOCAL_LLM_SYSTEM_PROMPT_FILE", "prompts/system_default.txt")
+    path = PACKAGE_DIR / rel
+    if path.is_file():
+        return path.read_text(encoding="utf-8").strip(), f"Loaded from `{path}`"
+    from config import get_settings
+
+    return (
+        get_settings().local_llm_default_system,
+        "Using `.env` → `LOCAL_LLM_DEFAULT_SYSTEM` (file not found). "
+        f"Create `{path}` or copy from `prompts/system_default.txt`.",
+    )
 
 
 def load_prompt_file(relative_path: str) -> str:

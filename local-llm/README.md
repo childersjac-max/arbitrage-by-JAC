@@ -231,7 +231,9 @@ curl -s http://127.0.0.1:5050/prompt \
 |----------|---------|---------|
 | `LOCAL_LLM_PROMPT_MAX_TOKENS` | `4096` | Max length for free-form replies |
 | `LOCAL_LLM_PROMPT_TEMPERATURE` | `0.7` | Creativity for prompts (normalize still uses `0`) |
-| `LOCAL_LLM_DEFAULT_SYSTEM` | (see `.env.example`) | Default system message for `prompt_cli.py` |
+| `prompts/system_default.txt` | arbitrage/data-engineering system prompt | Edit this file to change default behavior |
+| `LOCAL_LLM_PROMPT_TEMPERATURE` | `0.2` | Low creativity for code/architecture answers |
+| `LOCAL_LLM_SYSTEM_PROMPT_FILE` | `prompts/system_default.txt` | Alternate system prompt file path |
 | `LOCAL_LLM_PROMPT_SERVER_PORT` | `5050` | Port for `prompt_server.py` |
 
 ## Inference tuning (speed + determinism)

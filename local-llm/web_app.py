@@ -104,11 +104,6 @@ async def chat_respond(
     messages.append(ChatMessage("user", message.strip()))
 
     try:
-        await resolve_ollama()
-    except Exception as exc:
-        return format_connection_help(exc)
-
-    try:
         async with LocalInferenceClient() as client:
             result = await client.chat(
                 messages,

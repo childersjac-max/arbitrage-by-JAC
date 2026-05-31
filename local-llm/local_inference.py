@@ -19,7 +19,13 @@ from typing import Any, Mapping, Sequence
 import httpx
 
 from config import Backend, LocalLLMSettings, get_settings
-from ollama_connect import get_effective_ollama_model, get_ollama_base_url, resolve_ollama
+from ollama_connect import (
+    get_effective_ollama_model,
+    get_ollama_base_url,
+    httpx_client,
+    ollama_chat_completion,
+    resolve_ollama,
+)
 from prompt_loader import get_default_system_prompt
 from normalization_prompt import (
     SYSTEM_PROMPT,

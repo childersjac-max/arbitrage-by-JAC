@@ -19,7 +19,7 @@ from typing import Any, Mapping, Sequence
 import httpx
 
 from config import Backend, LocalLLMSettings, get_settings
-from ollama_check import get_effective_ollama_model
+from ollama_connect import get_effective_ollama_model, get_ollama_base_url, resolve_ollama
 from prompt_loader import get_default_system_prompt
 from normalization_prompt import (
     SYSTEM_PROMPT,
@@ -109,7 +109,8 @@ class LocalInferenceClient:
         client = self._ensure_client()
         backend = self.settings.local_llm_backend
         if backend == Backend.OLLAMA:
-            url = f"{self.settings.resolved_base_url()}/api/tags"
+            await resolve_ollama()
+            url = f"{get_ollama_base_url()}/api/tags"
             r = await client.get(url)
             r.raise_for_status()
             return {"backend": "ollama", "status": "ok", "tags": r.json()}
@@ -148,6 +149,7 @@ class LocalInferenceClient:
         backend = self.settings.local_llm_backend
         model = self.settings.resolved_model()
         if backend == Backend.OLLAMA:
+            await resolve_ollama()
             try:
                 model = await get_effective_ollama_model()
             except Exception:
@@ -172,7 +174,8 @@ class LocalInferenceClient:
         )
 
         if backend == Backend.OLLAMA:
-            url = f"{self.settings.resolved_base_url()}/api/chat"
+            base = get_ollama_base_url()
+            url = f"{base}/api/chat"
             body: dict[str, Any] = {
                 "model": model,
                 "stream": stream,
@@ -187,30 +190,39 @@ class LocalInferenceClient:
             if json_mode:
                 body["format"] = "json"
 
-            if not stream:
-                response = await client.post(url, json=body)
-                response.raise_for_status()
-                data = response.json()
-                return str(data.get("message", {}).get("content", ""))
+            last_exc: BaseException | None = None
+            for attempt in range(4):
+                try:
+                    if not stream:
+                        response = await client.post(url, json=body)
+                        response.raise_for_status()
+                        data = response.json()
+                        return str(data.get("message", {}).get("content", ""))
 
-            full: list[str] = []
-            async with client.stream("POST", url, json=body) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    token = chunk.get("message", {}).get("content", "")
-                    if token:
-                        full.append(token)
-                        if on_token:
-                            on_token(token)
-                    if chunk.get("done"):
-                        break
-            return "".join(full)
+                    full: list[str] = []
+                    async with client.stream("POST", url, json=body) as response:
+                        response.raise_for_status()
+                        async for line in response.aiter_lines():
+                            if not line:
+                                continue
+                            try:
+                                chunk = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            token = chunk.get("message", {}).get("content", "")
+                            if token:
+                                full.append(token)
+                                if on_token:
+                                    on_token(token)
+                            if chunk.get("done"):
+                                break
+                    return "".join(full)
+                except Exception as exc:
+                    last_exc = exc
+                    logger.warning("Ollama chat attempt %s failed: %s", attempt + 1, exc)
+                    await resolve_ollama(force=True)
+                    await asyncio.sleep(2.0 * (attempt + 1))
+            raise last_exc or RuntimeError("Ollama chat failed")
 
         url = f"{self.settings.resolved_base_url()}/chat/completions"
         body = {

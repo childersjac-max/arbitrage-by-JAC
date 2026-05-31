@@ -24,7 +24,12 @@ import gradio as gr
 
 from config import get_settings, reload_settings
 from local_inference import LocalInferenceClient
-from ollama_check import check_ollama_reachable, format_connection_help
+from ollama_connect import (
+    check_ollama_reachable,
+    format_connection_help,
+    resolve_ollama,
+    warmup_ollama,
+)
 from paths import ENV_FILE, PACKAGE_DIR
 from prompt_loader import get_system_prompt_info, system_prompt_path
 from prompt_types import ChatMessage
@@ -99,6 +104,11 @@ async def chat_respond(
     messages.append(ChatMessage("user", message.strip()))
 
     try:
+        await resolve_ollama()
+    except Exception as exc:
+        return format_connection_help(exc)
+
+    try:
         async with LocalInferenceClient() as client:
             result = await client.chat(
                 messages,
@@ -156,6 +166,7 @@ def build_ui() -> gr.Blocks:
 
         with gr.Row():
             health_btn = gr.Button("Check Ollama connection", variant="secondary")
+            warmup_btn = gr.Button("Wake up Ollama", variant="secondary")
             refresh_btn = gr.Button("Reload Ollama / config", variant="secondary")
         health_out = gr.Markdown("Click **Check Ollama connection** before your first message.")
 
@@ -296,7 +307,12 @@ def build_ui() -> gr.Blocks:
             reload_settings()
             return await check_connection()
 
+        async def wake_ollama() -> str:
+            ok, msg = await warmup_ollama()
+            return f"✅ {msg}" if ok else f"❌ {msg}"
+
         health_btn.click(check_connection, outputs=health_out)
+        warmup_btn.click(wake_ollama, outputs=health_out)
         refresh_btn.click(reload_ollama_only, outputs=health_out)
         load_prompt_btn.click(
             import_system_prompt_from_file,
@@ -304,7 +320,11 @@ def build_ui() -> gr.Blocks:
         )
 
         async def on_page_load() -> tuple[str, list, str, float, float]:
-            health = await check_connection()
+            ok, warm_msg = await warmup_ollama()
+            if ok:
+                health = f"✅ {warm_msg}\n\n{_status_markdown()}"
+            else:
+                health = f"❌ {warm_msg}"
             state = load_ui_state()
             history = load_chat_history()
             return (

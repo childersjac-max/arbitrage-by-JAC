@@ -7,6 +7,8 @@ Run:
   python web_app.py
 
 Then open http://127.0.0.1:7860 in your browser.
+
+Settings and chat history persist in local-llm/data/ between restarts.
 """
 
 from __future__ import annotations
@@ -17,23 +19,30 @@ import os
 import threading
 import time
 import webbrowser
-from pathlib import Path
 
 import gradio as gr
 
 from config import get_settings, reload_settings
-from paths import ENV_FILE, PACKAGE_DIR
 from local_inference import LocalInferenceClient
 from ollama_check import check_ollama_reachable, format_connection_help
-from prompt_loader import get_default_system_prompt, get_system_prompt_info, system_prompt_path
+from paths import ENV_FILE, PACKAGE_DIR
+from prompt_loader import get_system_prompt_info, system_prompt_path
 from prompt_types import ChatMessage
+from ui_state import (
+    clear_chat_history,
+    load_chat_history,
+    load_ui_state,
+    save_chat_history,
+    save_ui_state,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Always run from local-llm/ so relative paths and .env stay consistent (Windows/Git Bash).
 os.chdir(PACKAGE_DIR)
 reload_settings()
+
+_SAVED = load_ui_state()
 
 
 def _status_markdown() -> str:
@@ -43,6 +52,15 @@ def _status_markdown() -> str:
         f"**Backend:** `{cfg.local_llm_backend.value}` · "
         f"**Model:** `{cfg.ollama_model}` · "
         f"**Ollama:** `{cfg.ollama_host}` · {env_line}"
+    )
+
+
+def _settings_source_markdown(from_file: bool = False) -> str:
+    if from_file:
+        return f"**System prompt:** loaded from `{system_prompt_path()}` and saved as your default."
+    return (
+        "**Settings:** restored from `data/ui_state.json` (your last session). "
+        "Changes auto-save when you send a message or edit Advanced settings."
     )
 
 
@@ -63,9 +81,8 @@ async def chat_respond(
     if not message or not message.strip():
         return ""
 
-    cfg = get_settings()
     messages: list[ChatMessage] = []
-    sys_text = (system_prompt or "").strip() or get_default_system_prompt()
+    sys_text = (system_prompt or "").strip()
     if sys_text:
         messages.append(ChatMessage("system", sys_text))
 
@@ -98,6 +115,8 @@ async def normalize_names(
     fragments_text: str,
     reference_json: str,
 ) -> tuple[str, str]:
+    save_ui_state(fragments_text=fragments_text, reference_json=reference_json)
+
     fragments = [ln.strip() for ln in fragments_text.splitlines() if ln.strip()]
     if not fragments:
         return "", "⚠️ Add at least one raw name (one per line)."
@@ -131,49 +150,49 @@ def build_ui() -> gr.Blocks:
     ) as demo:
         gr.Markdown(
             "# Private Local LLM\n"
-            "Runs entirely on your machine via Ollama. Nothing is sent to cloud AI APIs."
+            "Runs on your machine via Ollama. Settings and chat are saved in `data/`."
         )
         status_md = gr.Markdown(_status_markdown())
 
         with gr.Row():
             health_btn = gr.Button("Check Ollama connection", variant="secondary")
-            refresh_btn = gr.Button("Reload settings", variant="secondary")
-        health_out = gr.Markdown(
-            "Click **Check Ollama connection** before your first message."
-        )
+            refresh_btn = gr.Button("Reload Ollama / config", variant="secondary")
+        health_out = gr.Markdown("Click **Check Ollama connection** before your first message.")
 
         with gr.Tabs():
             with gr.Tab("💬 Chat"):
                 gr.Markdown(
-                    "Ask anything—explanations, code, arbitrage ideas. "
-                    "First message after startup may take 1–3 minutes."
+                    "Chat history is saved automatically to `data/chat_history.json`."
                 )
-                chatbot = gr.Chatbot(height=420, label="Conversation")
+                chatbot = gr.Chatbot(height=420, label="Conversation", value=load_chat_history())
                 with gr.Accordion("Advanced", open=True):
-                    system_prompt_source = gr.Markdown(
-                        f"Edit **`{system_prompt_path()}`** in Notepad, save, then click **Reload system prompt from file**."
-                    )
-                    load_prompt_btn = gr.Button(
-                        "Reload system prompt from file",
-                        variant="secondary",
-                    )
+                    system_prompt_source = gr.Markdown(_settings_source_markdown())
+                    with gr.Row():
+                        load_prompt_btn = gr.Button(
+                            "Import system prompt from file",
+                            variant="secondary",
+                        )
+                        save_settings_btn = gr.Button(
+                            "Save current settings as default",
+                            variant="secondary",
+                        )
                     system_prompt = gr.Textbox(
                         label="System prompt",
-                        value=get_default_system_prompt(),
+                        value=_SAVED["system_prompt"],
                         lines=14,
                     )
                     with gr.Row():
                         temperature = gr.Slider(
                             0,
                             1.5,
-                            value=get_settings().local_llm_prompt_temperature,
+                            value=float(_SAVED["temperature"]),
                             step=0.1,
                             label="Temperature",
                         )
                         max_tokens = gr.Slider(
                             128,
                             8192,
-                            value=min(2048, get_settings().local_llm_prompt_max_tokens),
+                            value=int(_SAVED["max_tokens"]),
                             step=128,
                             label="Max tokens",
                         )
@@ -186,52 +205,76 @@ def build_ui() -> gr.Blocks:
                     send = gr.Button("Send", variant="primary")
                     clear = gr.Button("Clear chat")
 
+                def persist_settings_only(sys_p: str, temp: float, max_t: float) -> str:
+                    save_ui_state(
+                        system_prompt=sys_p,
+                        temperature=temp,
+                        max_tokens=int(max_t),
+                    )
+                    return _settings_source_markdown() + " _(saved just now)_"
+
                 async def user_submit(
                     message: str,
                     history: list,
                     sys_p: str,
                     temp: float,
-                    max_t: int,
-                ) -> tuple[list, str]:
+                    max_t: float,
+                ) -> tuple[list, str, str]:
+                    save_ui_state(
+                        system_prompt=sys_p,
+                        temperature=temp,
+                        max_tokens=int(max_t),
+                    )
                     reply = await chat_respond(message, history, sys_p, temp, max_t)
                     history = history or []
                     history.append([message, reply])
-                    return history, ""
+                    save_chat_history(history)
+                    return history, "", _settings_source_markdown()
+
+                def clear_chat() -> tuple[list, str, str]:
+                    clear_chat_history()
+                    return [], "", _settings_source_markdown()
 
                 send.click(
                     user_submit,
                     inputs=[msg, chatbot, system_prompt, temperature, max_tokens],
-                    outputs=[chatbot, msg],
+                    outputs=[chatbot, msg, system_prompt_source],
                 )
                 msg.submit(
                     user_submit,
                     inputs=[msg, chatbot, system_prompt, temperature, max_tokens],
-                    outputs=[chatbot, msg],
+                    outputs=[chatbot, msg, system_prompt_source],
                 )
-                clear.click(lambda: ([], ""), outputs=[chatbot, msg])
+                clear.click(
+                    clear_chat,
+                    outputs=[chatbot, msg, system_prompt_source],
+                )
+                save_settings_btn.click(
+                    persist_settings_only,
+                    inputs=[system_prompt, temperature, max_tokens],
+                    outputs=[system_prompt_source],
+                )
+                for field in (system_prompt, temperature, max_tokens):
+                    field.change(
+                        persist_settings_only,
+                        inputs=[system_prompt, temperature, max_tokens],
+                        outputs=[system_prompt_source],
+                    )
 
             with gr.Tab("🏷️ Normalize names"):
-                gr.Markdown(
-                    "Map messy sportsbook strings to official names (for your arb pipeline)."
-                )
+                gr.Markdown("Inputs are saved automatically when you click Normalize.")
                 with gr.Row():
                     with gr.Column():
                         fragments_text = gr.Textbox(
                             label="Raw names (one per line)",
                             lines=10,
+                            value=_SAVED.get("fragments_text", ""),
                             placeholder="CHA Hornets\nCharlotte\nLakers -3.5",
                         )
                         reference_json = gr.Textbox(
                             label="Reference JSON (id → official name)",
                             lines=8,
-                            value=json.dumps(
-                                {
-                                    "nba_cha": "Charlotte Hornets",
-                                    "nba_lal": "Los Angeles Lakers",
-                                    "nba_bos": "Boston Celtics",
-                                },
-                                indent=2,
-                            ),
+                            value=_SAVED.get("reference_json", "{}"),
                         )
                         norm_btn = gr.Button("Normalize", variant="primary")
                     with gr.Column():
@@ -244,48 +287,49 @@ def build_ui() -> gr.Blocks:
                     outputs=[norm_out, norm_meta],
                 )
 
-        def reload_system_prompt_ui() -> tuple[str, str]:
-            text, source = get_system_prompt_info()
-            return text, f"**System prompt:** {source}"
+        def import_system_prompt_from_file() -> tuple[str, str]:
+            text, _ = get_system_prompt_info()
+            save_ui_state(system_prompt=text)
+            return text, _settings_source_markdown(from_file=True)
 
-        async def reload_config() -> tuple[str, str, str, str]:
+        async def reload_ollama_only() -> str:
             reload_settings()
-            ok, msg = await check_ollama_reachable()
-            health = f"✅ {msg}\n\n{_status_markdown()}" if ok else f"❌ {msg}"
-            prompt_text, prompt_src = reload_system_prompt_ui()
-            return _status_markdown(), health, prompt_text, prompt_src
+            return await check_connection()
 
         health_btn.click(check_connection, outputs=health_out)
-        refresh_btn.click(
-            reload_config,
-            outputs=[status_md, health_out, system_prompt, system_prompt_source],
-        )
+        refresh_btn.click(reload_ollama_only, outputs=health_out)
         load_prompt_btn.click(
-            reload_system_prompt_ui,
+            import_system_prompt_from_file,
             outputs=[system_prompt, system_prompt_source],
         )
-        async def on_page_load() -> tuple[str, str, str]:
+
+        async def on_page_load() -> tuple[str, list, str, float, float]:
             health = await check_connection()
-            prompt_text, prompt_src = reload_system_prompt_ui()
-            return health, prompt_text, prompt_src
+            state = load_ui_state()
+            history = load_chat_history()
+            return (
+                health,
+                history,
+                _settings_source_markdown(),
+                float(state["temperature"]),
+                float(state["max_tokens"]),
+            )
 
         demo.load(
             on_page_load,
-            outputs=[health_out, system_prompt, system_prompt_source],
+            outputs=[health_out, chatbot, system_prompt_source, temperature, max_tokens],
         )
 
         gr.Markdown(
             "---\n"
-            "**Tips:** Keep Ollama running in the system tray. "
-            f"CLI: `python prompt_cli.py --interactive` · Port: "
-            f"`{get_settings().local_llm_ui_host}:{get_settings().local_llm_ui_port}`"
+            f"**Saved files:** `data/ui_state.json` · `data/chat_history.json` · "
+            f"Port `{get_settings().local_llm_ui_host}:{get_settings().local_llm_ui_port}`"
         )
 
     return demo
 
 
 def _open_browser_when_ready(url: str, delay_sec: float = 2.0) -> None:
-    """Open default browser (works when Gradio inbrowser=True fails on Windows/Git Bash)."""
     time.sleep(delay_sec)
     webbrowser.open(url)
 
@@ -305,6 +349,7 @@ def main() -> None:
     demo = build_ui()
     demo.queue(default_concurrency_limit=1)
     print(f"\n>>> Open in your browser: {url}\n")
+    print(f">>> Settings: {PACKAGE_DIR / 'data' / 'ui_state.json'}\n")
     demo.launch(
         server_name=host,
         server_port=port,

@@ -163,8 +163,10 @@ Opens **http://127.0.0.1:7860** (only on your PC; not exposed to the internet).
 
 | Tab | Use |
 |-----|-----|
-| **Chat** | Ask your private AI anything (default system prompt: `prompts/system_default.txt`, temperature **0.2**) |
+| **Chat** | Ask your private AI anything; **chat history auto-saves** to `data/chat_history.json` |
 | **Normalize names** | Paste raw book strings + reference JSON → mapping |
+
+**Persistent defaults:** Your last system prompt, temperature, max tokens, and chat are restored from `data/ui_state.json` and `data/chat_history.json` every time you start the app. Edit Advanced settings—they auto-save on change or when you send a message.
 
 Set `LOCAL_LLM_UI_PORT` in `.env` if 7860 is already in use.
 

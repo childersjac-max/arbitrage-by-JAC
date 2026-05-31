@@ -3,3 +3,5 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+data/ui_state.json
+data/chat_history.json

@@ -99,7 +99,3 @@ def get_settings() -> LocalLLMSettings:
 def reload_settings() -> LocalLLMSettings:
     get_settings.cache_clear()
     return get_settings()
-
-
-# Fallback only when prompts/system_default.txt is missing
-_FALLBACK_SYSTEM = "You are a helpful assistant. Follow the user instructions precisely."

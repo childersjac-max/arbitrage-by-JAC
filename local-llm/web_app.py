@@ -32,15 +32,16 @@ logger = logging.getLogger(__name__)
 
 # Always run from local-llm/ so relative paths and .env stay consistent (Windows/Git Bash).
 os.chdir(PACKAGE_DIR)
-settings = reload_settings()
+reload_settings()
 
 
 def _status_markdown() -> str:
+    cfg = get_settings()
     env_line = f"✅ `{ENV_FILE}`" if ENV_FILE.is_file() else f"⚠️ missing `{ENV_FILE}`"
     return (
-        f"**Backend:** `{settings.local_llm_backend.value}` · "
-        f"**Model:** `{settings.ollama_model}` · "
-        f"**Ollama:** `{settings.ollama_host}` · {env_line}"
+        f"**Backend:** `{cfg.local_llm_backend.value}` · "
+        f"**Model:** `{cfg.ollama_model}` · "
+        f"**Ollama:** `{cfg.ollama_host}` · {env_line}"
     )
 
 
@@ -61,8 +62,9 @@ async def chat_respond(
     if not message or not message.strip():
         return ""
 
+    cfg = get_settings()
     messages: list[ChatMessage] = []
-    sys_text = (system_prompt or "").strip() or settings.local_llm_default_system
+    sys_text = (system_prompt or "").strip() or get_default_system_prompt()
     if sys_text:
         messages.append(ChatMessage("system", sys_text))
 
@@ -113,7 +115,7 @@ async def normalize_names(
         pretty = json.dumps(result.mapping, indent=2, ensure_ascii=False)
         meta = (
             f"✅ Done in {result.latency_ms:.0f} ms · "
-            f"attempts={result.attempts} · model={settings.ollama_model}"
+            f"attempts={result.attempts} · model={get_settings().ollama_model}"
         )
         return pretty, meta
     except Exception as exc:
@@ -235,19 +237,20 @@ def build_ui() -> gr.Blocks:
                 )
 
         async def reload_config() -> tuple[str, str]:
-            global settings
-            settings = reload_settings()
+            reload_settings()
             ok, msg = await check_ollama_reachable()
             health = f"✅ {msg}\n\n{_status_markdown()}" if ok else f"❌ {msg}"
             return _status_markdown(), health
 
         health_btn.click(check_connection, outputs=health_out)
         refresh_btn.click(reload_config, outputs=[status_md, health_out])
+        demo.load(check_connection, outputs=health_out)
 
         gr.Markdown(
             "---\n"
             "**Tips:** Keep Ollama running in the system tray. "
-            f"CLI: `python prompt_cli.py --interactive` · Port: `{settings.local_llm_ui_host}:{settings.local_llm_ui_port}`"
+            f"CLI: `python prompt_cli.py --interactive` · Port: "
+            f"`{get_settings().local_llm_ui_host}:{get_settings().local_llm_ui_port}`"
         )
 
     return demo
@@ -260,8 +263,9 @@ def _open_browser_when_ready(url: str, delay_sec: float = 2.0) -> None:
 
 
 def main() -> None:
-    host = settings.local_llm_ui_host
-    port = settings.local_llm_ui_port
+    cfg = get_settings()
+    host = cfg.local_llm_ui_host
+    port = cfg.local_llm_ui_port
     url = f"http://{host}:{port}"
 
     threading.Thread(

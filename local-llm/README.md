@@ -163,7 +163,7 @@ Opens **http://127.0.0.1:7860** (only on your PC; not exposed to the internet).
 
 | Tab | Use |
 |-----|-----|
-| **Chat** | Ask your private AI anything |
+| **Chat** | Ask your private AI anything (default system prompt: `prompts/system_default.txt`, temperature **0.2**) |
 | **Normalize names** | Paste raw book strings + reference JSON → mapping |
 
 Set `LOCAL_LLM_UI_PORT` in `.env` if 7860 is already in use.

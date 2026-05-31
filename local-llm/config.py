@@ -59,7 +59,7 @@ class LocalLLMSettings(BaseSettings):
         validation_alias="LOCAL_LLM_PROMPT_MAX_TOKENS",
     )
     local_llm_prompt_temperature: float = Field(
-        default=0.7,
+        default=0.2,
         validation_alias="LOCAL_LLM_PROMPT_TEMPERATURE",
     )
     local_llm_default_system: str = Field(

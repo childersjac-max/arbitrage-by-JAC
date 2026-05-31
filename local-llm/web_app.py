@@ -33,6 +33,12 @@ from ollama_connect import (
 from paths import ENV_FILE, PACKAGE_DIR
 from prompt_loader import get_system_prompt_info, system_prompt_path
 from prompt_types import ChatMessage
+from architect_output import (
+    default_mega_prompt_path,
+    load_mega_prompt_file,
+    save_architect_result,
+    save_mega_prompt_file,
+)
 from architect_pipeline import run_architect
 from ui_state import (
     clear_chat_history,

@@ -165,6 +165,7 @@ Opens **http://127.0.0.1:7860** (only on your PC; not exposed to the internet).
 |-----|-----|
 | **Chat** | Ask your private AI anything; **chat history auto-saves** to `data/chat_history.json` |
 | **Normalize names** | Paste raw book strings + reference JSON → mapping |
+| **Architect (8B)** | Paste a huge spec → automatic JSON plan + phased code generation |
 
 **Persistent defaults:** Your last system prompt, temperature, max tokens, and chat are restored from `data/ui_state.json` and `data/chat_history.json` every time you start the app. Edit Advanced settings—they auto-save on change or when you send a message.
 

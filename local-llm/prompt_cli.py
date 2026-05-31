@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -194,12 +195,32 @@ def main() -> int:
         action="store_true",
         help="Only test Ollama connection, then exit",
     )
+    parser.add_argument(
+        "--architect",
+        action="store_true",
+        help="Run multi-phase architect pipeline (for large project prompts)",
+    )
     args = parser.parse_args()
 
     if args.check:
         ok, msg = asyncio.run(check_ollama_reachable())
         print(msg if ok else msg, file=sys.stderr if not ok else sys.stdout)
         return 0 if ok else 1
+
+    if getattr(args, "architect", False):
+        mega = args.prompt
+        if args.file:
+            mega = _read_prompt_file(Path(args.file))
+        if not mega.strip():
+            print("Error: provide --architect with a prompt or --file", file=sys.stderr)
+            return 1
+        result = asyncio.run(run_architect(mega))
+        print(json.dumps(result.plan_json, indent=2))
+        print("\n" + "=" * 60 + "\n")
+        for p in result.phases:
+            print(f"\n### PHASE {p.step}: {p.title}\n")
+            print(p.content)
+        return 0
 
     if args.interactive:
         return asyncio.run(_run_interactive(args))

@@ -24,6 +24,7 @@ from ollama_connect import (
     get_ollama_base_url,
     httpx_client,
     ollama_chat_completion,
+    ollama_model_options,
     resolve_ollama,
 )
 from prompt_loader import get_default_system_prompt

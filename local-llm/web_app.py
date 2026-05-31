@@ -33,6 +33,7 @@ from ollama_connect import (
 from paths import ENV_FILE, PACKAGE_DIR
 from prompt_loader import get_system_prompt_info, system_prompt_path
 from prompt_types import ChatMessage
+from architect_pipeline import run_architect
 from ui_state import (
     clear_chat_history,
     load_chat_history,
@@ -45,6 +46,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 os.chdir(PACKAGE_DIR)
+# Prevent corporate/VPN proxies from breaking localhost (curl works, Python httpx often didn't).
+_no = os.environ.get("NO_PROXY", "")
+_extra = "127.0.0.1,localhost,127.0.0.1:11434"
+os.environ["NO_PROXY"] = ",".join(filter(None, {_no, _extra} if _no else {_extra}))
 reload_settings()
 
 _SAVED = load_ui_state()
@@ -266,6 +271,61 @@ def build_ui() -> gr.Blocks:
                         inputs=[system_prompt, temperature, max_tokens],
                         outputs=[system_prompt_source],
                     )
+
+            with gr.Tab("🏗️ Architect (8B)"):
+                gr.Markdown(
+                    "Paste a **large** project prompt. The 8B model runs in **phases**: "
+                    "JSON plan first, then one implementation chunk per phase. "
+                    "Uses `prompts/system_8b_architect.txt` and saves your full prompt to "
+                    "`data/last_mega_prompt.txt`."
+                )
+                mega_in = gr.Textbox(
+                    label="Mega prompt",
+                    lines=16,
+                    placeholder="Paste your full architecture / scraping / arbitrage spec here…",
+                )
+                arch_phases = gr.Slider(
+                    2,
+                    8,
+                    value=int(get_settings().architect_max_phases),
+                    step=1,
+                    label="Max implementation phases",
+                )
+                arch_run = gr.Button("Run phased architect", variant="primary")
+                arch_status = gr.Markdown()
+                arch_plan = gr.Code(label="Plan JSON", language="json")
+                arch_output = gr.Textbox(
+                    label="Generated output (all phases)",
+                    lines=24,
+                    max_lines=60,
+                )
+
+                async def run_architect_ui(mega: str, n_phases: float) -> tuple[str, str, str]:
+                    if not (mega or "").strip():
+                        return "⚠️ Paste a prompt first.", "{}", ""
+                    await warmup_ollama()
+                    try:
+                        result = await run_architect(mega, max_phases=int(n_phases))
+                    except Exception as exc:
+                        return f"❌ {exc}", "{}", ""
+                    plan_str = json.dumps(result.plan_json, indent=2)
+                    chunks = [f"=== PLAN ===\n{plan_str}\n"]
+                    for p in result.phases:
+                        chunks.append(
+                            f"\n\n=== PHASE {p.step}: {p.title} ({p.latency_ms:.0f} ms) ===\n{p.content}"
+                        )
+                    total_ms = sum(p.latency_ms for p in result.phases)
+                    status = (
+                        f"✅ Done — {len(result.phases)} phase(s), ~{total_ms/1000:.1f}s generation. "
+                        "Copy code into `harvester/` under your repo."
+                    )
+                    return status, plan_str, "".join(chunks)
+
+                arch_run.click(
+                    run_architect_ui,
+                    inputs=[mega_in, arch_phases],
+                    outputs=[arch_status, arch_plan, arch_output],
+                )
 
             with gr.Tab("🏷️ Normalize names"):
                 gr.Markdown("Inputs are saved automatically when you click Normalize.")

@@ -80,6 +80,17 @@ class LocalLLMSettings(BaseSettings):
     local_llm_ui_host: str = Field(default="127.0.0.1", validation_alias="LOCAL_LLM_UI_HOST")
     local_llm_ui_port: int = Field(default=7860, validation_alias="LOCAL_LLM_UI_PORT")
 
+    # Ollama tuning for 8B (larger context + steadier codegen)
+    ollama_num_ctx: int = Field(default=8192, validation_alias="OLLAMA_NUM_CTX")
+    ollama_top_p: float = Field(default=0.9, validation_alias="OLLAMA_TOP_P")
+    ollama_repeat_penalty: float = Field(default=1.1, validation_alias="OLLAMA_REPEAT_PENALTY")
+
+    # Multi-phase architect (large prompts)
+    architect_max_phases: int = Field(default=5, validation_alias="ARCHITECT_MAX_PHASES")
+    architect_plan_max_tokens: int = Field(default=1024, validation_alias="ARCHITECT_PLAN_MAX_TOKENS")
+    architect_phase_max_tokens: int = Field(default=2048, validation_alias="ARCHITECT_PHASE_MAX_TOKENS")
+    architect_temperature: float = Field(default=0.15, validation_alias="ARCHITECT_TEMPERATURE")
+
     def resolved_model(self) -> str:
         if self.local_llm_backend == Backend.OLLAMA:
             return self.ollama_model

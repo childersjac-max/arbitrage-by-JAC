@@ -5,3 +5,4 @@ __pycache__/
 .pytest_cache/
 data/ui_state.json
 data/chat_history.json
+data/last_mega_prompt.txt

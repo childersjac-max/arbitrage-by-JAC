@@ -19,6 +19,7 @@ from pathlib import Path
 
 import httpx
 
+from architect_pipeline import run_architect
 from local_inference import LocalInferenceClient
 from ollama_check import check_ollama_reachable, format_connection_help
 from prompt_types import ChatMessage

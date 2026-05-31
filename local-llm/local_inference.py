@@ -95,7 +95,7 @@ class LocalInferenceClient:
             pool=30.0,
         )
         self._read_timeout_sec = read_seconds
-        self._client = httpx.AsyncClient(limits=limits, timeout=timeout)
+        self._client = httpx_client(limits=limits, timeout=timeout)
         if self._semaphore is None:
             self._semaphore = asyncio.Semaphore(self.settings.local_llm_batch_concurrency)
 
@@ -180,55 +180,43 @@ class LocalInferenceClient:
         )
 
         if backend == Backend.OLLAMA:
+            if not stream:
+                return await ollama_chat_completion(
+                    messages,
+                    model=model,
+                    temperature=temp,
+                    max_tokens=tokens,
+                    json_mode=json_mode,
+                )
+
             base = get_ollama_base_url()
             url = f"{base}/api/chat"
-            body: dict[str, Any] = {
+            body = {
                 "model": model,
-                "stream": stream,
+                "stream": True,
                 "messages": messages,
-                "options": {
-                    "temperature": temp,
-                    "num_predict": tokens,
-                    "top_p": 1.0,
-                    "repeat_penalty": 1.0,
-                },
+                "options": ollama_model_options(tokens, temperature=temp),
             }
             if json_mode:
                 body["format"] = "json"
-
-            last_exc: BaseException | None = None
-            for attempt in range(4):
-                try:
-                    if not stream:
-                        response = await client.post(url, json=body)
-                        response.raise_for_status()
-                        data = response.json()
-                        return str(data.get("message", {}).get("content", ""))
-
-                    full: list[str] = []
-                    async with client.stream("POST", url, json=body) as response:
-                        response.raise_for_status()
-                        async for line in response.aiter_lines():
-                            if not line:
-                                continue
-                            try:
-                                chunk = json.loads(line)
-                            except json.JSONDecodeError:
-                                continue
-                            token = chunk.get("message", {}).get("content", "")
-                            if token:
-                                full.append(token)
-                                if on_token:
-                                    on_token(token)
-                            if chunk.get("done"):
-                                break
-                    return "".join(full)
-                except Exception as exc:
-                    last_exc = exc
-                    logger.warning("Ollama chat attempt %s failed: %s", attempt + 1, exc)
-                    await resolve_ollama(force=True)
-                    await asyncio.sleep(2.0 * (attempt + 1))
-            raise last_exc or RuntimeError("Ollama chat failed")
+            full: list[str] = []
+            async with client.stream("POST", url, json=body) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    token = chunk.get("message", {}).get("content", "")
+                    if token:
+                        full.append(token)
+                        if on_token:
+                            on_token(token)
+                    if chunk.get("done"):
+                        break
+            return "".join(full)
 
         url = f"{self.settings.resolved_base_url()}/chat/completions"
         body = {

@@ -83,6 +83,22 @@ def _fetch_tags_urllib(host: str) -> list[str]:
     return _parse_tags_json(data)
 
 
+def ollama_model_options(
+    num_predict: int,
+    *,
+    temperature: float | None = None,
+) -> dict[str, Any]:
+    settings = get_settings()
+    temp = temperature if temperature is not None else settings.local_llm_prompt_temperature
+    return {
+        "temperature": temp,
+        "num_predict": num_predict,
+        "top_p": settings.ollama_top_p,
+        "repeat_penalty": settings.ollama_repeat_penalty,
+        "num_ctx": settings.ollama_num_ctx,
+    }
+
+
 def _chat_urllib(host: str, body: dict[str, Any]) -> str:
     url = f"{host.rstrip('/')}/api/chat"
     payload = json.dumps(body).encode("utf-8")
@@ -210,12 +226,7 @@ async def ollama_chat_completion(
         "model": model,
         "stream": False,
         "messages": messages,
-        "options": {
-            "temperature": temperature,
-            "num_predict": max_tokens,
-            "top_p": 1.0,
-            "repeat_penalty": 1.0,
-        },
+        "options": ollama_model_options(max_tokens, temperature=temperature),
     }
     if json_mode:
         body["format"] = "json"

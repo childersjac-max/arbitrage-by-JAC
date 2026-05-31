@@ -279,58 +279,131 @@ def build_ui() -> gr.Blocks:
                     )
 
             with gr.Tab("🏗️ Architect (8B)"):
+                _mega_path = str(default_mega_prompt_path())
                 gr.Markdown(
-                    "Paste a **large** project prompt. The 8B model runs in **phases**: "
-                    "JSON plan first, then one implementation chunk per phase. "
-                    "Uses `prompts/system_8b_architect.txt` and saves your full prompt to "
-                    "`data/last_mega_prompt.txt`."
+                    f"""
+### Easy mode (3 steps)
+1. **Open Ollama** (Start menu) — leave it running  
+2. **Edit your prompt** — button below opens `prompts/mega_prompt.txt` in Notepad (or edit the big box)  
+3. **Click the green button** — wait 5–15 min — results auto-save to **`harvester/generated/`**
+
+*Easiest of all:* double-click **`scripts/run_architect_easy.bat`** in File Explorer (no browser).
+"""
                 )
+                with gr.Row():
+                    open_notepad_btn = gr.Button("📝 Open prompt file (Notepad)", variant="secondary")
+                    reload_file_btn = gr.Button("↻ Reload my prompt file", variant="secondary")
+                    save_file_btn = gr.Button("💾 Save box → prompt file", variant="secondary")
                 mega_in = gr.Textbox(
-                    label="Mega prompt",
-                    lines=16,
-                    placeholder="Paste your full architecture / scraping / arbitrage spec here…",
+                    label="Your big prompt (same as mega_prompt.txt)",
+                    lines=14,
+                    value=load_mega_prompt_file(),
                 )
                 arch_phases = gr.Slider(
                     2,
                     8,
                     value=int(get_settings().architect_max_phases),
                     step=1,
-                    label="Max implementation phases",
+                    label="How many build steps? (start with 5)",
                 )
-                arch_run = gr.Button("Run phased architect", variant="primary")
-                arch_status = gr.Markdown()
+                auto_save = gr.Checkbox(
+                    value=True,
+                    label="Automatically save results to harvester/generated/ (recommended)",
+                )
+                arch_run = gr.Button("▶ START — Run my big prompt", variant="primary", size="lg")
+                arch_status = gr.Markdown("Ready. Click **START** when Ollama is open.")
                 arch_plan = gr.Code(label="Plan JSON", language="json")
                 arch_output = gr.Textbox(
-                    label="Generated output (all phases)",
-                    lines=24,
-                    max_lines=60,
+                    label="Preview (full files are on disk after run)",
+                    lines=12,
+                    max_lines=40,
+                )
+                arch_folder = gr.Textbox(
+                    label="Saved folder (open in File Explorer)",
+                    interactive=False,
                 )
 
-                async def run_architect_ui(mega: str, n_phases: float) -> tuple[str, str, str]:
+                def open_prompt_hint() -> str:
+                    path = default_mega_prompt_path()
+                    return (
+                        f"**Notepad:** edit and save `{path}` then click **Reload my prompt file**.\n\n"
+                        f"Or run: `notepad \"{path}\"`"
+                    )
+
+                open_notepad_btn.click(
+                    open_prompt_hint,
+                    outputs=[arch_status],
+                )
+                reload_file_btn.click(
+                    lambda: load_mega_prompt_file(),
+                    outputs=[mega_in],
+                )
+
+                def save_box_to_file(text: str) -> str:
+                    path = save_mega_prompt_file(text)
+                    return f"✅ Saved to `{path}`"
+
+                save_file_btn.click(save_box_to_file, inputs=[mega_in], outputs=[arch_status])
+
+                async def run_architect_ui(
+                    mega: str,
+                    n_phases: float,
+                    do_save: bool,
+                ):
                     if not (mega or "").strip():
-                        return "⚠️ Paste a prompt first.", "{}", ""
-                    await warmup_ollama()
+                        yield "⚠️ Write a prompt first (or click Reload my prompt file).", "{}", "", ""
+                        return
+                    yield "⏳ Connecting to Ollama…", "{}", "", ""
+                    ok, warm = await warmup_ollama()
+                    if not ok:
+                        yield f"❌ {warm}", "{}", "", ""
+                        return
+                    yield f"✅ {warm}\n\n⏳ Running architect — **do not close Git Bash**. This takes several minutes.", "{}", "", ""
+
+                    logs: list[str] = []
+
+                    def progress(msg: str) -> None:
+                        logs.append(msg)
+
                     try:
-                        result = await run_architect(mega, max_phases=int(n_phases))
+                        save_mega_prompt_file(mega)
+                        result = await run_architect(
+                            mega,
+                            max_phases=int(n_phases),
+                            on_progress=progress,
+                        )
                     except Exception as exc:
-                        return f"❌ {exc}", "{}", ""
+                        yield f"❌ {exc}", "{}", "", ""
+                        return
+
                     plan_str = json.dumps(result.plan_json, indent=2)
-                    chunks = [f"=== PLAN ===\n{plan_str}\n"]
+                    preview_parts = [f"=== PLAN ===\n{plan_str}\n"]
                     for p in result.phases:
-                        chunks.append(
-                            f"\n\n=== PHASE {p.step}: {p.title} ({p.latency_ms:.0f} ms) ===\n{p.content}"
+                        preview_parts.append(
+                            f"\n\n=== PHASE {p.step}: {p.title} ===\n{p.content[:2000]}..."
+                            if len(p.content) > 2000
+                            else f"\n\n=== PHASE {p.step}: {p.title} ===\n{p.content}"
                         )
                     total_ms = sum(p.latency_ms for p in result.phases)
+                    folder_line = ""
+                    out_dir_str = ""
+                    if do_save:
+                        saved = save_architect_result(result)
+                        out_dir_str = str(saved)
+                        folder_line = f"\n\n📁 **Open this folder:** `{saved}`"
+                    log_text = "\n".join(f"- {x}" for x in logs)
                     status = (
-                        f"✅ Done — {len(result.phases)} phase(s), ~{total_ms/1000:.1f}s generation. "
-                        "Copy code into `harvester/` under your repo."
+                        f"✅ **Finished** — {len(result.phases)} phase(s) in ~{total_ms/1000:.1f}s\n\n"
+                        f"{log_text}{folder_line}\n\n"
+                        "In File Explorer go to `harvester` → `generated` → newest date folder. "
+                        "Read `README.txt` first."
                     )
-                    return status, plan_str, "".join(chunks)
+                    yield status, plan_str, "".join(preview_parts), out_dir_str
 
                 arch_run.click(
                     run_architect_ui,
-                    inputs=[mega_in, arch_phases],
-                    outputs=[arch_status, arch_plan, arch_output],
+                    inputs=[mega_in, arch_phases, auto_save],
+                    outputs=[arch_status, arch_plan, arch_output, arch_folder],
                 )
 
             with gr.Tab("🏷️ Normalize names"):

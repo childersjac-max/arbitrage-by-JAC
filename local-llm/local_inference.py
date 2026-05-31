@@ -19,6 +19,7 @@ from typing import Any, Mapping, Sequence
 import httpx
 
 from config import Backend, LocalLLMSettings, get_settings
+from ollama_check import get_effective_ollama_model
 from normalization_prompt import (
     SYSTEM_PROMPT,
     build_retry_user_message,
@@ -145,6 +146,11 @@ class LocalInferenceClient:
         client = self._ensure_client()
         backend = self.settings.local_llm_backend
         model = self.settings.resolved_model()
+        if backend == Backend.OLLAMA:
+            try:
+                model = await get_effective_ollama_model()
+            except Exception:
+                model = self.settings.ollama_model
         temp = (
             temperature
             if temperature is not None

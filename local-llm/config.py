@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from enum import Enum
+from functools import lru_cache
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from paths import ENV_FILE
 
 
 class Backend(str, Enum):
@@ -15,7 +19,7 @@ class Backend(str, Enum):
 
 class LocalLLMSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ENV_FILE) if ENV_FILE.is_file() else None,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -24,7 +28,7 @@ class LocalLLMSettings(BaseSettings):
 
     ollama_host: str = Field(default="http://127.0.0.1:11434", validation_alias="OLLAMA_HOST")
     ollama_model: str = Field(
-        default="llama3.3:70b-instruct-q4_K_M",
+        default="llama3.1:8b-instruct-q4_K_M",
         validation_alias="OLLAMA_MODEL",
     )
 
@@ -84,5 +88,11 @@ class LocalLLMSettings(BaseSettings):
         return self.vllm_base_url.rstrip("/")
 
 
+@lru_cache
 def get_settings() -> LocalLLMSettings:
     return LocalLLMSettings()
+
+
+def reload_settings() -> LocalLLMSettings:
+    get_settings.cache_clear()
+    return get_settings()

@@ -13,11 +13,16 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+import os
+import threading
+import time
+import webbrowser
+from pathlib import Path
 
 import gradio as gr
 
-from config import get_settings
+from config import get_settings, reload_settings
+from paths import ENV_FILE, PACKAGE_DIR
 from local_inference import LocalInferenceClient
 from ollama_check import check_ollama_reachable, format_connection_help
 from prompt_types import ChatMessage
@@ -25,14 +30,17 @@ from prompt_types import ChatMessage
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-settings = get_settings()
+# Always run from local-llm/ so relative paths and .env stay consistent (Windows/Git Bash).
+os.chdir(PACKAGE_DIR)
+settings = reload_settings()
 
 
 def _status_markdown() -> str:
+    env_line = f"✅ `{ENV_FILE}`" if ENV_FILE.is_file() else f"⚠️ missing `{ENV_FILE}`"
     return (
         f"**Backend:** `{settings.local_llm_backend.value}` · "
         f"**Model:** `{settings.ollama_model}` · "
-        f"**Ollama:** `{settings.ollama_host}`"
+        f"**Ollama:** `{settings.ollama_host}` · {env_line}"
     )
 
 
@@ -52,10 +60,6 @@ async def chat_respond(
 ) -> str:
     if not message or not message.strip():
         return ""
-
-    ok, msg = await check_ollama_reachable()
-    if not ok:
-        return f"⚠️ {msg}"
 
     messages: list[ChatMessage] = []
     sys_text = (system_prompt or "").strip() or settings.local_llm_default_system
@@ -103,10 +107,6 @@ async def normalize_names(
     except json.JSONDecodeError as exc:
         return "", f"⚠️ Invalid reference JSON: {exc}"
 
-    ok, msg = await check_ollama_reachable()
-    if not ok:
-        return "", f"⚠️ {msg}"
-
     try:
         async with LocalInferenceClient() as client:
             result = await client.normalize_batch(fragments, reference)
@@ -130,11 +130,14 @@ def build_ui() -> gr.Blocks:
             "# Private Local LLM\n"
             "Runs entirely on your machine via Ollama. Nothing is sent to cloud AI APIs."
         )
-        gr.Markdown(_status_markdown())
+        status_md = gr.Markdown(_status_markdown())
 
         with gr.Row():
             health_btn = gr.Button("Check Ollama connection", variant="secondary")
-        health_out = gr.Markdown()
+            refresh_btn = gr.Button("Reload settings", variant="secondary")
+        health_out = gr.Markdown(
+            "Click **Check Ollama connection** before your first message."
+        )
 
         with gr.Tabs():
             with gr.Tab("💬 Chat"):
@@ -146,21 +149,21 @@ def build_ui() -> gr.Blocks:
                 with gr.Accordion("Advanced", open=False):
                     system_prompt = gr.Textbox(
                         label="System prompt",
-                        value=settings.local_llm_default_system,
+                        value=get_settings().local_llm_default_system,
                         lines=3,
                     )
                     with gr.Row():
                         temperature = gr.Slider(
                             0,
                             1.5,
-                            value=settings.local_llm_prompt_temperature,
+                            value=get_settings().local_llm_prompt_temperature,
                             step=0.1,
                             label="Temperature",
                         )
                         max_tokens = gr.Slider(
                             128,
                             8192,
-                            value=min(2048, settings.local_llm_prompt_max_tokens),
+                            value=min(2048, get_settings().local_llm_prompt_max_tokens),
                             step=128,
                             label="Max tokens",
                         )
@@ -231,7 +234,15 @@ def build_ui() -> gr.Blocks:
                     outputs=[norm_out, norm_meta],
                 )
 
+        async def reload_config() -> tuple[str, str]:
+            global settings
+            settings = reload_settings()
+            ok, msg = await check_ollama_reachable()
+            health = f"✅ {msg}\n\n{_status_markdown()}" if ok else f"❌ {msg}"
+            return _status_markdown(), health
+
         health_btn.click(check_connection, outputs=health_out)
+        refresh_btn.click(reload_config, outputs=[status_md, health_out])
 
         gr.Markdown(
             "---\n"

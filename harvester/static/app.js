@@ -73,20 +73,58 @@ function channelLabel(channel) {
   return "Via Odds API";
 }
 
-function renderOpportunities(opportunities) {
+function renderScannedEvents(events, summary) {
   el.list.innerHTML = "";
-  if (!opportunities.length) {
+  if (!events.length) {
     el.empty.classList.remove("hidden");
     el.list.classList.add("hidden");
     const label = state.view === "today" ? "today" : "tomorrow";
-    el.emptyMsg.textContent = `No opportunities for ${label}.`;
+    if (summary && summary.events_total > 0) {
+      el.emptyMsg.textContent = `No games scheduled for ${label} in this sport.`;
+      el.empty.querySelector(".empty-hint").textContent =
+        `Scanned ${summary.events_total} total event(s) · ${summary.sources_loaded} source(s) loaded. Try Tomorrow tab.`;
+    } else {
+      el.emptyMsg.textContent = `No data for ${label}.`;
+    }
     return;
   }
 
   el.empty.classList.add("hidden");
   el.list.classList.remove("hidden");
 
-  opportunities.forEach((opp) => {
+  events.forEach((ev) => {
+    const row = document.createElement("div");
+    row.className = ev.is_opportunity ? "opp-row" : "opp-row opp-row--scan";
+    let right = "";
+    if (ev.is_opportunity) {
+      right = `<span class="opp-yield">${formatPct(ev.yield_pct)}</span>`;
+    } else if (ev.overround_pct != null) {
+      right = `<span class="opp-market">+${ev.overround_pct.toFixed(2)}% vig</span>`;
+    } else {
+      right = `<span class="opp-market">No arb</span>`;
+    }
+    row.innerHTML = `
+      <div>
+        <div class="opp-event">${escapeHtml(ev.event_name)}</div>
+        <div class="opp-meta">${escapeHtml(ev.sport_key)} · ${formatCommence(ev.commence_time)} · ${ev.books_count} books</div>
+      </div>
+      <span class="opp-market">${escapeHtml(ev.market_type)}</span>
+      ${right}
+    `;
+    if (ev.is_opportunity && ev.legs && ev.legs.length) {
+      row.addEventListener("click", () => openSlip(ev));
+      row.style.cursor = "pointer";
+    }
+    el.list.appendChild(row);
+  });
+}
+
+function renderOpportunities(opportunities, scannedEvents, summary) {
+  if (opportunities.length) {
+    el.list.innerHTML = "";
+    el.empty.classList.add("hidden");
+    el.list.classList.remove("hidden");
+    opportunities.forEach((opp) => {
     const row = document.createElement("div");
     row.className = "opp-row";
     const method = opp.arb_method ? ` · ${opp.arb_method}` : "";
@@ -100,7 +138,10 @@ function renderOpportunities(opportunities) {
     `;
     row.addEventListener("click", () => openSlip(opp));
     el.list.appendChild(row);
-  });
+    });
+    return;
+  }
+  renderScannedEvents(scannedEvents || [], summary);
 }
 
 function renderSources(sources) {
@@ -218,7 +259,16 @@ function applyPayload(data) {
   }
 
   if (state.view === "today" || state.view === "tomorrow") {
-    renderOpportunities(data.opportunities || []);
+    renderOpportunities(data.opportunities || [], data.scanned_events || [], data.run_summary);
+    const s = data.run_summary;
+    if (s && !data.opportunities?.length && (s.events_today || s.events_tomorrow)) {
+      const hint = el.empty.querySelector(".empty-hint");
+      if (hint && s.events_total) {
+        hint.textContent =
+          `Scanned ${s.events_total} event(s), ${s.sources_loaded} books loaded. ` +
+          `No arb above threshold for this tab — see game list above or Sources tab.`;
+      }
+    }
   }
 
   renderSources(data.sources || []);

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any
 
-from engine import HarvesterEngine
+from engine import HarvesterEngine, best_prices_implied_sum
 from harvester_paths import PACKAGE_DIR
 from models import UnifiedRecord
 from settings import get_settings
@@ -100,26 +100,72 @@ def _opportunity_from_record(record: UnifiedRecord) -> dict[str, Any] | None:
     }
 
 
+def _filter_records_by_day(records: list[UnifiedRecord], *, day: str) -> list[UnifiedRecord]:
+    tz = _local_tz()
+    today, tomorrow = today_and_tomorrow(tz)
+    target = today if day == "today" else tomorrow
+    out: list[UnifiedRecord] = []
+    for record in records:
+        event_date = _event_local_date(record, tz)
+        if event_date == target:
+            out.append(record)
+        elif event_date is None and day == "today":
+            out.append(record)
+    return out
+
+
 def _filter_by_day(
     opportunities: list[dict[str, Any]],
     records: list[UnifiedRecord],
     *,
     day: str,
 ) -> list[dict[str, Any]]:
-    tz = _local_tz()
-    today, tomorrow = today_and_tomorrow(tz)
-    target = today if day == "today" else tomorrow
+    allowed = {r.event_id for r in _filter_records_by_day(records, day=day)}
+    return [o for o in opportunities if o.get("id") in allowed]
 
-    id_to_record = {r.event_id: r for r in records}
-    filtered: list[dict[str, Any]] = []
-    for opp in opportunities:
-        record = id_to_record.get(opp["id"])
-        if record is None:
-            continue
-        event_date = _event_local_date(record, tz)
-        if event_date == target:
-            filtered.append(opp)
-    return filtered
+
+def _scanned_event_from_record(record: UnifiedRecord) -> dict[str, Any]:
+    implied_sum, _, _ = best_prices_implied_sum(record)
+    books = len(record.sources)
+    yield_pct = 0.0
+    has_arb = False
+    if record.arbitrage is not None:
+        has_arb = True
+        yield_pct = record.arbitrage.yield_pct
+    elif implied_sum is not None and implied_sum < 1.0:
+        has_arb = True
+        yield_pct = round((1.0 / implied_sum - 1.0) * 100.0, 4)
+
+    overround_pct = round((implied_sum - 1.0) * 100.0, 2) if implied_sum and implied_sum >= 1.0 else None
+
+    legs: list[dict[str, Any]] = []
+    if record.arbitrage:
+        legs = [
+            {
+                "source": leg.source,
+                "outcome": leg.outcome,
+                "price": leg.price,
+                "stake_weight": leg.stake_weight,
+            }
+            for leg in record.arbitrage.legs
+        ]
+
+    return {
+        "id": record.event_id,
+        "event_name": record.normalized_event_name,
+        "sport_key": record.sport_key,
+        "market_type": record.market_type,
+        "commence_time": record.commence_time.isoformat() if record.commence_time else None,
+        "books_count": books,
+        "has_arbitrage": has_arb,
+        "yield_pct": yield_pct,
+        "implied_sum": round(implied_sum, 4) if implied_sum is not None else None,
+        "overround_pct": overround_pct,
+        "is_opportunity": has_arb and yield_pct >= get_settings().min_arb_yield_pct,
+        "legs": legs,
+        "arb_method": record.metadata.get("arb_method", "math"),
+        "llm_reasoning": record.metadata.get("llm_reasoning", ""),
+    }
 
 
 def _compute_stats(opportunities: list[dict[str, Any]]) -> dict[str, Any]:
@@ -153,16 +199,38 @@ def build_dashboard_payload(
         tomorrow_opps = _filter_by_day(all_opps, records, day="tomorrow")
         active = today_opps if day == "today" else tomorrow_opps
 
+        today_events = [_scanned_event_from_record(r) for r in _filter_records_by_day(records, day="today")]
+        tomorrow_events = [_scanned_event_from_record(r) for r in _filter_records_by_day(records, day="tomorrow")]
+        active_events = today_events if day == "today" else tomorrow_events
+
         sources = _state.source_report or build_source_report(records)
+        loaded_sources = source_summary(sources).get("loaded", 0)
+
+        best_edge = 0.0
+        for ev in active_events:
+            if ev.get("has_arbitrage"):
+                best_edge = max(best_edge, float(ev.get("yield_pct") or 0))
+
+        run_summary = {
+            "events_total": len(records),
+            "events_today": len(today_events),
+            "events_tomorrow": len(tomorrow_events),
+            "arbs_today": len(today_opps),
+            "arbs_tomorrow": len(tomorrow_opps),
+            "sources_loaded": loaded_sources,
+            "best_edge_pct": round(best_edge, 2),
+        }
 
         return {
             "day": day,
             "stats": _compute_stats(active),
             "counts": {
-                "today": len(today_opps),
-                "tomorrow": len(tomorrow_opps),
+                "today": len(today_events),
+                "tomorrow": len(tomorrow_events),
             },
             "opportunities": active,
+            "scanned_events": active_events,
+            "run_summary": run_summary,
             "sources": sources,
             "source_summary": source_summary(sources),
             "last_run_at": _state.last_run_at.isoformat() if _state.last_run_at else None,

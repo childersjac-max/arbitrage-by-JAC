@@ -52,6 +52,25 @@ def detect_h2h_arbitrage(record: UnifiedRecord) -> ArbitrageInfo | None:
     return ArbitrageInfo(yield_pct=round(yield_pct, 4), implied_sum=round(implied_sum, 6), legs=legs)
 
 
+def best_prices_implied_sum(record: UnifiedRecord) -> tuple[float | None, int, dict[str, tuple[float, str]]]:
+    """
+    Best decimal price per outcome across all books.
+    Returns (implied_sum, outcome_count, best_by_outcome).
+    """
+    best_by_outcome: dict[str, tuple[float, str]] = {}
+    for quotes in record.sources.values():
+        for quote in quotes:
+            if quote.price <= 1.0:
+                continue
+            current = best_by_outcome.get(quote.outcome)
+            if current is None or quote.price > current[0]:
+                best_by_outcome[quote.outcome] = (quote.price, quote.source)
+    if len(best_by_outcome) < 2:
+        return None, len(best_by_outcome), best_by_outcome
+    implied_sum = sum(1.0 / price for price, _ in best_by_outcome.values())
+    return implied_sum, len(best_by_outcome), best_by_outcome
+
+
 def _merge_arbitrage(
     math_arb: ArbitrageInfo | None,
     llm_hit: dict | None,

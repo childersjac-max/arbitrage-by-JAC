@@ -8,6 +8,25 @@
 
 We **do not** implement stealth scraping, TLS fingerprint spoofing, Playwright anti-bot bypass, or proxy rotation to harvest sportsbook sites without permission.
 
+## File layout (lawful blueprint)
+
+```text
+harvester/
+  transport/http_client.py      # httpx HTTP/2 pool, 429/5xx retry (not TLS spoofing)
+  adapters/
+    base.py
+    odds_api_adapter.py         # US books via your Odds API key
+    stub_adapter.py             # Kalshi, Polymarket, exchanges → official API
+    registry.py
+  pipeline/
+    align.py                      # Ollama fuzzy normalizer
+    stream.py                     # JSONL yield deltas
+  models_depth.py
+  run_pipeline.py
+```
+
+Not included: `curl_cffi` JA4 impersonation, Playwright stealth, or sportsbook HTML scraping.
+
 ## What is implemented
 
 | Module | Role |

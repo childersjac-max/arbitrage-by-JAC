@@ -61,6 +61,11 @@ class HarvesterSettings(BaseSettings):
         default=120.0,
         validation_alias="HARVESTER_RUN_TIMEOUT_SEC",
     )
+    http_proxy_url: str | None = Field(default=None, validation_alias="HARVESTER_HTTP_PROXY")
+    http_user_agent: str = Field(
+        default="harvester/1.0",
+        validation_alias="HARVESTER_HTTP_USER_AGENT",
+    )
 
 
 @lru_cache

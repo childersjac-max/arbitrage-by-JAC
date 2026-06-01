@@ -14,6 +14,7 @@ from config import get_settings
 from engine import HarvesterEngine
 from models import UnifiedRecord
 from paths import PACKAGE_DIR
+from source_status import build_source_report, source_summary
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class RunState:
     last_error: str | None = None
     last_run_at: datetime | None = None
     records: list[UnifiedRecord] = field(default_factory=list)
+    source_report: list[dict[str, Any]] = field(default_factory=list)
 
 
 _state = RunState()
@@ -132,6 +134,8 @@ def build_dashboard_payload(
     tomorrow_opps = _filter_by_day(all_opps, records, day="tomorrow")
     active = today_opps if day == "today" else tomorrow_opps
 
+    sources = _state.source_report or build_source_report(records)
+
     return {
         "day": day,
         "stats": _compute_stats(active),
@@ -140,6 +144,8 @@ def build_dashboard_payload(
             "tomorrow": len(tomorrow_opps),
         },
         "opportunities": active,
+        "sources": sources,
+        "source_summary": source_summary(sources),
         "last_run_at": _state.last_run_at.isoformat() if _state.last_run_at else None,
         "running": _state.running,
         "error": _state.last_error,
@@ -151,6 +157,7 @@ def _persist_cache(records: list[UnifiedRecord]) -> None:
     payload = {
         "last_run_at": _state.last_run_at.isoformat() if _state.last_run_at else None,
         "records": [r.to_export_dict() for r in records],
+        "source_report": _state.source_report,
     }
     CACHE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -166,6 +173,9 @@ def load_cached_records() -> list[UnifiedRecord]:
             records.append(UnifiedRecord.model_validate(item))
         if data.get("last_run_at"):
             _state.last_run_at = datetime.fromisoformat(str(data["last_run_at"]))
+        _state.source_report = list(data.get("source_report") or [])
+        if not _state.source_report and records:
+            _state.source_report = build_source_report(records)
         return records
     except Exception as exc:
         logger.warning("Could not load cache: %s", exc)
@@ -181,11 +191,15 @@ async def execute_run(*, sport_key: str | None = None) -> None:
         engine = HarvesterEngine()
         records = await engine.run(sport_key, arbs_only=False)
         _state.records = records
+        _state.source_report = build_source_report(records)
         _state.last_run_at = datetime.now(timezone.utc)
         _persist_cache(records)
     except Exception as exc:
         logger.exception("Dashboard run failed")
         _state.last_error = str(exc)
+        _state.records = []
+        _state.source_report = build_source_report([], api_error=str(exc))
+        _persist_cache([])
         raise
     finally:
         _state.running = False

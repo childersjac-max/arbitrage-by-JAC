@@ -1,5 +1,5 @@
 const state = {
-  day: "today",
+  view: "today",
   polling: null,
 };
 
@@ -9,10 +9,14 @@ const el = {
   best: document.getElementById("stat-best"),
   countToday: document.getElementById("count-today"),
   countTomorrow: document.getElementById("count-tomorrow"),
+  countSourcesLoaded: document.getElementById("count-sources-loaded"),
   empty: document.getElementById("empty-state"),
   emptyMsg: document.getElementById("empty-message"),
   list: document.getElementById("opp-list"),
-  listWrap: document.getElementById("list-wrap"),
+  panelOpportunities: document.getElementById("panel-opportunities"),
+  panelSources: document.getElementById("panel-sources"),
+  sourcesEmpty: document.getElementById("sources-empty"),
+  sourceList: document.getElementById("source-list"),
   error: document.getElementById("error-banner"),
   lastRun: document.getElementById("last-run"),
   refreshBtn: document.getElementById("btn-refresh"),
@@ -45,12 +49,28 @@ function setLoading(loading) {
   el.refreshLabel.textContent = loading ? "Running…" : "Refresh run";
 }
 
+function statusPillClass(status) {
+  const map = {
+    loaded: "status-pill--loaded",
+    empty: "status-pill--empty",
+    error: "status-pill--error",
+    stub: "status-pill--stub",
+  };
+  return map[status] || "status-pill--empty";
+}
+
+function channelLabel(channel) {
+  if (channel === "gateway") return "Data gateway";
+  if (channel === "direct") return "Direct adapter";
+  return "Via Odds API";
+}
+
 function renderOpportunities(opportunities) {
   el.list.innerHTML = "";
   if (!opportunities.length) {
     el.empty.classList.remove("hidden");
     el.list.classList.add("hidden");
-    const label = state.day === "today" ? "today" : "tomorrow";
+    const label = state.view === "today" ? "today" : "tomorrow";
     el.emptyMsg.textContent = `No opportunities for ${label}.`;
     return;
   }
@@ -72,6 +92,39 @@ function renderOpportunities(opportunities) {
     row.addEventListener("click", () => openSlip(opp));
     el.list.appendChild(row);
   });
+}
+
+function renderSources(sources) {
+  el.sourceList.innerHTML = "";
+  if (!sources || !sources.length) {
+    el.sourcesEmpty.classList.remove("hidden");
+    el.sourceList.classList.add("hidden");
+    return;
+  }
+
+  el.sourcesEmpty.classList.add("hidden");
+  el.sourceList.classList.remove("hidden");
+
+  sources.forEach((src) => {
+    const row = document.createElement("div");
+    row.className = "source-row";
+    const pillClass = statusPillClass(src.status);
+    row.innerHTML = `
+      <div>
+        <div class="source-name">${escapeHtml(src.name)}</div>
+        <div class="source-channel">${escapeHtml(channelLabel(src.channel))}</div>
+        <div class="source-message">${escapeHtml(src.message)}</div>
+      </div>
+      <span class="status-pill ${pillClass}">${escapeHtml(src.status_label)}</span>
+    `;
+    el.sourceList.appendChild(row);
+  });
+}
+
+function updatePanels() {
+  const isSources = state.view === "sources";
+  el.panelOpportunities.classList.toggle("hidden", isSources);
+  el.panelSources.classList.toggle("hidden", !isSources);
 }
 
 function escapeHtml(s) {
@@ -120,26 +173,33 @@ function applyPayload(data) {
   el.countToday.textContent = String(counts.today ?? 0);
   el.countTomorrow.textContent = String(counts.tomorrow ?? 0);
 
+  const summary = data.source_summary || {};
+  el.countSourcesLoaded.textContent = String(summary.loaded ?? 0);
+
   el.lastRun.textContent = formatLastRun(data.last_run_at);
 
-  if (data.error) {
+  if (data.error && state.view !== "sources") {
     el.error.textContent = data.error;
+    el.error.classList.remove("hidden");
+  } else if (!data.api_key_configured) {
+    el.error.textContent = "ODDS_API_KEY is not set in harvester/.env";
     el.error.classList.remove("hidden");
   } else {
     el.error.classList.add("hidden");
   }
 
-  if (!data.api_key_configured) {
-    el.error.textContent = "ODDS_API_KEY is not set in harvester/.env";
-    el.error.classList.remove("hidden");
+  if (state.view === "today" || state.view === "tomorrow") {
+    renderOpportunities(data.opportunities || []);
   }
 
-  renderOpportunities(data.opportunities || []);
+  renderSources(data.sources || []);
+  updatePanels();
   setLoading(Boolean(data.running));
 }
 
 async function fetchStatus() {
-  const res = await fetch(`/api/status?day=${state.day}`);
+  const day = state.view === "tomorrow" ? "tomorrow" : "today";
+  const res = await fetch(`/api/status?day=${day}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -195,12 +255,13 @@ async function onRefresh() {
 
 el.tabs.forEach((tab) => {
   tab.addEventListener("click", async () => {
-    state.day = tab.dataset.day;
+    state.view = tab.dataset.view;
     el.tabs.forEach((t) => {
       const active = t === tab;
       t.classList.toggle("active", active);
       t.setAttribute("aria-selected", active ? "true" : "false");
     });
+    updatePanels();
     try {
       const data = await fetchStatus();
       applyPayload(data);
@@ -214,6 +275,7 @@ el.refreshBtn.addEventListener("click", onRefresh);
 el.slipClose.addEventListener("click", () => el.slipDialog.close());
 
 (async function init() {
+  updatePanels();
   try {
     const data = await fetchStatus();
     applyPayload(data);

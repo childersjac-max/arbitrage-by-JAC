@@ -62,20 +62,32 @@
       </div>
 
       <div class="tabs" role="tablist">
-        <button type="button" class="tab active" data-day="today" role="tab" aria-selected="true">
+        <button type="button" class="tab active" data-view="today" role="tab" aria-selected="true">
           Today <span class="badge" id="count-today">0</span>
         </button>
-        <button type="button" class="tab" data-day="tomorrow" role="tab" aria-selected="false">
+        <button type="button" class="tab" data-view="tomorrow" role="tab" aria-selected="false">
           Tomorrow <span class="badge" id="count-tomorrow">0</span>
+        </button>
+        <button type="button" class="tab" data-view="sources" role="tab" aria-selected="false">
+          Sources <span class="badge badge--muted" id="count-sources-loaded">0</span>
         </button>
       </div>
 
-      <div class="list-wrap" id="list-wrap">
+      <div class="list-wrap" id="panel-opportunities">
         <div class="empty-state" id="empty-state">
           <p id="empty-message">No opportunities for today.</p>
           <p class="empty-hint">Click <strong>Refresh run</strong> to fetch odds from The Odds API.</p>
         </div>
         <div class="opp-list hidden" id="opp-list"></div>
+      </div>
+
+      <div class="list-wrap hidden" id="panel-sources">
+        <p class="sources-intro">Books and platforms considered for arbitrage on the last refresh.</p>
+        <div class="empty-state" id="sources-empty">
+          <p>No source status yet.</p>
+          <p class="empty-hint">Click <strong>Refresh run</strong> to load sportsbook status.</p>
+        </div>
+        <div class="source-list hidden" id="source-list"></div>
       </div>
 
       <p class="error-banner hidden" id="error-banner"></p>

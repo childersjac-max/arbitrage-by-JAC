@@ -48,6 +48,15 @@ echo Output will be saved to: harvester\generated\
 echo.
 
 python run_architect_easy.py
+if errorlevel 1 (
+  echo.
+  echo ============================================
+  echo   FAILED - see error above
+  echo   If it says "out of date", run: git pull origin cursor/local-llm-normalization-4fea
+  echo ============================================
+  pause
+  exit /b 1
+)
 
 echo.
 echo ============================================

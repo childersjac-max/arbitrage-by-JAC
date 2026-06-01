@@ -52,7 +52,20 @@ async def main() -> int:
     def progress(step: str) -> None:
         print(f"  >> {step}")
 
-    result = await run_architect(mega, max_phases=n, on_progress=progress)
+    try:
+        result = await run_architect(mega, max_phases=n, on_progress=progress)
+    except TypeError as exc:
+        if "on_progress" in str(exc):
+            print(
+                "\nERROR: Project files are out of date.\n"
+                "In Git Bash run:\n"
+                "  cd /c/Users/child/Projects/arbitrage-by-JAC\n"
+                "  git pull origin cursor/local-llm-normalization-4fea\n"
+                "Then run this script again.\n"
+            )
+            return 1
+        raise
+
     out_dir = save_architect_result(result)
 
     print(f"\nSaved to:\n  {out_dir}\n")

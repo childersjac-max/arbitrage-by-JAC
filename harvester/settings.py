@@ -35,12 +35,16 @@ class HarvesterSettings(BaseSettings):
         validation_alias="HARVESTER_MIN_ARB_YIELD_PCT",
     )
     use_local_normalization: bool = Field(
-        default=True,
+        default=False,
         validation_alias="HARVESTER_USE_LOCAL_NORMALIZATION",
     )
     use_llm_arbitrage: bool = Field(
-        default=True,
+        default=False,
         validation_alias="HARVESTER_USE_LLM_ARBITRAGE",
+    )
+    dashboard_fast_mode: bool = Field(
+        default=True,
+        validation_alias="HARVESTER_DASHBOARD_FAST_MODE",
     )
     llm_arb_max_events: int = Field(default=25, validation_alias="HARVESTER_LLM_ARB_MAX_EVENTS")
     llm_arb_max_tokens: int = Field(default=4096, validation_alias="HARVESTER_LLM_ARB_MAX_TOKENS")
@@ -51,7 +55,7 @@ class HarvesterSettings(BaseSettings):
         validation_alias="HARVESTER_TIMEZONE",
     )
     run_timeout_sec: float = Field(
-        default=600.0,
+        default=120.0,
         validation_alias="HARVESTER_RUN_TIMEOUT_SEC",
     )
 

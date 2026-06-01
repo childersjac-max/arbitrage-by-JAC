@@ -217,9 +217,15 @@ def load_cached_records() -> list[UnifiedRecord]:
 
 
 async def _run_pipeline(sport_key: str | None) -> None:
-    _state.run_status = "Fetching odds from The Odds API…"
+    settings = get_settings()
+    fast = settings.dashboard_fast_mode
+    _state.run_status = (
+        "Fetching odds (fast mode, no Ollama)…"
+        if fast
+        else "Fetching odds from The Odds API…"
+    )
     engine = HarvesterEngine()
-    records = await engine.run(sport_key, arbs_only=False)
+    records = await engine.run(sport_key, arbs_only=False, fast=fast)
     _state.run_status = "Saving results…"
     _state.records = records
     _state.source_report = build_source_report(records)
@@ -236,10 +242,13 @@ async def execute_run(*, sport_key: str | None = None) -> None:
     _state.last_error = None
     _state.run_status = "Starting…"
     try:
-        hint = ""
-        if settings.use_llm_arbitrage or settings.use_local_normalization:
-            hint = " (Ollama may take several minutes on first run)"
-        _state.run_status = f"Running pipeline{hint}…"
+        if settings.dashboard_fast_mode:
+            _state.run_status = "Fast scan (Odds API + math only)…"
+        else:
+            hint = ""
+            if settings.use_llm_arbitrage or settings.use_local_normalization:
+                hint = " (Ollama may take several minutes)"
+            _state.run_status = f"Full pipeline{hint}…"
         await asyncio.wait_for(
             _run_pipeline(sport_key),
             timeout=settings.run_timeout_sec,

@@ -118,13 +118,18 @@ async def apply_normalization(records: list[UnifiedRecord]) -> list[UnifiedRecor
     return records
 
 
-async def score_arbitrage(records: list[UnifiedRecord]) -> list[UnifiedRecord]:
+async def score_arbitrage(
+    records: list[UnifiedRecord],
+    *,
+    use_llm: bool | None = None,
+) -> list[UnifiedRecord]:
     """Math + optional local LLM arbitrage scoring across target sources."""
     settings = get_settings()
     min_yield = settings.min_arb_yield_pct
+    llm_enabled = settings.use_llm_arbitrage if use_llm is None else use_llm
 
     llm_hits: dict[str, dict] = {}
-    if settings.use_llm_arbitrage:
+    if llm_enabled:
         try:
             llm_hits = await analyze_arbitrage_with_llm(records)
         except Exception as exc:
@@ -161,6 +166,7 @@ class HarvesterEngine:
         sport_key: str | None = None,
         *,
         arbs_only: bool = False,
+        fast: bool = False,
     ) -> list[UnifiedRecord]:
         settings = get_settings()
         sport = sport_key or settings.default_sport_key
@@ -172,10 +178,10 @@ class HarvesterEngine:
 
         records = filter_records_to_target_sources(records)
 
-        if settings.use_local_normalization:
+        if not fast and settings.use_local_normalization:
             records = await apply_normalization(records)
 
-        records = await score_arbitrage(records)
+        records = await score_arbitrage(records, use_llm=False if fast else None)
 
         if arbs_only:
             return [

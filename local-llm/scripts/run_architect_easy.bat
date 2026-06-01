@@ -1,6 +1,13 @@
 @echo off
 title Local LLM - Architect (easy mode)
 cd /d "%~dp0\.."
+set "REPO_ROOT=%cd%\.."
+if exist "%REPO_ROOT%\.git" (
+  echo Syncing latest local-llm scripts...
+  cd /d "%REPO_ROOT%"
+  git pull origin cursor/local-llm-normalization-4fea 2>nul
+  cd /d "%~dp0\.."
+)
 
 echo.
 echo ============================================

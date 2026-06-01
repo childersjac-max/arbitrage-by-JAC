@@ -96,6 +96,7 @@ async def run_architect(
     mega_prompt: str,
     *,
     max_phases: int | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> ArchitectResult:
     """
     Turn a large project prompt into a plan + phased implementation snippets.
@@ -107,6 +108,9 @@ async def run_architect(
     full_mega = mega_prompt.strip()
     _save_mega_prompt(full_mega)
     brief = _compress_mega_prompt(full_mega)
+
+    if on_progress:
+        on_progress("Step 1: Building JSON plan from your prompt...")
 
     plan_user = (
         "USER MEGA-PROMPT (summarize into a build plan):\n\n"
@@ -147,6 +151,8 @@ async def run_architect(
             continue
         step = int(spec.get("step") or i + 1)
         title = str(spec.get("title") or f"Phase {step}")
+        if on_progress:
+            on_progress(f"Step {step + 1}/{cap + 1}: Generating code — {title}...")
         files = spec.get("files") or []
         goal = str(spec.get("goal") or title)
         file_hint = ", ".join(str(f) for f in files) if files else "see title"

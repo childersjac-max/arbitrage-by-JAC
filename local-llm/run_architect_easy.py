@@ -9,6 +9,7 @@ One-command architect run (no web browser needed).
 from __future__ import annotations
 
 import asyncio
+import inspect
 import sys
 
 from architect_output import (
@@ -52,19 +53,13 @@ async def main() -> int:
     def progress(step: str) -> None:
         print(f"  >> {step}")
 
-    try:
-        result = await run_architect(mega, max_phases=n, on_progress=progress)
-    except TypeError as exc:
-        if "on_progress" in str(exc):
-            print(
-                "\nERROR: Project files are out of date.\n"
-                "In Git Bash run:\n"
-                "  cd /c/Users/child/Projects/arbitrage-by-JAC\n"
-                "  git pull origin cursor/local-llm-normalization-4fea\n"
-                "Then run this script again.\n"
-            )
-            return 1
-        raise
+    kwargs: dict = {"max_phases": n}
+    if "on_progress" in inspect.signature(run_architect).parameters:
+        kwargs["on_progress"] = progress
+    else:
+        print("  (Tip: git pull for step-by-step progress updates)\n")
+
+    result = await run_architect(mega, **kwargs)
 
     out_dir = save_architect_result(result)
 

@@ -36,6 +36,22 @@ pip install -r requirements.txt
 
 Ensure **Ollama** is running if `HARVESTER_USE_LOCAL_NORMALIZATION=true` (uses `local-llm/`).
 
+## Live Arbitrage Finder (web dashboard)
+
+Dark dashboard UI to **Refresh run** and view opportunities (Today / Tomorrow tabs).
+
+```bash
+# Git Bash
+cd harvester
+source .venv/Scripts/activate
+pip install -r requirements.txt
+python web_app.py
+```
+
+Open **http://127.0.0.1:8765** — click **Refresh run** to fetch odds and list arbs.
+
+Windows: double-click `scripts/run_dashboard.bat`.
+
 ## Commands
 
 ```bash

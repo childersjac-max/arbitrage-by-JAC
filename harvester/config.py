@@ -38,6 +38,8 @@ class HarvesterSettings(BaseSettings):
         default=True,
         validation_alias="HARVESTER_USE_LOCAL_NORMALIZATION",
     )
+    harvester_ui_host: str = Field(default="127.0.0.1", validation_alias="HARVESTER_UI_HOST")
+    harvester_ui_port: int = Field(default=8765, validation_alias="HARVESTER_UI_PORT")
 
 
 @lru_cache

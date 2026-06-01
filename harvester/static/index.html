@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Arbitrage Finder</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="top-bar">
+      <div class="brand">Arbitrage</div>
+      <button type="button" id="btn-refresh" class="btn-refresh" aria-label="Refresh run">
+        <span class="btn-refresh-icon" aria-hidden="true">↻</span>
+        <span id="btn-refresh-label">Refresh run</span>
+      </button>
+    </header>
+
+    <section class="stats-row">
+      <article class="stat-card stat-card--blue">
+        <div class="stat-card-accent"></div>
+        <div class="stat-card-body">
+          <div class="stat-card-top">
+            <span class="stat-label">Total Opportunities</span>
+            <svg class="stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 12h4l3-9 4 18 3-9h4"/>
+            </svg>
+          </div>
+          <p class="stat-value" id="stat-total">0</p>
+        </div>
+      </article>
+
+      <article class="stat-card stat-card--purple">
+        <div class="stat-card-accent"></div>
+        <div class="stat-card-body">
+          <div class="stat-card-top">
+            <span class="stat-label">Avg Profit</span>
+            <span class="stat-icon stat-icon--text">%</span>
+          </div>
+          <p class="stat-value" id="stat-avg">0.00%</p>
+        </div>
+      </article>
+
+      <article class="stat-card stat-card--green">
+        <div class="stat-card-accent"></div>
+        <div class="stat-card-body">
+          <div class="stat-card-top">
+            <span class="stat-label">Best Available</span>
+          </div>
+          <p class="stat-value stat-value--green" id="stat-best">0.00%</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="main-panel">
+      <div class="main-panel-header">
+        <div>
+          <h1>Live Arbitrage Finder</h1>
+          <p class="subtitle">Tap any row to open the bet slip — showing today and tomorrow only</p>
+        </div>
+        <p class="last-run" id="last-run"></p>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab active" data-day="today" role="tab" aria-selected="true">
+          Today <span class="badge" id="count-today">0</span>
+        </button>
+        <button type="button" class="tab" data-day="tomorrow" role="tab" aria-selected="false">
+          Tomorrow <span class="badge" id="count-tomorrow">0</span>
+        </button>
+      </div>
+
+      <div class="list-wrap" id="list-wrap">
+        <div class="empty-state" id="empty-state">
+          <p id="empty-message">No opportunities for today.</p>
+          <p class="empty-hint">Click <strong>Refresh run</strong> to fetch odds from The Odds API.</p>
+        </div>
+        <div class="opp-list hidden" id="opp-list"></div>
+      </div>
+
+      <p class="error-banner hidden" id="error-banner"></p>
+    </section>
+  </div>
+
+  <dialog id="slip-dialog" class="slip-dialog">
+    <div class="slip-dialog-inner">
+      <button type="button" class="slip-close" id="slip-close" aria-label="Close">×</button>
+      <h2 id="slip-title">Bet slip</h2>
+      <p class="slip-yield" id="slip-yield"></p>
+      <ul class="slip-legs" id="slip-legs"></ul>
+    </div>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

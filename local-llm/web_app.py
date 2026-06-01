@@ -31,7 +31,7 @@ from ollama_connect import (
     warmup_ollama,
 )
 from paths import ENV_FILE, PACKAGE_DIR
-from prompt_loader import get_system_prompt_info, system_prompt_path
+from prompt_loader import get_default_system_prompt, get_system_prompt_info, system_prompt_path
 from prompt_types import ChatMessage
 from architect_output import (
     default_mega_prompt_path,
@@ -71,12 +71,19 @@ def _status_markdown() -> str:
     )
 
 
-def _settings_source_markdown(from_file: bool = False) -> str:
-    if from_file:
-        return f"**System prompt:** loaded from `{system_prompt_path()}` and saved as your default."
+def _system_prompt_source_markdown(*, reloaded: bool = False) -> str:
+    suffix = " _(reloaded just now)_" if reloaded else ""
     return (
-        "**Settings:** restored from `data/ui_state.json` (your last session). "
-        "Changes auto-save when you send a message or edit Advanced settings."
+        f"**System prompt:** from `{system_prompt_path()}` "
+        f"(edit that file, then reload the page or click **Reload system prompt from file**).{suffix}"
+    )
+
+
+def _settings_source_markdown() -> str:
+    return (
+        f"{_system_prompt_source_markdown()}\n\n"
+        "**Temperature / max tokens:** restored from `data/ui_state.json`. "
+        "They auto-save when you send a message or change the sliders."
     )
 
 
@@ -186,7 +193,7 @@ def build_ui() -> gr.Blocks:
                     system_prompt_source = gr.Markdown(_settings_source_markdown())
                     with gr.Row():
                         load_prompt_btn = gr.Button(
-                            "Import system prompt from file",
+                            "Reload system prompt from file",
                             variant="secondary",
                         )
                         save_settings_btn = gr.Button(
@@ -194,8 +201,8 @@ def build_ui() -> gr.Blocks:
                             variant="secondary",
                         )
                     system_prompt = gr.Textbox(
-                        label="System prompt",
-                        value=_SAVED["system_prompt"],
+                        label="System prompt (from prompts/system_default.txt)",
+                        value=get_default_system_prompt(),
                         lines=14,
                     )
                     with gr.Row():
@@ -222,9 +229,8 @@ def build_ui() -> gr.Blocks:
                     send = gr.Button("Send", variant="primary")
                     clear = gr.Button("Clear chat")
 
-                def persist_settings_only(sys_p: str, temp: float, max_t: float) -> str:
+                def persist_settings_only(temp: float, max_t: float) -> str:
                     save_ui_state(
-                        system_prompt=sys_p,
                         temperature=temp,
                         max_tokens=int(max_t),
                     )
@@ -233,20 +239,27 @@ def build_ui() -> gr.Blocks:
                 async def user_submit(
                     message: str,
                     history: list,
-                    sys_p: str,
+                    _sys_p: str,
                     temp: float,
                     max_t: float,
-                ) -> tuple[list, str, str]:
+                ) -> tuple[list, str, str, str]:
                     save_ui_state(
-                        system_prompt=sys_p,
                         temperature=temp,
                         max_tokens=int(max_t),
                     )
-                    reply = await chat_respond(message, history, sys_p, temp, max_t)
+                    sys_from_file = get_default_system_prompt()
+                    reply = await chat_respond(
+                        message, history, sys_from_file, temp, max_t
+                    )
                     history = history or []
                     history.append([message, reply])
                     save_chat_history(history)
-                    return history, "", _settings_source_markdown()
+                    return (
+                        history,
+                        "",
+                        _settings_source_markdown(),
+                        sys_from_file,
+                    )
 
                 def clear_chat() -> tuple[list, str, str]:
                     clear_chat_history()
@@ -255,12 +268,12 @@ def build_ui() -> gr.Blocks:
                 send.click(
                     user_submit,
                     inputs=[msg, chatbot, system_prompt, temperature, max_tokens],
-                    outputs=[chatbot, msg, system_prompt_source],
+                    outputs=[chatbot, msg, system_prompt_source, system_prompt],
                 )
                 msg.submit(
                     user_submit,
                     inputs=[msg, chatbot, system_prompt, temperature, max_tokens],
-                    outputs=[chatbot, msg, system_prompt_source],
+                    outputs=[chatbot, msg, system_prompt_source, system_prompt],
                 )
                 clear.click(
                     clear_chat,
@@ -268,13 +281,13 @@ def build_ui() -> gr.Blocks:
                 )
                 save_settings_btn.click(
                     persist_settings_only,
-                    inputs=[system_prompt, temperature, max_tokens],
+                    inputs=[temperature, max_tokens],
                     outputs=[system_prompt_source],
                 )
-                for field in (system_prompt, temperature, max_tokens):
+                for field in (temperature, max_tokens):
                     field.change(
                         persist_settings_only,
-                        inputs=[system_prompt, temperature, max_tokens],
+                        inputs=[temperature, max_tokens],
                         outputs=[system_prompt_source],
                     )
 
@@ -432,10 +445,9 @@ def build_ui() -> gr.Blocks:
                     outputs=[norm_out, norm_meta],
                 )
 
-        def import_system_prompt_from_file() -> tuple[str, str]:
+        def reload_system_prompt_from_file() -> tuple[str, str]:
             text, _ = get_system_prompt_info()
-            save_ui_state(system_prompt=text)
-            return text, _settings_source_markdown(from_file=True)
+            return text, _system_prompt_source_markdown(reloaded=True)
 
         async def reload_ollama_only() -> str:
             reload_settings()
@@ -449,11 +461,11 @@ def build_ui() -> gr.Blocks:
         warmup_btn.click(wake_ollama, outputs=health_out)
         refresh_btn.click(reload_ollama_only, outputs=health_out)
         load_prompt_btn.click(
-            import_system_prompt_from_file,
+            reload_system_prompt_from_file,
             outputs=[system_prompt, system_prompt_source],
         )
 
-        async def on_page_load() -> tuple[str, list, str, float, float]:
+        async def on_page_load() -> tuple[str, list, str, str, float, float]:
             ok, warm_msg = await warmup_ollama()
             if ok:
                 health = f"✅ {warm_msg}\n\n{_status_markdown()}"
@@ -465,17 +477,26 @@ def build_ui() -> gr.Blocks:
                 health,
                 history,
                 _settings_source_markdown(),
+                get_default_system_prompt(),
                 float(state["temperature"]),
                 float(state["max_tokens"]),
             )
 
         demo.load(
             on_page_load,
-            outputs=[health_out, chatbot, system_prompt_source, temperature, max_tokens],
+            outputs=[
+                health_out,
+                chatbot,
+                system_prompt_source,
+                system_prompt,
+                temperature,
+                max_tokens,
+            ],
         )
 
         gr.Markdown(
             "---\n"
+            f"**System prompt file:** `{system_prompt_path()}` · "
             f"**Saved files:** `data/ui_state.json` · `data/chat_history.json` · "
             f"Port `{get_settings().local_llm_ui_host}:{get_settings().local_llm_ui_port}`"
         )

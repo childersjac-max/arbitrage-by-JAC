@@ -8,8 +8,6 @@ from typing import Any
 
 from config import get_settings
 from paths import PACKAGE_DIR
-from prompt_loader import get_default_system_prompt
-
 DATA_DIR = PACKAGE_DIR / "data"
 UI_STATE_FILE = DATA_DIR / "ui_state.json"
 CHAT_HISTORY_FILE = DATA_DIR / "chat_history.json"
@@ -24,7 +22,6 @@ DEFAULT_REFERENCE = {
 def _default_ui_state() -> dict[str, Any]:
     cfg = get_settings()
     return {
-        "system_prompt": get_default_system_prompt(),
         "temperature": float(cfg.local_llm_prompt_temperature),
         "max_tokens": int(min(2048, cfg.local_llm_prompt_max_tokens)),
         "reference_json": json.dumps(DEFAULT_REFERENCE, indent=2),
@@ -46,15 +43,12 @@ def load_ui_state() -> dict[str, Any]:
 
 def save_ui_state(
     *,
-    system_prompt: str | None = None,
     temperature: float | None = None,
     max_tokens: int | None = None,
     reference_json: str | None = None,
     fragments_text: str | None = None,
 ) -> None:
     state = load_ui_state()
-    if system_prompt is not None:
-        state["system_prompt"] = system_prompt
     if temperature is not None:
         state["temperature"] = float(temperature)
     if max_tokens is not None:

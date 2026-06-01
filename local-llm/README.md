@@ -167,7 +167,7 @@ Opens **http://127.0.0.1:7860** (only on your PC; not exposed to the internet).
 | **Normalize names** | Paste raw book strings + reference JSON → mapping |
 | **Architect (8B)** | Paste a huge spec → automatic JSON plan + phased code generation |
 
-**Persistent defaults:** Your last system prompt, temperature, max tokens, and chat are restored from `data/ui_state.json` and `data/chat_history.json` every time you start the app. Edit Advanced settings—they auto-save on change or when you send a message.
+**Persistent defaults:** The **system prompt** always comes from `prompts/system_default.txt` (reloaded on page load and on every message). Temperature, max tokens, and chat history are restored from `data/ui_state.json` and `data/chat_history.json`. After editing the system prompt file, reload the page or click **Reload system prompt from file**.
 
 Set `LOCAL_LLM_UI_PORT` in `.env` if 7860 is already in use.
 

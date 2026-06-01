@@ -12,6 +12,9 @@
    `arbitrage-by-JAC\harvester\generated\`  
    (newest dated folder → `README.txt`)
 
+**Runnable package:** Architect phases are merged into `harvester/` (see `harvester/README.md`).  
+Set `ODDS_API_KEY` in `harvester/.env`, then run `harvester\scripts\run_pipeline.bat run health`.
+
 ## Option B — Web app
 
 1. Ollama open.

@@ -78,6 +78,9 @@ def _opportunity_from_record(record: UnifiedRecord) -> dict[str, Any] | None:
         "yield_pct": arb.yield_pct,
         "implied_sum": arb.implied_sum,
         "legs": legs,
+        "arb_method": record.metadata.get("arb_method", "math"),
+        "llm_reasoning": record.metadata.get("llm_reasoning", ""),
+        "sources_used": record.metadata.get("sources_used", []),
     }
 
 

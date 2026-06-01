@@ -1,4 +1,4 @@
-"""Lawful placeholder integrators for platforms without a public API in this repo."""
+"""Lawful placeholder integrators — derived from target_sources registry."""
 
 from __future__ import annotations
 
@@ -6,23 +6,12 @@ from typing import Any
 
 from integrators.base import OddsIntegrator
 from models import UnifiedRecord
+from target_sources import TARGET_SOURCES
 
-# Fourteen target platforms from the architect spec (stubs until official APIs are wired).
 STUB_SPECS: list[tuple[str, str]] = [
-    ("draftkings", "Use DraftKings official partner API or licensed data feed; no scraping."),
-    ("fanduel", "Use FanDuel official API / affiliate data program."),
-    ("betmgm", "Use BetMGM / Entain partner integrations."),
-    ("caesars", "Use Caesars Sportsbook authorized API or aggregator."),
-    ("betrivers", "Use Rush Street / BetRivers partner API."),
-    ("pointsbet", "Use PointsBet commercial API where available."),
-    ("espnbet", "Use ESPN BET / PENN partner data access."),
-    ("bovada", "No public API; use licensed odds aggregator only."),
-    ("bet365", "Use Bet365 affiliate / commercial feed (region-restricted)."),
-    ("unibet", "Use Kindred / Unibet partner API."),
-    ("pinnacle", "Use Pinnacle API (commercial; available in some regions)."),
-    ("betfair", "Use Betfair Exchange API (developer.betfair.com)."),
-    ("kalshi", "Use Kalshi REST API (kalshi.com/docs) for event contracts."),
-    ("polymarket", "Use Polymarket CLOB / gamma API (docs.polymarket.com)."),
+    (s.key, s.integration_note or f"Direct adapter for {s.name} not implemented.")
+    for s in TARGET_SOURCES
+    if s.direct_only
 ]
 
 

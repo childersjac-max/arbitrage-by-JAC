@@ -452,7 +452,23 @@ body {
 .slip-yield {
   color: var(--green);
   font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.slip-note {
+  font-size: 0.85rem;
+  color: var(--muted);
   margin-bottom: 1rem;
+  line-height: 1.4;
+}
+
+.source-category {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--blue);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0.75rem 0 0.35rem 0.75rem;
 }
 
 .slip-legs {

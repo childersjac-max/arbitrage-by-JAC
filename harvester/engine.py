@@ -1,12 +1,12 @@
-"""Merge integrator output, normalize entities, detect arbitrage."""
+"""Merge integrator output, normalize entities, detect arbitrage (math + local LLM)."""
 
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 
 from config import get_settings
 from integrators.odds_api import OddsApiIntegrator
+from llm_arbitrage import analyze_arbitrage_with_llm, filter_records_to_target_sources
 from models import ArbitrageInfo, ArbitrageLeg, SourceQuote, UnifiedRecord
 from normalization.bridge import build_reference_from_names, normalize_team_labels
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def detect_h2h_arbitrage(record: UnifiedRecord) -> ArbitrageInfo | None:
     """
-    Find two-way arb using best decimal price per outcome across all books.
+    Find two-way arb using best decimal price per outcome across target sources.
 
     Arb exists when sum(1/price_i) < 1 for the best prices on each side.
     """
@@ -50,6 +50,28 @@ def detect_h2h_arbitrage(record: UnifiedRecord) -> ArbitrageInfo | None:
         )
 
     return ArbitrageInfo(yield_pct=round(yield_pct, 4), implied_sum=round(implied_sum, 6), legs=legs)
+
+
+def _merge_arbitrage(
+    math_arb: ArbitrageInfo | None,
+    llm_hit: dict | None,
+    *,
+    min_yield: float,
+) -> ArbitrageInfo | None:
+    """Prefer higher yield; combine metadata when both agree."""
+    llm_arb = llm_hit.get("arbitrage") if llm_hit else None
+
+    if math_arb and llm_arb:
+        chosen = math_arb if math_arb.yield_pct >= llm_arb.yield_pct else llm_arb
+        if chosen.yield_pct < min_yield:
+            return None
+        return chosen
+
+    if math_arb and math_arb.yield_pct >= min_yield:
+        return math_arb
+    if llm_arb and llm_arb.yield_pct >= min_yield:
+        return llm_arb
+    return None
 
 
 def _collect_name_fragments(records: list[UnifiedRecord]) -> list[str]:
@@ -96,8 +118,43 @@ async def apply_normalization(records: list[UnifiedRecord]) -> list[UnifiedRecor
     return records
 
 
+async def score_arbitrage(records: list[UnifiedRecord]) -> list[UnifiedRecord]:
+    """Math + optional local LLM arbitrage scoring across target sources."""
+    settings = get_settings()
+    min_yield = settings.min_arb_yield_pct
+
+    llm_hits: dict[str, dict] = {}
+    if settings.use_llm_arbitrage:
+        try:
+            llm_hits = await analyze_arbitrage_with_llm(records)
+        except Exception as exc:
+            logger.warning("LLM arbitrage pass skipped: %s", exc)
+
+    for record in records:
+        math_arb = detect_h2h_arbitrage(record)
+        llm_hit = llm_hits.get(record.event_id)
+        merged = _merge_arbitrage(math_arb, llm_hit, min_yield=min_yield)
+
+        if merged is not None:
+            record.arbitrage = merged
+            if math_arb and llm_hit:
+                record.metadata["arb_method"] = "combined"
+            elif llm_hit:
+                record.metadata["arb_method"] = "llm"
+            else:
+                record.metadata["arb_method"] = "math"
+            if llm_hit:
+                record.metadata["llm_reasoning"] = llm_hit.get("reasoning", "")
+                record.metadata["sources_used"] = llm_hit.get("sources_used", [])
+        else:
+            record.arbitrage = None
+            record.metadata.pop("arb_method", None)
+
+    return records
+
+
 class HarvesterEngine:
-    """End-to-end pipeline: fetch → normalize → score arbs."""
+    """End-to-end: fetch → target sources → normalize → LLM + math arbs."""
 
     async def run(
         self,
@@ -113,17 +170,17 @@ class HarvesterEngine:
         finally:
             await integrator.close()
 
+        records = filter_records_to_target_sources(records)
+
         if settings.use_local_normalization:
             records = await apply_normalization(records)
 
-        for record in records:
-            record.arbitrage = detect_h2h_arbitrage(record)
+        records = await score_arbitrage(records)
 
         if arbs_only:
-            min_yield = settings.min_arb_yield_pct
             return [
                 r
                 for r in records
-                if r.arbitrage is not None and r.arbitrage.yield_pct >= min_yield
+                if r.arbitrage is not None and r.arbitrage.yield_pct >= settings.min_arb_yield_pct
             ]
         return records

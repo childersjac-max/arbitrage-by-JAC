@@ -81,10 +81,11 @@ function renderOpportunities(opportunities) {
   opportunities.forEach((opp) => {
     const row = document.createElement("div");
     row.className = "opp-row";
+    const method = opp.arb_method ? ` · ${opp.arb_method}` : "";
     row.innerHTML = `
       <div>
         <div class="opp-event">${escapeHtml(opp.event_name)}</div>
-        <div class="opp-meta">${escapeHtml(opp.sport_key)} · ${formatCommence(opp.commence_time)}</div>
+        <div class="opp-meta">${escapeHtml(opp.sport_key)} · ${formatCommence(opp.commence_time)}${escapeHtml(method)}</div>
       </div>
       <span class="opp-market">${escapeHtml(opp.market_type)}</span>
       <span class="opp-yield">${formatPct(opp.yield_pct)}</span>
@@ -105,7 +106,19 @@ function renderSources(sources) {
   el.sourcesEmpty.classList.add("hidden");
   el.sourceList.classList.remove("hidden");
 
+  let lastCategory = "";
   sources.forEach((src) => {
+    const catLabel = src.category_label || "";
+    if (catLabel && catLabel !== lastCategory && src.category !== "gateway") {
+      lastCategory = catLabel;
+      const heading = document.createElement("div");
+      heading.className = "source-category";
+      heading.textContent = catLabel;
+      el.sourceList.appendChild(heading);
+    } else if (src.category === "gateway" && catLabel !== lastCategory) {
+      lastCategory = catLabel;
+    }
+
     const row = document.createElement("div");
     row.className = "source-row";
     const pillClass = statusPillClass(src.status);
@@ -150,7 +163,15 @@ function formatCommence(iso) {
 
 function openSlip(opp) {
   el.slipTitle.textContent = opp.event_name;
-  el.slipYield.textContent = `Profit: ${formatPct(opp.yield_pct)}`;
+  let yieldLine = `Profit: ${formatPct(opp.yield_pct)}`;
+  if (opp.arb_method) yieldLine += ` (${opp.arb_method})`;
+  el.slipYield.textContent = yieldLine;
+  if (opp.llm_reasoning) {
+    const note = document.createElement("p");
+    note.className = "slip-note";
+    note.textContent = opp.llm_reasoning;
+    el.slipYield.after(note);
+  }
   el.slipLegs.innerHTML = "";
   (opp.legs || []).forEach((leg) => {
     const li = document.createElement("li");

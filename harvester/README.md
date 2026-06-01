@@ -36,6 +36,18 @@ pip install -r requirements.txt
 
 Ensure **Ollama** is running if `HARVESTER_USE_LOCAL_NORMALIZATION=true` (uses `local-llm/`).
 
+## Target sources (local LLM arbitrage)
+
+The pipeline evaluates **only** these platforms (via Odds API where available + local LLM analysis):
+
+1. **US sportsbooks:** DraftKings, FanDuel, BetMGM, Caesars, Fanatics, bet365, The Score  
+2. **US prediction markets:** Kalshi, Polymarket, DraftKings Predictions, FanDuel Prediction  
+3. **P2P exchanges:** Betfair Exchange, Smarkets, SportX / SX Bet  
+
+Set `HARVESTER_USE_LLM_ARBITRAGE=true` and run **Ollama** so the local model considers cross-source arbs on each refresh. Direct adapters for prediction markets/exchanges are stubs until you wire lawful APIs.
+
+Registry: `harvester/target_sources.py`
+
 ## Live Arbitrage Finder (web dashboard)
 
 Dark dashboard UI to **Refresh run** and view opportunities (Today / Tomorrow tabs).

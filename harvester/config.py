@@ -38,6 +38,12 @@ class HarvesterSettings(BaseSettings):
         default=True,
         validation_alias="HARVESTER_USE_LOCAL_NORMALIZATION",
     )
+    use_llm_arbitrage: bool = Field(
+        default=True,
+        validation_alias="HARVESTER_USE_LLM_ARBITRAGE",
+    )
+    llm_arb_max_events: int = Field(default=25, validation_alias="HARVESTER_LLM_ARB_MAX_EVENTS")
+    llm_arb_max_tokens: int = Field(default=4096, validation_alias="HARVESTER_LLM_ARB_MAX_TOKENS")
     harvester_ui_host: str = Field(default="127.0.0.1", validation_alias="HARVESTER_UI_HOST")
     harvester_ui_port: int = Field(default=8765, validation_alias="HARVESTER_UI_PORT")
 

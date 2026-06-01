@@ -1,6 +1,8 @@
 const state = {
   view: "today",
   polling: null,
+  pollStartedAt: 0,
+  maxPollMs: 12 * 60 * 1000,
 };
 
 const el = {
@@ -43,10 +45,16 @@ function formatLastRun(iso) {
   }
 }
 
-function setLoading(loading) {
+function setLoading(loading, statusText) {
   el.refreshBtn.disabled = loading;
   el.refreshBtn.classList.toggle("loading", loading);
-  el.refreshLabel.textContent = loading ? "Running…" : "Refresh run";
+  if (loading && statusText) {
+    el.refreshLabel.textContent = statusText.length > 42 ? "Running…" : statusText;
+    el.refreshBtn.title = statusText;
+  } else {
+    el.refreshLabel.textContent = loading ? "Running…" : "Refresh run";
+    el.refreshBtn.title = loading ? "Pipeline in progress" : "Fetch odds and scan for arbitrage";
+  }
 }
 
 function statusPillClass(status) {
@@ -215,14 +223,26 @@ function applyPayload(data) {
 
   renderSources(data.sources || []);
   updatePanels();
-  setLoading(Boolean(data.running));
+  const statusText = data.run_status || (data.running ? "Running pipeline…" : "");
+  setLoading(Boolean(data.running), statusText);
+
+  if (data.running && data.run_status) {
+    el.error.classList.add("hidden");
+  }
 }
 
 async function fetchStatus() {
   const day = state.view === "tomorrow" ? "tomorrow" : "today";
   const res = await fetch(`/api/status?day=${day}`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(text || res.statusText);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error("Invalid response from server");
+  }
 }
 
 async function triggerRun() {
@@ -238,17 +258,46 @@ async function triggerRun() {
   return res.json();
 }
 
+async function forceResetRun() {
+  try {
+    await fetch("/api/reset-run", { method: "POST" });
+  } catch {
+    /* ignore */
+  }
+}
+
 function startPolling() {
   stopPolling();
+  state.pollStartedAt = Date.now();
   state.polling = setInterval(async () => {
+    if (Date.now() - state.pollStartedAt > state.maxPollMs) {
+      stopPolling();
+      await forceResetRun();
+      setLoading(false);
+      el.error.textContent =
+        "Run took too long and was stopped. Try turning off LLM in harvester/.env " +
+        "(HARVESTER_USE_LLM_ARBITRAGE=false) or ensure Ollama is running.";
+      el.error.classList.remove("hidden");
+      return;
+    }
     try {
       const data = await fetchStatus();
       applyPayload(data);
-      if (!data.running) stopPolling();
+      if (!data.running) {
+        stopPolling();
+        if (data.error) {
+          el.error.textContent = data.error;
+          el.error.classList.remove("hidden");
+        }
+      }
     } catch (e) {
       console.error(e);
       stopPolling();
       setLoading(false);
+      el.error.textContent =
+        "Could not reach server during run. Restart web_app.py and try again. " +
+        (e.message || String(e));
+      el.error.classList.remove("hidden");
     }
   }, 2000);
 }

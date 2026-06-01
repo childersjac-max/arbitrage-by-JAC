@@ -50,6 +50,10 @@ class HarvesterSettings(BaseSettings):
         default="America/New_York",
         validation_alias="HARVESTER_TIMEZONE",
     )
+    run_timeout_sec: float = Field(
+        default=600.0,
+        validation_alias="HARVESTER_RUN_TIMEOUT_SEC",
+    )
 
 
 @lru_cache

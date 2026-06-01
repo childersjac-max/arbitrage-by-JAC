@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -23,10 +24,17 @@ CACHE_PATH = PACKAGE_DIR / "data" / "last_dashboard_run.json"
 @dataclass
 class RunState:
     running: bool = False
+    run_status: str = ""
     last_error: str | None = None
     last_run_at: datetime | None = None
     records: list[UnifiedRecord] = field(default_factory=list)
     source_report: list[dict[str, Any]] = field(default_factory=list)
+
+
+def reset_run_state() -> None:
+    """Clear stuck 'running' flag (e.g. after server crash)."""
+    _state.running = False
+    _state.run_status = ""
 
 
 _state = RunState()
@@ -134,32 +142,48 @@ def build_dashboard_payload(
     *,
     day: str = "today",
 ) -> dict[str, Any]:
-    all_opps: list[dict[str, Any]] = []
-    for record in records:
-        opp = _opportunity_from_record(record)
-        if opp:
-            all_opps.append(opp)
+    try:
+        all_opps: list[dict[str, Any]] = []
+        for record in records:
+            opp = _opportunity_from_record(record)
+            if opp:
+                all_opps.append(opp)
 
-    today_opps = _filter_by_day(all_opps, records, day="today")
-    tomorrow_opps = _filter_by_day(all_opps, records, day="tomorrow")
-    active = today_opps if day == "today" else tomorrow_opps
+        today_opps = _filter_by_day(all_opps, records, day="today")
+        tomorrow_opps = _filter_by_day(all_opps, records, day="tomorrow")
+        active = today_opps if day == "today" else tomorrow_opps
 
-    sources = _state.source_report or build_source_report(records)
+        sources = _state.source_report or build_source_report(records)
 
-    return {
-        "day": day,
-        "stats": _compute_stats(active),
-        "counts": {
-            "today": len(today_opps),
-            "tomorrow": len(tomorrow_opps),
-        },
-        "opportunities": active,
-        "sources": sources,
-        "source_summary": source_summary(sources),
-        "last_run_at": _state.last_run_at.isoformat() if _state.last_run_at else None,
-        "running": _state.running,
-        "error": _state.last_error,
-    }
+        return {
+            "day": day,
+            "stats": _compute_stats(active),
+            "counts": {
+                "today": len(today_opps),
+                "tomorrow": len(tomorrow_opps),
+            },
+            "opportunities": active,
+            "sources": sources,
+            "source_summary": source_summary(sources),
+            "last_run_at": _state.last_run_at.isoformat() if _state.last_run_at else None,
+            "running": _state.running,
+            "run_status": _state.run_status,
+            "error": _state.last_error,
+        }
+    except Exception as exc:
+        logger.exception("build_dashboard_payload failed")
+        return {
+            "day": day,
+            "stats": _compute_stats([]),
+            "counts": {"today": 0, "tomorrow": 0},
+            "opportunities": [],
+            "sources": _state.source_report or [],
+            "source_summary": source_summary(_state.source_report or []),
+            "last_run_at": _state.last_run_at.isoformat() if _state.last_run_at else None,
+            "running": False,
+            "run_status": "",
+            "error": f"Dashboard error: {exc}",
+        }
 
 
 def _persist_cache(records: list[UnifiedRecord]) -> None:
@@ -192,24 +216,49 @@ def load_cached_records() -> list[UnifiedRecord]:
         return []
 
 
+async def _run_pipeline(sport_key: str | None) -> None:
+    _state.run_status = "Fetching odds from The Odds API…"
+    engine = HarvesterEngine()
+    records = await engine.run(sport_key, arbs_only=False)
+    _state.run_status = "Saving results…"
+    _state.records = records
+    _state.source_report = build_source_report(records)
+    _state.last_run_at = datetime.now(timezone.utc)
+    _persist_cache(records)
+    _state.run_status = "Done"
+
+
 async def execute_run(*, sport_key: str | None = None) -> None:
     if _state.running:
         return
+    settings = get_settings()
     _state.running = True
     _state.last_error = None
+    _state.run_status = "Starting…"
     try:
-        engine = HarvesterEngine()
-        records = await engine.run(sport_key, arbs_only=False)
-        _state.records = records
-        _state.source_report = build_source_report(records)
-        _state.last_run_at = datetime.now(timezone.utc)
-        _persist_cache(records)
+        hint = ""
+        if settings.use_llm_arbitrage or settings.use_local_normalization:
+            hint = " (Ollama may take several minutes on first run)"
+        _state.run_status = f"Running pipeline{hint}…"
+        await asyncio.wait_for(
+            _run_pipeline(sport_key),
+            timeout=settings.run_timeout_sec,
+        )
+    except asyncio.TimeoutError:
+        logger.error("Dashboard run timed out after %ss", settings.run_timeout_sec)
+        _state.last_error = (
+            f"Timed out after {int(settings.run_timeout_sec)}s. "
+            "Keep Ollama open, or set HARVESTER_USE_LLM_ARBITRAGE=false and "
+            "HARVESTER_USE_LOCAL_NORMALIZATION=false in harvester/.env for a faster run."
+        )
+        _state.source_report = build_source_report(_state.records, api_error=_state.last_error)
     except Exception as exc:
         logger.exception("Dashboard run failed")
         _state.last_error = str(exc)
         _state.records = []
         _state.source_report = build_source_report([], api_error=str(exc))
         _persist_cache([])
-        raise
     finally:
         _state.running = False
+        if not _state.last_error:
+            _state.run_status = ""

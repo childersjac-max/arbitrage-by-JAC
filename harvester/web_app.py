@@ -19,6 +19,7 @@ from dashboard_service import (
     execute_run,
     get_run_state,
     load_cached_records,
+    reset_run_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    reset_run_state()
     cached = load_cached_records()
     state = get_run_state()
     if cached:
@@ -84,10 +86,17 @@ async def api_run(body: RunRequest = RunRequest()):
         try:
             await execute_run(sport_key=sport)
         except Exception:
-            pass
+            logger.exception("Background run failed")
 
     asyncio.create_task(_background())
     return {"ok": True, "running": True, "message": "Run started"}
+
+
+@app.post("/api/reset-run")
+async def api_reset_run():
+    """Force-clear stuck Running state."""
+    reset_run_state()
+    return {"ok": True, "running": False}
 
 
 def main() -> None:

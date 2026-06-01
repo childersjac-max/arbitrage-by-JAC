@@ -5,16 +5,15 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
+from datetime import date, datetime, timezone
 from typing import Any
-from zoneinfo import ZoneInfo
 
-from config import get_settings
 from engine import HarvesterEngine
+from harvester_paths import PACKAGE_DIR
 from models import UnifiedRecord
-from paths import PACKAGE_DIR
+from settings import get_settings
 from source_status import build_source_report, source_summary
+from time_utils import get_tz, today_and_tomorrow, to_local_date
 
 logger = logging.getLogger(__name__)
 
@@ -37,20 +36,29 @@ def get_run_state() -> RunState:
     return _state
 
 
-def _local_tz() -> ZoneInfo:
-    try:
-        return ZoneInfo("America/New_York")
-    except Exception:
-        return ZoneInfo("UTC")
+def _local_tz() -> Any:
+    return get_tz(get_settings().dashboard_timezone)
 
 
-def _event_local_date(record: UnifiedRecord, tz: ZoneInfo) -> date | None:
-    commence = record.commence_time
-    if commence is None:
+def _event_local_date(record: UnifiedRecord, tz: Any) -> date | None:
+    if record.commence_time is None:
         return None
-    if commence.tzinfo is None:
-        commence = commence.replace(tzinfo=timezone.utc)
-    return commence.astimezone(tz).date()
+    return to_local_date(record.commence_time, tz)
+
+
+def _sanitize_record_dict(item: dict[str, Any]) -> dict[str, Any]:
+    """Fix legacy cache rows missing arbitrage.implied_sum."""
+    arb = item.get("arbitrage")
+    if isinstance(arb, dict) and arb:
+        if "implied_sum" not in arb:
+            legs = arb.get("legs") or []
+            if legs and arb.get("yield_pct"):
+                arb["implied_sum"] = 0.99
+            else:
+                item["arbitrage"] = None
+        elif not arb.get("legs") and not arb.get("yield_pct"):
+            item["arbitrage"] = None
+    return item
 
 
 def _opportunity_from_record(record: UnifiedRecord) -> dict[str, Any] | None:
@@ -91,8 +99,7 @@ def _filter_by_day(
     day: str,
 ) -> list[dict[str, Any]]:
     tz = _local_tz()
-    today = datetime.now(tz).date()
-    tomorrow = today + timedelta(days=1)
+    today, tomorrow = today_and_tomorrow(tz)
     target = today if day == "today" else tomorrow
 
     id_to_record = {r.event_id: r for r in records}
@@ -173,7 +180,7 @@ def load_cached_records() -> list[UnifiedRecord]:
         raw = data.get("records") or []
         records: list[UnifiedRecord] = []
         for item in raw:
-            records.append(UnifiedRecord.model_validate(item))
+            records.append(UnifiedRecord.model_validate(_sanitize_record_dict(item)))
         if data.get("last_run_at"):
             _state.last_run_at = datetime.fromisoformat(str(data["last_run_at"]))
         _state.source_report = list(data.get("source_report") or [])

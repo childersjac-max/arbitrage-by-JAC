@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import logging
 import re
-import sys
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 
-from paths import LOCAL_LLM_DIR
+from harvester_paths import LOCAL_LLM_DIR
+from local_llm_bridge import import_local_llm, prepare_local_llm_path
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +18,12 @@ def _slug(text: str) -> str:
 
 
 def ensure_local_llm_importable() -> None:
-    root = str(LOCAL_LLM_DIR.resolve())
-    if root not in sys.path:
-        sys.path.insert(0, root)
     if not (LOCAL_LLM_DIR / "local_inference.py").is_file():
         raise RuntimeError(
             f"local-llm not found at {LOCAL_LLM_DIR}. "
             "Clone the repo branch that includes local-llm/."
         )
+    prepare_local_llm_path()
 
 
 def build_reference_from_names(names: Sequence[str]) -> dict[str, str]:
@@ -52,7 +49,8 @@ async def normalize_team_labels(
     Returns mapping fragment -> canonical name or None.
     """
     ensure_local_llm_importable()
-    from local_inference import LocalInferenceClient
+    local_inference = import_local_llm("local_inference")
+    LocalInferenceClient = local_inference.LocalInferenceClient
 
     unique = sorted({f.strip() for f in fragments if f and f.strip()})
     if not unique:

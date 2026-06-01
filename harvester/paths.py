@@ -1,12 +1,19 @@
-"""Repository paths for the harvester package."""
+"""Backward-compatible shim — use harvester_paths.py."""
 
-from __future__ import annotations
+from harvester_paths import (
+    ENV_EXAMPLE,
+    ENV_FILE,
+    GENERATED_DIR,
+    LOCAL_LLM_DIR,
+    PACKAGE_DIR,
+    REPO_ROOT,
+)
 
-from pathlib import Path
-
-PACKAGE_DIR = Path(__file__).resolve().parent
-REPO_ROOT = PACKAGE_DIR.parent
-LOCAL_LLM_DIR = REPO_ROOT / "local-llm"
-GENERATED_DIR = PACKAGE_DIR / "generated"
-ENV_FILE = PACKAGE_DIR / ".env"
-ENV_EXAMPLE = PACKAGE_DIR / ".env.example"
+__all__ = [
+    "ENV_EXAMPLE",
+    "ENV_FILE",
+    "GENERATED_DIR",
+    "LOCAL_LLM_DIR",
+    "PACKAGE_DIR",
+    "REPO_ROOT",
+]

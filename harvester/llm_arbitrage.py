@@ -7,7 +7,8 @@ import logging
 import re
 from typing import Any
 
-from config import get_settings
+from local_llm_bridge import import_local_llm, prepare_local_llm_path
+from settings import get_settings
 from models import ArbitrageInfo, ArbitrageLeg, UnifiedRecord
 from normalization.bridge import ensure_local_llm_importable
 from target_sources import (
@@ -143,18 +144,18 @@ async def analyze_arbitrage_with_llm(records: list[UnifiedRecord]) -> dict[str, 
         f"Minimum yield to report: {settings.min_arb_yield_pct}%."
     )
 
-    ensure_local_llm_importable()
-    from ollama_connect import get_effective_ollama_model, ollama_chat_completion, resolve_ollama
+    prepare_local_llm_path()
+    ollama_connect = import_local_llm("ollama_connect")
 
-    await resolve_ollama()
-    model = await get_effective_ollama_model()
+    await ollama_connect.resolve_ollama()
+    model = await ollama_connect.get_effective_ollama_model()
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_msg},
     ]
 
     try:
-        raw = await ollama_chat_completion(
+        raw = await ollama_connect.ollama_chat_completion(
             messages,
             model=model,
             temperature=0.0,

@@ -52,7 +52,4 @@ class UnifiedRecord(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     def to_export_dict(self) -> dict[str, Any]:
-        data = self.model_dump(mode="json")
-        if self.arbitrage is None:
-            data["arbitrage"] = {"yield_pct": 0.0, "legs": []}
-        return data
+        return self.model_dump(mode="json")

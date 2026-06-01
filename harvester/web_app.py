@@ -106,6 +106,11 @@ def main() -> None:
     host = settings.harvester_ui_host
     port = settings.harvester_ui_port
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    print("=" * 60)
+    print("  HARVESTER ARBITRAGE DASHBOARD (FastAPI)")
+    print(f"  Open: http://{host}:{port}")
+    print("  For Ollama CHAT use: cd ../local-llm && python web_app.py  →  :7860")
+    print("=" * 60)
     uvicorn.run(
         "web_app:app",
         host=host,

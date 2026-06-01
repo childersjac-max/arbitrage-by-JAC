@@ -24,6 +24,11 @@ _cached_models: list[str] | None = None
 _prefer_urllib: bool = os.name == "nt"  # Windows: curl works; httpx often breaks via proxy
 
 
+def prefer_buffered_transport() -> bool:
+    """Use non-streaming Ollama HTTP (urllib) — reliable on Windows behind proxies."""
+    return _prefer_urllib
+
+
 def httpx_client(**kwargs: Any) -> httpx.AsyncClient:
     """Localhost client — ignore HTTP_PROXY / HTTPS_PROXY (common Windows issue)."""
     return httpx.AsyncClient(trust_env=False, **kwargs)
@@ -99,6 +104,24 @@ def ollama_model_options(
     }
 
 
+def extract_ollama_chat_content(data: dict[str, Any]) -> str:
+    """Parse Ollama /api/chat JSON (non-streaming)."""
+    if err := data.get("error"):
+        raise RuntimeError(f"Ollama error: {err}")
+    msg = data.get("message") or {}
+    content = str(msg.get("content", ""))
+    if content.strip():
+        return content
+    if data.get("done"):
+        reason = msg.get("done_reason") or data.get("done_reason") or "unknown"
+        raise RuntimeError(
+            "Ollama returned an empty reply "
+            f"(done_reason={reason}). "
+            "Try lowering max tokens, shortening the system prompt, or run `ollama logs`."
+        )
+    return content
+
+
 def _chat_urllib(host: str, body: dict[str, Any]) -> str:
     url = f"{host.rstrip('/')}/api/chat"
     payload = json.dumps(body).encode("utf-8")
@@ -110,7 +133,7 @@ def _chat_urllib(host: str, body: dict[str, Any]) -> str:
     )
     with urllib.request.urlopen(req, timeout=600) as resp:
         data = json.loads(resp.read().decode("utf-8"))
-    return str(data.get("message", {}).get("content", ""))
+    return extract_ollama_chat_content(data)
 
 
 async def _fetch_tags_httpx(host: str) -> list[str]:
@@ -246,8 +269,7 @@ async def ollama_chat_completion(
         async with httpx_client(timeout=timeout) as client:
             r = await client.post(url, json=body)
             r.raise_for_status()
-            data = r.json()
-            return str(data.get("message", {}).get("content", ""))
+            return extract_ollama_chat_content(r.json())
     except Exception as exc:
         last_exc = exc
         logger.warning("httpx chat failed: %s", exc)
@@ -273,16 +295,18 @@ async def check_ollama_reachable() -> tuple[bool, str]:
     requested = settings.ollama_model
     if not names:
         return False, f"Ollama at {host} has no models. Run: `ollama pull {requested}`"
-    if not model_is_installed(requested, names):
-        effective = pick_ollama_model(requested, names)
-        return False, (
-            f"Model `{requested}` not found. Installed: {', '.join(names)}. "
-            f"Run `ollama pull {requested}` or set OLLAMA_MODEL={effective}"
-        )
     effective = pick_ollama_model(requested, names)
+    if not model_is_installed(requested, names):
+        return True, (
+            f"OK at {host} — will use `{effective}` "
+            f"(configured `{requested}` is not installed). "
+            f"Installed: {', '.join(names)}. "
+            f"To match .env exactly: `ollama pull {requested}` "
+            f"or set OLLAMA_MODEL={effective} in `local-llm/.env`."
+        )
     if effective != requested:
-        return True, f"OK at {host} (model `{effective}`)"
-    return True, f"OK at {host}"
+        return True, f"OK at {host} (using model `{effective}`)"
+    return True, f"OK at {host} · model `{effective}`"
 
 
 async def warmup_ollama() -> tuple[bool, str]:

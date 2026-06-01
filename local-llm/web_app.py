@@ -19,6 +19,7 @@ import os
 import threading
 import time
 import webbrowser
+from pathlib import Path
 
 import gradio as gr
 
@@ -30,7 +31,7 @@ from ollama_connect import (
     resolve_ollama,
     warmup_ollama,
 )
-from paths import ENV_FILE, PACKAGE_DIR
+from paths import ENV_FILE, ENV_EXAMPLE, PACKAGE_DIR, ensure_env_file
 from prompt_loader import get_default_system_prompt, get_system_prompt_info, system_prompt_path
 from prompt_types import ChatMessage
 from architect_output import (
@@ -51,11 +52,21 @@ from ui_state import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+if Path.cwd().resolve() != PACKAGE_DIR.resolve():
+    print(
+        f"Note: run from the local-llm folder.\n"
+        f"  cd {PACKAGE_DIR}\n"
+        f"  python web_app.py\n"
+        f"(You started in {Path.cwd()})"
+    )
 os.chdir(PACKAGE_DIR)
 # Prevent corporate/VPN proxies from breaking localhost (curl works, Python httpx often didn't).
 _no = os.environ.get("NO_PROXY", "")
 _extra = "127.0.0.1,localhost,127.0.0.1:11434"
 os.environ["NO_PROXY"] = ",".join(filter(None, {_no, _extra} if _no else {_extra}))
+if not ENV_FILE.is_file() and ENV_EXAMPLE.is_file():
+    ensure_env_file()
+    print(f"Created {ENV_FILE} from .env.example — set OLLAMA_MODEL to a model from `ollama list`.")
 reload_settings()
 
 _SAVED = load_ui_state()
@@ -121,6 +132,10 @@ async def chat_respond(
 
     messages.append(ChatMessage("user", message.strip()))
 
+    ok, preflight = await check_ollama_reachable()
+    if not ok:
+        return f"❌ {preflight}"
+
     try:
         async with LocalInferenceClient() as client:
             result = await client.chat(
@@ -128,7 +143,16 @@ async def chat_respond(
                 temperature=temperature,
                 max_tokens=int(max_tokens),
             )
-            return result.content
+            text = (result.content or "").strip()
+            if not text:
+                return (
+                    "⚠️ Ollama returned an empty reply. "
+                    "Lower **Max tokens**, shorten the system prompt, or check the model with "
+                    "`ollama run <model>` in a terminal."
+                )
+            return text
+    except ConnectionError as exc:
+        return str(exc)
     except Exception as exc:
         logger.exception("chat failed")
         return format_connection_help(exc)
@@ -161,6 +185,8 @@ async def normalize_names(
             f"attempts={result.attempts} · model={get_settings().ollama_model}"
         )
         return pretty, meta
+    except ConnectionError as exc:
+        return "", str(exc)
     except Exception as exc:
         logger.exception("normalize failed")
         return "", format_connection_help(exc)
@@ -514,6 +540,14 @@ def main() -> None:
     host = cfg.local_llm_ui_host
     port = cfg.local_llm_ui_port
     url = f"http://{host}:{port}"
+
+    print("=" * 60)
+    print("  LOCAL LLM CHAT (Ollama + Gradio)")
+    print(f"  Folder: {PACKAGE_DIR}")
+    print(f"  Open:   {url}")
+    print(f"  Model:  {cfg.ollama_model}  (see local-llm/.env)")
+    print("  NOT the harvester dashboard (that is harvester/web_app.py :8765)")
+    print("=" * 60)
 
     threading.Thread(
         target=_open_browser_when_ready,

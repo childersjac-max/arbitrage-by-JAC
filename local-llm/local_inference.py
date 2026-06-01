@@ -25,6 +25,7 @@ from ollama_connect import (
     httpx_client,
     ollama_chat_completion,
     ollama_model_options,
+    prefer_buffered_transport,
     resolve_ollama,
 )
 from prompt_loader import get_default_system_prompt
@@ -116,11 +117,15 @@ class LocalInferenceClient:
         client = self._ensure_client()
         backend = self.settings.local_llm_backend
         if backend == Backend.OLLAMA:
-            await resolve_ollama()
-            url = f"{get_ollama_base_url()}/api/tags"
-            r = await client.get(url)
-            r.raise_for_status()
-            return {"backend": "ollama", "status": "ok", "tags": r.json()}
+            host, names = await resolve_ollama()
+            model = await get_effective_ollama_model()
+            return {
+                "backend": "ollama",
+                "status": "ok",
+                "host": host,
+                "model": model,
+                "installed_models": names,
+            }
         url = f"{self.settings.resolved_base_url()}/models"
         r = await client.get(url)
         r.raise_for_status()
@@ -181,14 +186,17 @@ class LocalInferenceClient:
         )
 
         if backend == Backend.OLLAMA:
-            if not stream:
-                return await ollama_chat_completion(
+            if not stream or prefer_buffered_transport():
+                text = await ollama_chat_completion(
                     messages,
                     model=model,
                     temperature=temp,
                     max_tokens=tokens,
                     json_mode=json_mode,
                 )
+                if stream and on_token and text:
+                    on_token(text)
+                return text
 
             base = get_ollama_base_url()
             url = f"{base}/api/chat"
@@ -383,6 +391,10 @@ class LocalInferenceClient:
                     attempts=attempt,
                     latency_ms=latency_ms,
                 )
+            except ConnectionError as exc:
+                last_error = str(exc)
+                logger.warning("normalize_batch attempt %s connection error", attempt)
+                break
             except httpx.TimeoutException as exc:
                 last_error = f"timeout: {exc}"
                 logger.warning("normalize_batch attempt %s timeout", attempt)

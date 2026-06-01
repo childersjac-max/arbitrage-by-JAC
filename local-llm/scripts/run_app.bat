@@ -10,8 +10,17 @@ echo.
 echo For BIG prompts: double-click scripts\run_architect_easy.bat instead.
 echo If Ollama is not running, start scripts\start_ollama.bat first.
 echo.
-echo Starting Private Local LLM app...
-echo Open http://127.0.0.1:7860 in your browser if it does not open automatically.
+echo Running doctor (Ollama check)...
+python doctor.py
+if errorlevel 1 (
+  echo.
+  echo Fix Ollama first: scripts\start_ollama.bat  then  ollama pull YOUR_MODEL
+  pause
+  exit /b 1
+)
+echo.
+echo Starting Private Local LLM CHAT app...
+echo Open http://127.0.0.1:7860  (NOT harvester :8765)
 echo.
 python web_app.py
 pause

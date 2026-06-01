@@ -23,7 +23,10 @@ class HarvesterSettings(BaseSettings):
         validation_alias="ODDS_API_BASE_URL",
     )
     odds_api_regions: str = Field(default="us", validation_alias="ODDS_API_REGIONS")
-    odds_api_markets: str = Field(default="h2h", validation_alias="ODDS_API_MARKETS")
+    odds_api_markets: str = Field(
+        default="h2h,spreads,totals",
+        validation_alias="ODDS_API_MARKETS",
+    )
     odds_api_odds_format: str = Field(default="decimal", validation_alias="ODDS_API_ODDS_FORMAT")
     default_sport_key: str = Field(
         default="basketball_nba",

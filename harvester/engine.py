@@ -189,11 +189,20 @@ class HarvesterEngine:
     ) -> list[UnifiedRecord]:
         settings = get_settings()
         sport = sport_key or settings.default_sport_key
-        integrator = OddsApiIntegrator()
+        from integrator_factory import IntegratorFactory
+        from odds_api_fetch import fetch_odds_api_multi_market
+
+        markets = [m.strip() for m in settings.odds_api_markets.split(",") if m.strip()]
+        factory = IntegratorFactory()
         try:
-            records = await integrator.fetch_records(sport)
+            if len(markets) <= 1:
+                records = await factory.odds_api_integrator().fetch_records(
+                    sport, market_types=markets or None
+                )
+            else:
+                records = await fetch_odds_api_multi_market(factory, sport, markets)
         finally:
-            await integrator.close()
+            await factory.close()
 
         records = filter_records_to_target_sources(records)
 

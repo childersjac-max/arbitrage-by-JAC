@@ -43,13 +43,7 @@ except ModuleNotFoundError:
     )
     raise SystemExit(1) from None
 
-from performance_profiles import (
-    PerformanceProfileName,
-    activate_performance_profile,
-    get_performance_profile,
-    load_system_prompt_for_profile,
-    profile_markdown,
-)
+from performance_profiles import get_performance_profile, load_system_prompt_for_profile
 from config import get_settings, reload_settings
 from local_inference import LocalInferenceClient
 from ollama_connect import (
@@ -72,6 +66,14 @@ from architect_output import (
     save_mega_prompt_file,
 )
 from architect_pipeline import run_architect
+from ui.chat_helpers import (
+    build_chat_api_messages,
+    clamp_ui_max_tokens,
+    reveal_text_chunks,
+    settings_source_markdown,
+)
+from ui.chat_tab import load_messages_from_disk, mount_copilot_chat_tab
+from ui.copilot_styles import COPILOT_CSS, copilot_theme, render_header_html
 from ui_state import (
     clear_chat_history,
     load_chat_history,
@@ -107,45 +109,11 @@ _INITIAL_PROFILE_NAME = str(
 _INITIAL_PROFILE = get_performance_profile(_INITIAL_PROFILE_NAME)
 
 
-async def _reveal_text_chunks(text: str, *, words_per_chunk: int = 4, delay_sec: float = 0.04):
-    """Pseudo-streaming on Windows when true Ollama stream is unavailable."""
-    words = text.split()
-    if not words:
-        yield text
-        return
-    buf: list[str] = []
-    for i in range(0, len(words), words_per_chunk):
-        buf.extend(words[i : i + words_per_chunk])
-        yield " ".join(buf)
-        await asyncio.sleep(delay_sec)
-    yield text
-
-
-def _clamp_ui_max_tokens(value: float, profile) -> int:
-    return max(128, min(int(value), profile.max_tokens_cap))
-
-
-def _build_chat_api_messages(
-    message: str,
-    history: list | None,
-    system_prompt: str,
-    *,
-    max_history_turns: int,
-) -> list[dict[str, str]]:
-    messages: list[dict[str, str]] = []
-    sys_text = (system_prompt or "").strip()
-    if sys_text:
-        messages.append({"role": "system", "content": sys_text})
-    pairs = [p for p in (history or []) if p][-max_history_turns:]
-    for pair in pairs:
-        user_text = pair[0] if len(pair) > 0 else None
-        bot_text = pair[1] if len(pair) > 1 else None
-        if user_text:
-            messages.append({"role": "user", "content": str(user_text)})
-        if bot_text and not str(bot_text).startswith("⏳"):
-            messages.append({"role": "assistant", "content": str(bot_text)})
-    messages.append({"role": "user", "content": message.strip()})
-    return messages
+# Backward-compatible aliases for tests/imports
+_build_chat_api_messages = build_chat_api_messages
+_clamp_ui_max_tokens = clamp_ui_max_tokens
+_reveal_text_chunks = reveal_text_chunks
+_settings_source_markdown = settings_source_markdown
 
 
 def _status_markdown() -> str:
@@ -156,15 +124,6 @@ def _status_markdown() -> str:
         f"**Backend:** `{cfg.local_llm_backend.value}` · "
         f"**Profile:** `{prof.name.value}` · **Model:** `{prof.ollama_model}` · "
         f"**Ollama:** `{cfg.ollama_host}` · {env_line}"
-    )
-
-
-def _settings_source_markdown(profile_name: str | None = None, *, reloaded: bool = False) -> str:
-    profile = get_performance_profile(profile_name or _INITIAL_PROFILE_NAME)
-    suffix = " _(reloaded just now)_" if reloaded else ""
-    return (
-        f"{profile_markdown(profile)}{suffix}\n\n"
-        "One-click env switch: `python scripts/set_profile.py balanced`"
     )
 
 
@@ -263,316 +222,18 @@ async def normalize_names(
 
 
 def build_ui() -> gr.Blocks:
-    with gr.Blocks(
-        title="Private Local LLM",
-        theme=gr.themes.Soft(),
-    ) as demo:
-        gr.Markdown(
-            "# Private Local LLM\n"
-            "Runs on your machine via Ollama. Settings and chat are saved in `data/`."
-        )
-        status_md = gr.Markdown(_status_markdown())
-
-        with gr.Row():
-            health_btn = gr.Button("Check Ollama connection", variant="secondary")
-            warmup_btn = gr.Button("Wake up Ollama", variant="secondary")
-            refresh_btn = gr.Button("Reload Ollama / config", variant="secondary")
-        health_out = gr.Markdown("Click **Check Ollama connection** before your first message.")
+    with gr.Blocks(title="Local Copilot") as demo:
+        with gr.Accordion("Connection & diagnostics", open=False):
+            status_md = gr.Markdown(_status_markdown())
+            with gr.Row():
+                health_btn = gr.Button("Check Ollama", variant="secondary", size="sm")
+                warmup_btn = gr.Button("Wake up model", variant="secondary", size="sm")
+                refresh_btn = gr.Button("Reload config", variant="secondary", size="sm")
+            health_out = gr.Markdown("Expand to check Ollama status.")
 
         with gr.Tabs():
-            with gr.Tab("💬 Chat"):
-                gr.Markdown(
-                    "Choose a **performance profile** (CPU-tuned). **Balanced** is the recommended default "
-                    "(3B model). Only one Ollama job runs at a time to avoid contention."
-                )
-                perf_profile = gr.Radio(
-                    choices=[
-                        ("⚡ Fast", PerformanceProfileName.FAST.value),
-                        ("⚖️ Balanced (default)", PerformanceProfileName.BALANCED.value),
-                        ("🎯 Quality (7B, slow)", PerformanceProfileName.QUALITY.value),
-                    ],
-                    value=_INITIAL_PROFILE.name.value,
-                    label="Performance profile",
-                )
-                chatbot = gr.Chatbot(height=420, label="Conversation", value=load_chat_history())
-                with gr.Accordion("Advanced", open=True):
-                    system_prompt_source = gr.Markdown(
-                        _settings_source_markdown(_INITIAL_PROFILE.name.value)
-                    )
-                    with gr.Row():
-                        load_prompt_btn = gr.Button(
-                            "Reload system prompt from file",
-                            variant="secondary",
-                        )
-                        save_settings_btn = gr.Button(
-                            "Save current settings as default",
-                            variant="secondary",
-                        )
-                    system_prompt = gr.Textbox(
-                        label=f"System prompt ({_INITIAL_PROFILE.system_prompt_relpath})",
-                        value=load_system_prompt_for_profile(_INITIAL_PROFILE),
-                        lines=14,
-                    )
-                    with gr.Row():
-                        temperature = gr.Slider(
-                            0,
-                            1.5,
-                            value=float(_SAVED["temperature"]),
-                            step=0.1,
-                            label="Temperature",
-                        )
-                        max_tokens = gr.Slider(
-                            128,
-                            _INITIAL_PROFILE.max_tokens_cap,
-                            value=int(_SAVED["max_tokens"]),
-                            step=64,
-                            label=f"Max tokens (cap {_INITIAL_PROFILE.max_tokens_cap} in this mode)",
-                        )
-                msg = gr.Textbox(
-                    label="Your message",
-                    placeholder="Explain sports arbitrage in simple terms…",
-                    lines=2,
-                )
-                with gr.Row():
-                    send = gr.Button("Send", variant="primary")
-                    clear = gr.Button("Clear chat")
-
-                def persist_settings_only(mode: str, temp: float, max_t: float) -> str:
-                    save_ui_state(
-                        performance_profile=mode,
-                        temperature=temp,
-                        max_tokens=int(max_t),
-                    )
-                    return _settings_source_markdown(mode) + " _(saved just now)_"
-
-                def apply_performance_profile_ui(mode: str) -> tuple[float, dict, str, str]:
-                    activate_performance_profile(mode)
-                    profile = get_performance_profile(mode)
-                    save_ui_state(
-                        performance_profile=mode,
-                        temperature=profile.temperature,
-                        max_tokens=profile.max_tokens,
-                    )
-                    return (
-                        profile.temperature,
-                        gr.Slider(
-                            minimum=128,
-                            maximum=profile.max_tokens_cap,
-                            value=profile.max_tokens,
-                            step=64,
-                            label=f"Max tokens (cap {profile.max_tokens_cap} in this mode)",
-                        ),
-                        load_system_prompt_for_profile(profile),
-                        _settings_source_markdown(mode),
-                    )
-
-                async def user_submit(
-                    message: str,
-                    history: list,
-                    mode: str,
-                    _sys_p: str,
-                    temp: float,
-                    max_t: float,
-                ):
-                    activate_performance_profile(mode)
-                    profile = get_performance_profile(mode)
-                    sys_from_file = load_system_prompt_for_profile(profile)
-                    meta = _settings_source_markdown(mode)
-                    history = list(history or [])
-
-                    if not message or not message.strip():
-                        yield history, "", meta, sys_from_file
-                        return
-
-                    max_t = _clamp_ui_max_tokens(max_t, profile)
-                    temp = float(temp)
-                    save_ui_state(
-                        performance_profile=mode, temperature=temp, max_tokens=max_t
-                    )
-
-                    ok, preflight = await check_ollama_reachable()
-                    if not ok:
-                        history.append([message, f"❌ {preflight}"])
-                        save_chat_history(history)
-                        yield history, "", meta, sys_from_file
-                        return
-
-                    wait_msg = (
-                        "⏳ Warming up model (reliable mode)…"
-                        if prefer_buffered_transport()
-                        else "⏳ Connecting to Ollama…"
-                    )
-                    history.append([message, wait_msg])
-                    yield history, "", meta, sys_from_file
-
-                    api_messages = _build_chat_api_messages(
-                        message,
-                        history[:-1],
-                        sys_from_file,
-                        max_history_turns=profile.max_history_turns,
-                    )
-                    timeout_sec = float(profile.timeout_sec)
-
-                    try:
-                        model = await get_effective_ollama_model(
-                            requested=profile.ollama_model,
-                            fast=profile.use_fast_model_picker,
-                        )
-                    except Exception as exc:
-                        history[-1][1] = format_connection_help(exc)
-                        save_chat_history(history)
-                        yield history, "", meta, sys_from_file
-                        return
-
-                    partial = ""
-                    started = time.monotonic()
-                    queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
-                    use_buffered = prefer_buffered_transport()
-
-                    async def pump() -> None:
-                        try:
-                            if use_buffered and profile.warm_on_send:
-                                await warmup_ollama_model(model, num_ctx=profile.num_ctx)
-                            if use_buffered:
-                                text = await ollama_chat_completion(
-                                    api_messages,
-                                    model=model,
-                                    temperature=temp,
-                                    max_tokens=max_t,
-                                    num_ctx=profile.num_ctx,
-                                    workload_kind="chat",
-                                )
-                                if text:
-                                    await queue.put(("reveal", text))
-                            else:
-                                async for token in ollama_chat_stream(
-                                    api_messages,
-                                    model=model,
-                                    temperature=temp,
-                                    max_tokens=max_t,
-                                    num_ctx=profile.num_ctx,
-                                ):
-                                    await queue.put(("t", token))
-                        except Exception as exc:
-                            if not use_buffered:
-                                try:
-                                    logger.warning(
-                                        "stream failed, falling back to buffered: %s", exc
-                                    )
-                                    text = await ollama_chat_completion(
-                                        api_messages,
-                                        model=model,
-                                        temperature=temp,
-                                        max_tokens=max_t,
-                                        num_ctx=profile.num_ctx,
-                                        workload_kind="chat",
-                                    )
-                                    if text:
-                                        await queue.put(("reveal", text))
-                                except Exception as exc2:
-                                    await queue.put(("e", exc2))
-                            else:
-                                await queue.put(("e", exc))
-                        await queue.put(("d", None))
-
-                    task = asyncio.create_task(pump())
-                    try:
-                        while True:
-                            elapsed = time.monotonic() - started
-                            if elapsed > timeout_sec:
-                                task.cancel()
-                                suffix = (
-                                    f"\n\n❌ Timed out after {int(elapsed)}s ({profile.label}). "
-                                    "Try **Fast** mode, lower max tokens, or: "
-                                    f"`ollama run {model}`"
-                                )
-                                history[-1][1] = (partial or "⏳") + suffix
-                                break
-
-                            try:
-                                kind, payload = await asyncio.wait_for(queue.get(), timeout=2.0)
-                            except asyncio.TimeoutError:
-                                if not partial:
-                                    mode = "generating" if use_buffered else "loading"
-                                    history[-1][1] = (
-                                        f"⏳ Ollama {mode}… {int(elapsed)}s "
-                                        "(CPU can take 5–15 min first time — do not close this tab)"
-                                    )
-                                else:
-                                    history[-1][1] = partial + f" … ({int(elapsed)}s)"
-                                yield history, "", meta, sys_from_file
-                                continue
-
-                            if kind == "reveal":
-                                async for chunk in _reveal_text_chunks(str(payload)):
-                                    partial = chunk
-                                    history[-1][1] = chunk
-                                    yield history, "", meta, sys_from_file
-                                continue
-                            if kind == "d":
-                                if not partial.strip():
-                                    history[-1][1] = (
-                                        f"⚠️ Empty reply. Try **Fast** profile or shorten "
-                                        f"`{profile.system_prompt_relpath}`."
-                                    )
-                                else:
-                                    history[-1][1] = partial
-                                break
-                            if kind == "e":
-                                exc = payload
-                                history[-1][1] = (
-                                    str(exc)
-                                    if isinstance(exc, ConnectionError)
-                                    else format_connection_help(
-                                        exc if isinstance(exc, BaseException) else None
-                                    )
-                                )
-                                break
-                            partial += str(payload)
-                            history[-1][1] = partial
-                            yield history, "", meta, sys_from_file
-                    finally:
-                        if not task.done():
-                            task.cancel()
-
-                    save_chat_history(history)
-                    yield history, "", meta, sys_from_file
-
-                def clear_chat() -> tuple[list, str, str]:
-                    clear_chat_history()
-                    return [], "", _settings_source_markdown()
-
-                perf_profile.change(
-                    apply_performance_profile_ui,
-                    inputs=[perf_profile],
-                    outputs=[temperature, max_tokens, system_prompt, system_prompt_source],
-                )
-
-                send.click(
-                    user_submit,
-                    inputs=[msg, chatbot, perf_profile, system_prompt, temperature, max_tokens],
-                    outputs=[chatbot, msg, system_prompt_source, system_prompt],
-                )
-                msg.submit(
-                    user_submit,
-                    inputs=[msg, chatbot, perf_profile, system_prompt, temperature, max_tokens],
-                    outputs=[chatbot, msg, system_prompt_source, system_prompt],
-                )
-                clear.click(
-                    clear_chat,
-                    outputs=[chatbot, msg, system_prompt_source],
-                )
-                save_settings_btn.click(
-                    persist_settings_only,
-                    inputs=[perf_profile, temperature, max_tokens],
-                    outputs=[system_prompt_source],
-                )
-                for field in (temperature, max_tokens):
-                    field.change(
-                        persist_settings_only,
-                        inputs=[perf_profile, temperature, max_tokens],
-                        outputs=[system_prompt_source],
-                    )
+            with gr.Tab("Chat"):
+                chat_refs = mount_copilot_chat_tab(_SAVED, _INITIAL_PROFILE)
 
             with gr.Tab("🏗️ Architect (8B)"):
                 _mega_path = str(default_mega_prompt_path())
@@ -742,11 +403,6 @@ def build_ui() -> gr.Blocks:
                     outputs=[norm_out, norm_meta],
                 )
 
-        def reload_system_prompt_from_file(mode: str) -> tuple[str, str]:
-            profile = get_performance_profile(mode)
-            text = load_system_prompt_for_profile(profile)
-            return text, _settings_source_markdown(mode, reloaded=True)
-
         async def reload_ollama_only() -> str:
             reload_settings()
             return await check_connection()
@@ -758,42 +414,40 @@ def build_ui() -> gr.Blocks:
         health_btn.click(check_connection, outputs=health_out)
         warmup_btn.click(wake_ollama, outputs=health_out)
         refresh_btn.click(reload_ollama_only, outputs=health_out)
-        load_prompt_btn.click(
-            reload_system_prompt_from_file,
-            inputs=[perf_profile],
-            outputs=[system_prompt, system_prompt_source],
-        )
 
-        async def on_page_load() -> tuple[str, list, str, str, float, float]:
+        async def on_page_load() -> tuple[str, list, str, str, float, float, str, str]:
             ok, warm_msg = await warmup_ollama(load_model=False)
             if ok:
                 health = f"✅ {warm_msg}\n\n{_status_markdown()}"
             else:
                 health = f"❌ {warm_msg}"
             state = load_ui_state()
-            history = load_chat_history()
             prof_name = str(
                 state.get("performance_profile", get_settings().local_llm_performance_profile)
             )
             prof = get_performance_profile(prof_name)
             return (
                 health,
-                history,
-                _settings_source_markdown(prof_name),
+                load_messages_from_disk(),
+                settings_source_markdown(prof_name),
                 load_system_prompt_for_profile(prof),
                 float(state["temperature"]),
                 float(state["max_tokens"]),
+                f"**Profile:** {prof.label} · **Model:** `{prof.ollama_model}`",
+                render_header_html(prof, ollama_ok=ok),
             )
 
         demo.load(
             on_page_load,
             outputs=[
                 health_out,
-                chatbot,
-                system_prompt_source,
-                system_prompt,
-                temperature,
-                max_tokens,
+                chat_refs.chatbot,
+                chat_refs.system_prompt_source,
+                chat_refs.system_prompt,
+                chat_refs.temperature,
+                chat_refs.max_tokens,
+                chat_refs.status_bar,
+                chat_refs.header_html,
             ],
         )
 
@@ -844,6 +498,8 @@ def main() -> None:
         share=False,
         show_error=True,
         inbrowser=False,
+        theme=copilot_theme(),
+        css=COPILOT_CSS,
     )
 
 

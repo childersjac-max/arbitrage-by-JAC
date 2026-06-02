@@ -44,8 +44,10 @@ async def main() -> int:
     print(f"  models: fast={cfg.ollama_model_fast} balanced={cfg.ollama_model_balanced} quality={cfg.ollama_model_quality}")
     print(f"  ui:      http://{cfg.local_llm_ui_host}:{cfg.local_llm_ui_port}")
 
-    sp = get_default_system_prompt()
-    print(f"  system prompt: {len(sp)} chars from prompts/system_default.txt")
+    from performance_profiles import load_system_prompt_for_profile
+
+    sp = load_system_prompt_for_profile(prof)
+    print(f"  system prompt: {len(sp)} chars from {prof.system_prompt_relpath}")
 
     ok, msg = await check_ollama_reachable()
     if ok:

@@ -302,6 +302,24 @@ async def ollama_chat_stream(
                     return
 
 
+async def warmup_ollama_model(model: str | None = None) -> None:
+    """Load model weights into memory (one-token ping). Can take minutes on CPU."""
+    if model is None:
+        model = await get_effective_ollama_model()
+    host = get_ollama_base_url()
+    await resolve_ollama()
+    body = _ollama_chat_body(
+        [{"role": "user", "content": "hi"}],
+        model=model,
+        temperature=0.0,
+        max_tokens=1,
+        stream=False,
+        for_chat_ui=True,
+    )
+    await asyncio.to_thread(_chat_urllib, host, body)
+    logger.info("Ollama model warmed: %s", model)
+
+
 async def ollama_chat_completion(
     messages: list[dict[str, str]],
     *,
@@ -309,6 +327,7 @@ async def ollama_chat_completion(
     temperature: float,
     max_tokens: int,
     json_mode: bool = False,
+    for_chat_ui: bool = False,
 ) -> str:
     """
     POST /api/chat — urllib on Windows (same stack as working curl), httpx as backup.
@@ -324,6 +343,7 @@ async def ollama_chat_completion(
         max_tokens=max_tokens,
         stream=False,
         json_mode=json_mode,
+        for_chat_ui=for_chat_ui,
     )
 
     last_exc: BaseException | None = None
@@ -381,10 +401,20 @@ async def check_ollama_reachable() -> tuple[bool, str]:
     return True, f"OK at {host} · model `{effective}`"
 
 
-async def warmup_ollama() -> tuple[bool, str]:
+async def warmup_ollama(*, load_model: bool = True) -> tuple[bool, str]:
     try:
         host, names = await resolve_ollama(force=True)
         model = pick_ollama_model(get_settings().ollama_model, names)
+        if load_model:
+            try:
+                await warmup_ollama_model(model)
+                return True, f"Ready at {host} · model `{model}` loaded into memory"
+            except Exception as exc:
+                logger.warning("model warmup failed: %s", exc)
+                return True, (
+                    f"Ollama at {host} · model `{model}` "
+                    f"(ping failed: {_format_error(exc)} — chat may still work)"
+                )
         return True, f"Ready at {host} · model `{model}`"
     except Exception as exc:
         return False, format_connection_help(exc)

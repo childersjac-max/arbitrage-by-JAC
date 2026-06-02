@@ -6,6 +6,7 @@ from ollama_connect import (
     get_effective_ollama_model,
     resolve_ollama,
     warmup_ollama,
+    warmup_ollama_model,
 )
 
 __all__ = [

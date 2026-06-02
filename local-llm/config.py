@@ -80,17 +80,17 @@ class LocalLLMSettings(BaseSettings):
     local_llm_ui_host: str = Field(default="127.0.0.1", validation_alias="LOCAL_LLM_UI_HOST")
     local_llm_ui_port: int = Field(default=7860, validation_alias="LOCAL_LLM_UI_PORT")
     local_llm_ui_timeout_sec: float = Field(
-        default=300.0,
+        default=900.0,
         validation_alias="LOCAL_LLM_UI_TIMEOUT_SEC",
     )
     local_llm_ui_max_tokens: int = Field(
-        default=768,
+        default=512,
         validation_alias="LOCAL_LLM_UI_MAX_TOKENS",
     )
 
     # Ollama tuning for 8B (larger context + steadier codegen)
     ollama_num_ctx: int = Field(default=8192, validation_alias="OLLAMA_NUM_CTX")
-    ollama_chat_num_ctx: int = Field(default=4096, validation_alias="OLLAMA_CHAT_NUM_CTX")
+    ollama_chat_num_ctx: int = Field(default=2048, validation_alias="OLLAMA_CHAT_NUM_CTX")
     ollama_top_p: float = Field(default=0.9, validation_alias="OLLAMA_TOP_P")
     ollama_repeat_penalty: float = Field(default=1.1, validation_alias="OLLAMA_REPEAT_PENALTY")
 

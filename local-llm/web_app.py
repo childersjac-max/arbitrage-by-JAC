@@ -49,8 +49,11 @@ from ollama_connect import (
     check_ollama_reachable,
     format_connection_help,
     get_effective_ollama_model,
+    ollama_chat_completion,
     ollama_chat_stream,
+    prefer_buffered_transport,
     warmup_ollama,
+    warmup_ollama_model,
 )
 from paths import ENV_FILE, ENV_EXAMPLE, PACKAGE_DIR, ensure_env_file
 from prompt_loader import get_default_system_prompt, get_system_prompt_info, system_prompt_path
@@ -91,6 +94,7 @@ if not ENV_FILE.is_file() and ENV_EXAMPLE.is_file():
 reload_settings()
 
 _SAVED = load_ui_state()
+_MAX_CHAT_TURNS = 4
 
 
 def _clamp_ui_max_tokens(value: float) -> int:
@@ -107,9 +111,8 @@ def _build_chat_api_messages(
     sys_text = (system_prompt or "").strip()
     if sys_text:
         messages.append({"role": "system", "content": sys_text})
-    for pair in history or []:
-        if not pair:
-            continue
+    pairs = [p for p in (history or []) if p][-_MAX_CHAT_TURNS:]
+    for pair in pairs:
         user_text = pair[0] if len(pair) > 0 else None
         bot_text = pair[1] if len(pair) > 1 else None
         if user_text:
@@ -339,7 +342,12 @@ def build_ui() -> gr.Blocks:
                         yield history, "", meta, sys_from_file
                         return
 
-                    history.append([message, "⏳ Connecting to Ollama…"])
+                    wait_msg = (
+                        "⏳ Warming up model (reliable mode)…"
+                        if prefer_buffered_transport()
+                        else "⏳ Connecting to Ollama…"
+                    )
+                    history.append([message, wait_msg])
                     yield history, "", meta, sys_from_file
 
                     api_messages = _build_chat_api_messages(
@@ -359,18 +367,48 @@ def build_ui() -> gr.Blocks:
                     partial = ""
                     started = time.monotonic()
                     queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
+                    use_buffered = prefer_buffered_transport()
 
                     async def pump() -> None:
                         try:
-                            async for token in ollama_chat_stream(
-                                api_messages,
-                                model=model,
-                                temperature=float(temp),
-                                max_tokens=max_t,
-                            ):
-                                await queue.put(("t", token))
+                            if use_buffered:
+                                await warmup_ollama_model(model)
+                                text = await ollama_chat_completion(
+                                    api_messages,
+                                    model=model,
+                                    temperature=float(temp),
+                                    max_tokens=max_t,
+                                    for_chat_ui=True,
+                                )
+                                if text:
+                                    await queue.put(("t", text))
+                            else:
+                                async for token in ollama_chat_stream(
+                                    api_messages,
+                                    model=model,
+                                    temperature=float(temp),
+                                    max_tokens=max_t,
+                                ):
+                                    await queue.put(("t", token))
                         except Exception as exc:
-                            await queue.put(("e", exc))
+                            if not use_buffered:
+                                try:
+                                    logger.warning(
+                                        "stream failed, falling back to buffered: %s", exc
+                                    )
+                                    text = await ollama_chat_completion(
+                                        api_messages,
+                                        model=model,
+                                        temperature=float(temp),
+                                        max_tokens=max_t,
+                                        for_chat_ui=True,
+                                    )
+                                    if text:
+                                        await queue.put(("t", text))
+                                except Exception as exc2:
+                                    await queue.put(("e", exc2))
+                            else:
+                                await queue.put(("e", exc))
                         await queue.put(("d", None))
 
                     task = asyncio.create_task(pump())
@@ -391,9 +429,10 @@ def build_ui() -> gr.Blocks:
                                 kind, payload = await asyncio.wait_for(queue.get(), timeout=2.0)
                             except asyncio.TimeoutError:
                                 if not partial:
+                                    mode = "generating" if use_buffered else "loading"
                                     history[-1][1] = (
-                                        f"⏳ Loading model… {int(elapsed)}s "
-                                        "(CPU first reply often 1–5 min — leave this tab open)"
+                                        f"⏳ Ollama {mode}… {int(elapsed)}s "
+                                        "(CPU can take 5–15 min first time — do not close this tab)"
                                     )
                                 else:
                                     history[-1][1] = partial + f" … ({int(elapsed)}s)"
@@ -622,7 +661,7 @@ def build_ui() -> gr.Blocks:
             return await check_connection()
 
         async def wake_ollama() -> str:
-            ok, msg = await warmup_ollama()
+            ok, msg = await warmup_ollama(load_model=True)
             return f"✅ {msg}" if ok else f"❌ {msg}"
 
         health_btn.click(check_connection, outputs=health_out)
@@ -634,7 +673,7 @@ def build_ui() -> gr.Blocks:
         )
 
         async def on_page_load() -> tuple[str, list, str, str, float, float]:
-            ok, warm_msg = await warmup_ollama()
+            ok, warm_msg = await warmup_ollama(load_model=False)
             if ok:
                 health = f"✅ {warm_msg}\n\n{_status_markdown()}"
             else:

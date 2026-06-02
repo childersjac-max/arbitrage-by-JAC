@@ -174,6 +174,13 @@ Opens **http://127.0.0.1:7860** on your PC by default (not reachable from your p
 
 Startup prints a URL like **http://192.168.1.42:7860** — open that in your phone’s browser. Your PC must stay on with Ollama and the app running. Allow port **7860** through Windows Firewall if needed.
 
+### Phone away from home (cellular, other Wi‑Fi)
+
+Use a temporary public link (password required):
+
+- Windows: **`run-local-llm-remote.bat`** at repo root, or `local-llm/scripts/run_remote.bat`
+- Full guide: **[REMOTE_ACCESS.md](REMOTE_ACCESS.md)** (includes Tailscale as a private alternative)
+
 | Tab | Use |
 |-----|-----|
 | **Chat** | Ask your private AI anything; **chat history auto-saves** to `data/chat_history.json` |

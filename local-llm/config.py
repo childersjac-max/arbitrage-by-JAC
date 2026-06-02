@@ -92,6 +92,13 @@ class LocalLLMSettings(BaseSettings):
     local_llm_ui_host: str = Field(default="127.0.0.1", validation_alias="LOCAL_LLM_UI_HOST")
     local_llm_ui_port: int = Field(default=7860, validation_alias="LOCAL_LLM_UI_PORT")
     local_llm_ui_lan: bool = Field(default=False, validation_alias="LOCAL_LLM_UI_LAN")
+    local_llm_ui_share: bool = Field(default=False, validation_alias="LOCAL_LLM_UI_SHARE")
+    local_llm_ui_auth_user: str = Field(default="", validation_alias="LOCAL_LLM_UI_AUTH_USER")
+    local_llm_ui_auth_password: str = Field(default="", validation_alias="LOCAL_LLM_UI_AUTH_PASSWORD")
+    local_llm_ui_share_insecure: bool = Field(
+        default=False,
+        validation_alias="LOCAL_LLM_UI_SHARE_INSECURE",
+    )
     local_llm_ui_timeout_sec: float = Field(
         default=900.0,
         validation_alias="LOCAL_LLM_UI_TIMEOUT_SEC",

@@ -66,6 +66,11 @@ from ui.chat_helpers import (
 from ui.chat_tab import load_messages_from_disk, mount_copilot_chat_tab
 from ui.copilot_styles import COPILOT_CSS, copilot_theme, render_header_html
 from network_urls import resolve_ui_bind
+from remote_access import (
+    resolve_gradio_auth,
+    save_public_url,
+    validate_share_mode,
+)
 from ui_state import (
     clear_chat_history,
     load_chat_history,
@@ -458,6 +463,17 @@ def _open_browser_when_ready(url: str, delay_sec: float = 2.0) -> None:
     webbrowser.open(url)
 
 
+def _print_remote_banner(public_url: str, auth: tuple[str, str] | None) -> None:
+    print("\n" + "=" * 60)
+    print("  AWAY FROM HOME — open this URL on your phone (any network):")
+    print(f"    {public_url}")
+    if auth:
+        print(f"  Login:  user = {auth[0]}  password = (see .env LOCAL_LLM_UI_AUTH_PASSWORD)")
+    print("  Link is valid ~72 hours while this app keeps running.")
+    print("  Saved to: data/remote_url.txt")
+    print("=" * 60 + "\n")
+
+
 def main() -> None:
     cfg = get_settings()
     port = cfg.local_llm_ui_port
@@ -466,12 +482,22 @@ def main() -> None:
         port,
         lan_enabled=cfg.local_llm_ui_lan,
     )
+    auth = resolve_gradio_auth(cfg.local_llm_ui_auth_user, cfg.local_llm_ui_auth_password)
+    validate_share_mode(
+        share=cfg.local_llm_ui_share,
+        auth=auth,
+        insecure=cfg.local_llm_ui_share_insecure,
+    )
 
     print("=" * 60)
     print("  LOCAL LLM CHAT (Ollama + Gradio)")
     print(f"  Folder: {PACKAGE_DIR}")
     print(f"  On this PC:  {local_url}")
-    if phone_urls:
+    if cfg.local_llm_ui_share:
+        print("  Remote:    Gradio public link (printed below after server starts)")
+        if auth:
+            print(f"  Remote login user: {auth[0]}")
+    elif phone_urls:
         print("  On your phone (same Wi-Fi):")
         for phone_url in phone_urls:
             print(f"    {phone_url}")
@@ -481,7 +507,8 @@ def main() -> None:
     prof = get_performance_profile()
     print(f"  Profile: {prof.name.value} · Model: {prof.ollama_model}")
     print(f"  Switch:  python scripts/set_profile.py fast|balanced|quality")
-    print("  Phone mode: set LOCAL_LLM_UI_LAN=1 in .env or run scripts/run_phone.bat")
+    print("  Same Wi-Fi phone: scripts/run_phone.bat")
+    print("  Away from home:   scripts/run_remote.bat  (see REMOTE_ACCESS.md)")
     print("  NOT the harvester dashboard (that is harvester/web_app.py :8765)")
     print("=" * 60)
 
@@ -494,21 +521,43 @@ def main() -> None:
     demo = build_ui()
     demo.queue(default_concurrency_limit=1)
     print(f"\n>>> Open on this PC: {local_url}\n")
-    if phone_urls:
-        print(">>> Open on your phone:\n")
+    if phone_urls and not cfg.local_llm_ui_share:
+        print(">>> Open on your phone (same Wi-Fi):\n")
         for phone_url in phone_urls:
             print(f"    {phone_url}")
         print()
     print(f">>> Settings: {PACKAGE_DIR / 'data' / 'ui_state.json'}\n")
-    demo.launch(
-        server_name=bind_host,
-        server_port=port,
-        share=False,
-        show_error=True,
-        inbrowser=False,
-        theme=copilot_theme(),
-        css=COPILOT_CSS,
-    )
+
+    launch_kw: dict = {
+        "server_name": bind_host,
+        "server_port": port,
+        "share": cfg.local_llm_ui_share,
+        "show_error": True,
+        "inbrowser": False,
+        "theme": copilot_theme(),
+        "css": COPILOT_CSS,
+    }
+    if auth:
+        launch_kw["auth"] = auth
+        launch_kw["ssr_mode"] = False
+
+    if cfg.local_llm_ui_share:
+        launch_kw["prevent_thread_lock"] = True
+        _app, _local, public_url = demo.launch(**launch_kw)
+        public_url = (public_url or "").strip()
+        if public_url:
+            save_public_url(PACKAGE_DIR, public_url)
+            _print_remote_banner(public_url, auth)
+        else:
+            print("Remote tunnel starting — look for: Running on public URL: https://....gradio.live")
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            print("\nShutting down…")
+            demo.close()
+    else:
+        demo.launch(**launch_kw)
 
 
 if __name__ == "__main__":

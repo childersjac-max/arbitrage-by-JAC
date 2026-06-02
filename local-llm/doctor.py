@@ -58,6 +58,15 @@ async def main() -> int:
         print("  ui (phone): enable LAN but no IP detected — check Wi-Fi / ipconfig")
     else:
         print("  ui (phone): off — run scripts/enable_phone.py or scripts/run_phone.bat")
+    if cfg.local_llm_ui_share:
+        user = (cfg.local_llm_ui_auth_user or "").strip()
+        print("  ui (remote): Gradio public link when web_app.py runs (see REMOTE_ACCESS.md)")
+        if user:
+            print(f"  remote login user: {user}")
+        else:
+            print("  remote login: MISSING — run scripts/enable_remote.py")
+    else:
+        print("  ui (remote): off — run scripts/run_remote.bat for away-from-home use")
 
     from performance_profiles import load_system_prompt_for_profile
 
@@ -76,7 +85,8 @@ async def main() -> int:
             print(f"\nNext: python web_app.py  →  phone: {phone_urls[0]}")
         else:
             print("\nNext: python web_app.py  →  http://127.0.0.1:7860")
-            print("      Phone: scripts/run_phone.bat  or  python scripts/enable_phone.py")
+            print("      Phone (Wi-Fi): scripts/run_phone.bat")
+            print("      Away from home: scripts/run_remote.bat  (REMOTE_ACCESS.md)")
         return 0
 
     print(f"  ollama:  FAIL\n{msg}")

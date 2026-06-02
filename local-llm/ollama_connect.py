@@ -10,6 +10,7 @@ import logging
 import os
 import urllib.error
 import urllib.request
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -92,15 +93,17 @@ def ollama_model_options(
     num_predict: int,
     *,
     temperature: float | None = None,
+    num_ctx: int | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
     temp = temperature if temperature is not None else settings.local_llm_prompt_temperature
+    ctx = num_ctx if num_ctx is not None else settings.ollama_num_ctx
     return {
         "temperature": temp,
         "num_predict": num_predict,
         "top_p": settings.ollama_top_p,
         "repeat_penalty": settings.ollama_repeat_penalty,
-        "num_ctx": settings.ollama_num_ctx,
+        "num_ctx": ctx,
     }
 
 
@@ -230,6 +233,75 @@ async def get_effective_ollama_model() -> str:
     return pick_ollama_model(get_settings().ollama_model, names)
 
 
+def _ollama_chat_body(
+    messages: list[dict[str, str]],
+    *,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    stream: bool,
+    json_mode: bool = False,
+    for_chat_ui: bool = False,
+) -> dict[str, Any]:
+    settings = get_settings()
+    ctx = settings.ollama_chat_num_ctx if for_chat_ui else None
+    body: dict[str, Any] = {
+        "model": model,
+        "stream": stream,
+        "messages": messages,
+        "keep_alive": "10m",
+        "options": ollama_model_options(
+            max_tokens,
+            temperature=temperature,
+            num_ctx=ctx,
+        ),
+    }
+    if json_mode:
+        body["format"] = "json"
+    return body
+
+
+async def ollama_chat_stream(
+    messages: list[dict[str, str]],
+    *,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+) -> AsyncIterator[str]:
+    """
+    Stream tokens from Ollama /api/chat (httpx, trust_env=False for localhost).
+    """
+    host = get_ollama_base_url()
+    await resolve_ollama()
+    body = _ollama_chat_body(
+        messages,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stream=True,
+        for_chat_ui=True,
+    )
+    url = f"{host}/api/chat"
+    timeout = httpx.Timeout(None, connect=60.0)
+    async with httpx_client(timeout=timeout) as client:
+        async with client.stream("POST", url, json=body) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line:
+                    continue
+                try:
+                    chunk = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if chunk.get("error"):
+                    raise RuntimeError(f"Ollama error: {chunk['error']}")
+                token = chunk.get("message", {}).get("content", "")
+                if token:
+                    yield str(token)
+                if chunk.get("done"):
+                    return
+
+
 async def ollama_chat_completion(
     messages: list[dict[str, str]],
     *,
@@ -245,14 +317,14 @@ async def ollama_chat_completion(
     host = get_ollama_base_url()
     await resolve_ollama()
 
-    body: dict[str, Any] = {
-        "model": model,
-        "stream": False,
-        "messages": messages,
-        "options": ollama_model_options(max_tokens, temperature=temperature),
-    }
-    if json_mode:
-        body["format"] = "json"
+    body = _ollama_chat_body(
+        messages,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stream=False,
+        json_mode=json_mode,
+    )
 
     last_exc: BaseException | None = None
 

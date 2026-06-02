@@ -23,7 +23,7 @@ def _default_ui_state() -> dict[str, Any]:
     cfg = get_settings()
     return {
         "temperature": float(cfg.local_llm_prompt_temperature),
-        "max_tokens": int(min(2048, cfg.local_llm_prompt_max_tokens)),
+        "max_tokens": int(cfg.local_llm_ui_max_tokens),
         "reference_json": json.dumps(DEFAULT_REFERENCE, indent=2),
         "fragments_text": "",
     }
@@ -36,6 +36,9 @@ def load_ui_state() -> dict[str, Any]:
         data = json.loads(UI_STATE_FILE.read_text(encoding="utf-8"))
         base = _default_ui_state()
         base.update({k: data[k] for k in base if k in data})
+        cap = int(get_settings().local_llm_ui_max_tokens)
+        if int(base.get("max_tokens", cap)) > cap:
+            base["max_tokens"] = cap
         return base
     except (json.JSONDecodeError, OSError):
         return _default_ui_state()

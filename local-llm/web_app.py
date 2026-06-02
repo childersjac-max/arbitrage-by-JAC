@@ -13,6 +13,7 @@ Settings and chat history persist in local-llm/data/ between restarts.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -28,7 +29,8 @@ from local_inference import LocalInferenceClient
 from ollama_connect import (
     check_ollama_reachable,
     format_connection_help,
-    resolve_ollama,
+    get_effective_ollama_model,
+    ollama_chat_stream,
     warmup_ollama,
 )
 from paths import ENV_FILE, ENV_EXAMPLE, PACKAGE_DIR, ensure_env_file
@@ -70,6 +72,33 @@ if not ENV_FILE.is_file() and ENV_EXAMPLE.is_file():
 reload_settings()
 
 _SAVED = load_ui_state()
+
+
+def _clamp_ui_max_tokens(value: float) -> int:
+    cap = int(get_settings().local_llm_ui_max_tokens)
+    return max(128, min(int(value), cap))
+
+
+def _build_chat_api_messages(
+    message: str,
+    history: list | None,
+    system_prompt: str,
+) -> list[dict[str, str]]:
+    messages: list[dict[str, str]] = []
+    sys_text = (system_prompt or "").strip()
+    if sys_text:
+        messages.append({"role": "system", "content": sys_text})
+    for pair in history or []:
+        if not pair:
+            continue
+        user_text = pair[0] if len(pair) > 0 else None
+        bot_text = pair[1] if len(pair) > 1 else None
+        if user_text:
+            messages.append({"role": "user", "content": str(user_text)})
+        if bot_text and not str(bot_text).startswith("⏳"):
+            messages.append({"role": "assistant", "content": str(bot_text)})
+    messages.append({"role": "user", "content": message.strip()})
+    return messages
 
 
 def _status_markdown() -> str:
@@ -212,7 +241,10 @@ def build_ui() -> gr.Blocks:
         with gr.Tabs():
             with gr.Tab("💬 Chat"):
                 gr.Markdown(
-                    "Chat history is saved automatically to `data/chat_history.json`."
+                    "Chat streams tokens as Ollama generates them. "
+                    "First reply on CPU can take **1–5 minutes** — you will see a live timer. "
+                    "Keep **Max tokens** at **512–768** for speed. "
+                    "History saves to `data/chat_history.json`."
                 )
                 chatbot = gr.Chatbot(height=420, label="Conversation", value=load_chat_history())
                 with gr.Accordion("Advanced", open=True):
@@ -239,12 +271,13 @@ def build_ui() -> gr.Blocks:
                             step=0.1,
                             label="Temperature",
                         )
+                        _ui_token_cap = int(get_settings().local_llm_ui_max_tokens)
                         max_tokens = gr.Slider(
                             128,
-                            8192,
+                            max(2048, _ui_token_cap),
                             value=int(_SAVED["max_tokens"]),
-                            step=128,
-                            label="Max tokens",
+                            step=64,
+                            label=f"Max tokens (≤{_ui_token_cap} enforced for speed)",
                         )
                 msg = gr.Textbox(
                     label="Your message",
@@ -268,24 +301,114 @@ def build_ui() -> gr.Blocks:
                     _sys_p: str,
                     temp: float,
                     max_t: float,
-                ) -> tuple[list, str, str, str]:
-                    save_ui_state(
-                        temperature=temp,
-                        max_tokens=int(max_t),
-                    )
+                ):
                     sys_from_file = get_default_system_prompt()
-                    reply = await chat_respond(
-                        message, history, sys_from_file, temp, max_t
+                    meta = _settings_source_markdown()
+                    history = list(history or [])
+
+                    if not message or not message.strip():
+                        yield history, "", meta, sys_from_file
+                        return
+
+                    max_t = _clamp_ui_max_tokens(max_t)
+                    save_ui_state(temperature=temp, max_tokens=max_t)
+
+                    ok, preflight = await check_ollama_reachable()
+                    if not ok:
+                        history.append([message, f"❌ {preflight}"])
+                        save_chat_history(history)
+                        yield history, "", meta, sys_from_file
+                        return
+
+                    history.append([message, "⏳ Connecting to Ollama…"])
+                    yield history, "", meta, sys_from_file
+
+                    api_messages = _build_chat_api_messages(
+                        message, history[:-1], sys_from_file
                     )
-                    history = history or []
-                    history.append([message, reply])
+                    cfg = get_settings()
+                    timeout_sec = float(cfg.local_llm_ui_timeout_sec)
+
+                    try:
+                        model = await get_effective_ollama_model()
+                    except Exception as exc:
+                        history[-1][1] = format_connection_help(exc)
+                        save_chat_history(history)
+                        yield history, "", meta, sys_from_file
+                        return
+
+                    partial = ""
+                    started = time.monotonic()
+                    queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
+
+                    async def pump() -> None:
+                        try:
+                            async for token in ollama_chat_stream(
+                                api_messages,
+                                model=model,
+                                temperature=float(temp),
+                                max_tokens=max_t,
+                            ):
+                                await queue.put(("t", token))
+                        except Exception as exc:
+                            await queue.put(("e", exc))
+                        await queue.put(("d", None))
+
+                    task = asyncio.create_task(pump())
+                    try:
+                        while True:
+                            elapsed = time.monotonic() - started
+                            if elapsed > timeout_sec:
+                                task.cancel()
+                                suffix = (
+                                    f"\n\n❌ Timed out after {int(elapsed)}s. "
+                                    "Try **Max tokens** ≤512, keep Ollama running, or test in terminal: "
+                                    f"`ollama run {model}`"
+                                )
+                                history[-1][1] = (partial or "⏳") + suffix
+                                break
+
+                            try:
+                                kind, payload = await asyncio.wait_for(queue.get(), timeout=2.0)
+                            except asyncio.TimeoutError:
+                                if not partial:
+                                    history[-1][1] = (
+                                        f"⏳ Loading model… {int(elapsed)}s "
+                                        "(CPU first reply often 1–5 min — leave this tab open)"
+                                    )
+                                else:
+                                    history[-1][1] = partial + f" … ({int(elapsed)}s)"
+                                yield history, "", meta, sys_from_file
+                                continue
+
+                            if kind == "d":
+                                if not partial.strip():
+                                    history[-1][1] = (
+                                        "⚠️ Empty reply. Lower **Max tokens** or shorten "
+                                        "the system prompt in `prompts/system_default.txt`."
+                                    )
+                                else:
+                                    history[-1][1] = partial
+                                break
+                            if kind == "e":
+                                exc = payload
+                                history[-1][1] = (
+                                    str(exc)
+                                    if isinstance(exc, ConnectionError)
+                                    else format_connection_help(
+                                        exc if isinstance(exc, BaseException) else None
+                                    )
+                                )
+                                break
+                            partial += str(payload)
+                            history[-1][1] = partial
+                            yield history, "", meta, sys_from_file
+                    finally:
+                        if not task.done():
+                            task.cancel()
+
                     save_chat_history(history)
-                    return (
-                        history,
-                        "",
-                        _settings_source_markdown(),
-                        sys_from_file,
-                    )
+                    yield history, "", meta, sys_from_file
 
                 def clear_chat() -> tuple[list, str, str]:
                     clear_chat_history()

@@ -159,7 +159,20 @@ pip install -r requirements-app.txt
 python web_app.py
 ```
 
-Opens **http://127.0.0.1:7860** (only on your PC; not exposed to the internet).
+Opens **http://127.0.0.1:7860** on your PC by default (not reachable from your phone).
+
+### Phone on the same Wi‑Fi
+
+1. **One-time enable** (writes `.env`):
+   ```bash
+   python scripts/enable_phone.py
+   python web_app.py
+   ```
+2. **Or run once** with LAN mode (no `.env` change):
+   - Windows: double-click `scripts/run_phone.bat` or repo root `run-local-llm-phone.bat`
+   - Git Bash: `bash scripts/run_phone.sh`
+
+Startup prints a URL like **http://192.168.1.42:7860** — open that in your phone’s browser. Your PC must stay on with Ollama and the app running. Allow port **7860** through Windows Firewall if needed.
 
 | Tab | Use |
 |-----|-----|

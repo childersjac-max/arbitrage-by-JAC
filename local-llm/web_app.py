@@ -46,16 +46,7 @@ except ModuleNotFoundError:
 from performance_profiles import get_performance_profile, load_system_prompt_for_profile
 from config import get_settings, reload_settings
 from local_inference import LocalInferenceClient
-from ollama_connect import (
-    check_ollama_reachable,
-    format_connection_help,
-    get_effective_ollama_model,
-    ollama_chat_completion,
-    ollama_chat_stream,
-    prefer_buffered_transport,
-    warmup_ollama,
-    warmup_ollama_model,
-)
+from ollama_connect import check_ollama_reachable, format_connection_help, warmup_ollama
 from paths import ENV_FILE, ENV_EXAMPLE, PACKAGE_DIR, ensure_env_file
 from prompt_loader import get_default_system_prompt, get_system_prompt_info, system_prompt_path
 from prompt_types import ChatMessage
@@ -74,6 +65,7 @@ from ui.chat_helpers import (
 )
 from ui.chat_tab import load_messages_from_disk, mount_copilot_chat_tab
 from ui.copilot_styles import COPILOT_CSS, copilot_theme, render_header_html
+from network_urls import resolve_ui_bind
 from ui_state import (
     clear_chat_history,
     load_chat_history,
@@ -468,32 +460,48 @@ def _open_browser_when_ready(url: str, delay_sec: float = 2.0) -> None:
 
 def main() -> None:
     cfg = get_settings()
-    host = cfg.local_llm_ui_host
     port = cfg.local_llm_ui_port
-    url = f"http://{host}:{port}"
+    bind_host, local_url, phone_urls = resolve_ui_bind(
+        cfg.local_llm_ui_host,
+        port,
+        lan_enabled=cfg.local_llm_ui_lan,
+    )
 
     print("=" * 60)
     print("  LOCAL LLM CHAT (Ollama + Gradio)")
     print(f"  Folder: {PACKAGE_DIR}")
-    print(f"  Open:   {url}")
+    print(f"  On this PC:  {local_url}")
+    if phone_urls:
+        print("  On your phone (same Wi-Fi):")
+        for phone_url in phone_urls:
+            print(f"    {phone_url}")
+        print("  Tip: allow Python through Windows Firewall for port", port, "if the phone cannot connect.")
+    elif cfg.local_llm_ui_lan:
+        print("  Phone URL: could not detect LAN IP — run ipconfig and use http://<your-ipv4>:", port, sep="")
     prof = get_performance_profile()
     print(f"  Profile: {prof.name.value} · Model: {prof.ollama_model}")
     print(f"  Switch:  python scripts/set_profile.py fast|balanced|quality")
+    print("  Phone mode: set LOCAL_LLM_UI_LAN=1 in .env or run scripts/run_phone.bat")
     print("  NOT the harvester dashboard (that is harvester/web_app.py :8765)")
     print("=" * 60)
 
     threading.Thread(
         target=_open_browser_when_ready,
-        args=(url,),
+        args=(local_url,),
         daemon=True,
     ).start()
 
     demo = build_ui()
     demo.queue(default_concurrency_limit=1)
-    print(f"\n>>> Open in your browser: {url}\n")
+    print(f"\n>>> Open on this PC: {local_url}\n")
+    if phone_urls:
+        print(">>> Open on your phone:\n")
+        for phone_url in phone_urls:
+            print(f"    {phone_url}")
+        print()
     print(f">>> Settings: {PACKAGE_DIR / 'data' / 'ui_state.json'}\n")
     demo.launch(
-        server_name=host,
+        server_name=bind_host,
         server_port=port,
         share=False,
         show_error=True,

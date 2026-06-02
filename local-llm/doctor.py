@@ -42,7 +42,22 @@ async def main() -> int:
     prof = get_performance_profile()
     print(profile_markdown(prof).replace("**", ""))
     print(f"  models: fast={cfg.ollama_model_fast} balanced={cfg.ollama_model_balanced} quality={cfg.ollama_model_quality}")
-    print(f"  ui:      http://{cfg.local_llm_ui_host}:{cfg.local_llm_ui_port}")
+    from network_urls import resolve_ui_bind
+
+    _, local_url, phone_urls = resolve_ui_bind(
+        cfg.local_llm_ui_host,
+        cfg.local_llm_ui_port,
+        lan_enabled=cfg.local_llm_ui_lan,
+    )
+    print(f"  ui (PC): {local_url}")
+    if phone_urls:
+        print("  ui (phone, same Wi-Fi):")
+        for u in phone_urls:
+            print(f"           {u}")
+    elif cfg.local_llm_ui_lan:
+        print("  ui (phone): enable LAN but no IP detected — check Wi-Fi / ipconfig")
+    else:
+        print("  ui (phone): off — run scripts/enable_phone.py or scripts/run_phone.bat")
 
     from performance_profiles import load_system_prompt_for_profile
 
@@ -57,7 +72,11 @@ async def main() -> int:
             print(f"  effective model: {effective}")
         except Exception as exc:
             print(f"  effective model: (error) {exc}")
-        print("\nNext: python web_app.py  →  http://127.0.0.1:7860")
+        if phone_urls:
+            print(f"\nNext: python web_app.py  →  phone: {phone_urls[0]}")
+        else:
+            print("\nNext: python web_app.py  →  http://127.0.0.1:7860")
+            print("      Phone: scripts/run_phone.bat  or  python scripts/enable_phone.py")
         return 0
 
     print(f"  ollama:  FAIL\n{msg}")

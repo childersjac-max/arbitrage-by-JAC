@@ -89,6 +89,7 @@ async def _architect_chat(user: str, *, json_mode: bool = False, max_tokens: int
         temperature=settings.architect_temperature,
         max_tokens=tokens,
         json_mode=json_mode,
+        workload_kind="architect",
     )
 
 

@@ -98,13 +98,16 @@ def ollama_model_options(
     settings = get_settings()
     temp = temperature if temperature is not None else settings.local_llm_prompt_temperature
     ctx = num_ctx if num_ctx is not None else settings.ollama_num_ctx
-    return {
+    opts: dict[str, Any] = {
         "temperature": temp,
         "num_predict": num_predict,
         "top_p": settings.ollama_top_p,
         "repeat_penalty": settings.ollama_repeat_penalty,
         "num_ctx": ctx,
     }
+    if settings.ollama_num_thread is not None and settings.ollama_num_thread > 0:
+        opts["num_thread"] = settings.ollama_num_thread
+    return opts
 
 
 def extract_ollama_chat_content(data: dict[str, Any]) -> str:
@@ -232,7 +235,7 @@ async def get_effective_ollama_model(*, requested: str | None = None, fast: bool
     _, names = await resolve_ollama()
     req = requested or get_settings().ollama_model
     if fast:
-        from chat_modes import pick_fast_ollama_model
+        from performance_profiles import pick_fast_ollama_model
 
         return pick_fast_ollama_model(req, names)
     return pick_ollama_model(req, names)
@@ -312,8 +315,10 @@ async def ollama_chat_stream(
                     return
 
 
-async def warmup_ollama_model(model: str | None = None) -> None:
+async def warmup_ollama_model(model: str | None = None, *, num_ctx: int | None = None) -> None:
     """Load model weights into memory (one-token ping). Can take minutes on CPU."""
+    from workload_lock import WorkloadKind, ollama_workload
+
     if model is None:
         model = await get_effective_ollama_model()
     host = get_ollama_base_url()
@@ -325,8 +330,10 @@ async def warmup_ollama_model(model: str | None = None) -> None:
         max_tokens=1,
         stream=False,
         for_chat_ui=True,
+        num_ctx=num_ctx,
     )
-    await asyncio.to_thread(_chat_urllib, host, body)
+    async with ollama_workload(WorkloadKind.WARMUP):
+        await asyncio.to_thread(_chat_urllib, host, body)
     logger.info("Ollama model warmed: %s", model)
 
 
@@ -339,13 +346,21 @@ async def ollama_chat_completion(
     json_mode: bool = False,
     for_chat_ui: bool = False,
     num_ctx: int | None = None,
+    workload_kind: str = "chat",
 ) -> str:
     """
     POST /api/chat — urllib on Windows (same stack as working curl), httpx as backup.
     """
+    from workload_lock import WorkloadKind, ollama_workload
+
     global _prefer_urllib
     host = get_ollama_base_url()
     await resolve_ollama()
+
+    try:
+        kind = WorkloadKind(workload_kind)
+    except ValueError:
+        kind = WorkloadKind.CHAT
 
     body = _ollama_chat_body(
         messages,
@@ -360,31 +375,32 @@ async def ollama_chat_completion(
 
     last_exc: BaseException | None = None
 
-    if _prefer_urllib:
+    async with ollama_workload(kind):
+        if _prefer_urllib:
+            try:
+                return await asyncio.to_thread(_chat_urllib, host, body)
+            except Exception as exc:
+                last_exc = exc
+                logger.warning("urllib chat failed: %s", exc)
+
         try:
-            return await asyncio.to_thread(_chat_urllib, host, body)
+            url = f"{host}/api/chat"
+            timeout = httpx.Timeout(600.0, connect=60.0)
+            async with httpx_client(timeout=timeout) as client:
+                r = await client.post(url, json=body)
+                r.raise_for_status()
+                return extract_ollama_chat_content(r.json())
         except Exception as exc:
             last_exc = exc
-            logger.warning("urllib chat failed: %s", exc)
+            logger.warning("httpx chat failed: %s", exc)
 
-    try:
-        url = f"{host}/api/chat"
-        timeout = httpx.Timeout(600.0, connect=60.0)
-        async with httpx_client(timeout=timeout) as client:
-            r = await client.post(url, json=body)
-            r.raise_for_status()
-            return extract_ollama_chat_content(r.json())
-    except Exception as exc:
-        last_exc = exc
-        logger.warning("httpx chat failed: %s", exc)
-
-    try:
-        text = await asyncio.to_thread(_chat_urllib, host, body)
-        _prefer_urllib = True
-        return text
-    except Exception as exc:
-        last_exc = exc
-        raise ConnectionError(format_connection_help(last_exc)) from exc
+        try:
+            text = await asyncio.to_thread(_chat_urllib, host, body)
+            _prefer_urllib = True
+            return text
+        except Exception as exc:
+            last_exc = exc
+            raise ConnectionError(format_connection_help(last_exc)) from exc
 
 
 async def check_ollama_reachable() -> tuple[bool, str]:

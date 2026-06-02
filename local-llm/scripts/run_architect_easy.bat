@@ -59,7 +59,7 @@ if errorlevel 1 (
   echo.
   echo ============================================
   echo   FAILED - see error above
-  echo   If it says "out of date", run: git pull origin cursor/local-llm-normalization-4fea
+  echo   If errors persist, in Git Bash: git pull origin cursor/local-llm-normalization-4fea
   echo ============================================
   pause
   exit /b 1

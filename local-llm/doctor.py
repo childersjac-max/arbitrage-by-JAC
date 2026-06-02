@@ -37,9 +37,11 @@ async def main() -> int:
     cfg = get_settings()
     print(f"  backend: {cfg.local_llm_backend.value}")
     print(f"  host:    {cfg.ollama_host}")
-    print(f"  model (normal): {cfg.ollama_model}")
-    print(f"  model (fast):   {cfg.ollama_model_fast}")
-    print(f"  default mode:   {cfg.local_llm_default_chat_mode}")
+    from performance_profiles import get_performance_profile, profile_markdown
+
+    prof = get_performance_profile()
+    print(profile_markdown(prof).replace("**", ""))
+    print(f"  models: fast={cfg.ollama_model_fast} balanced={cfg.ollama_model_balanced} quality={cfg.ollama_model_quality}")
     print(f"  ui:      http://{cfg.local_llm_ui_host}:{cfg.local_llm_ui_port}")
 
     sp = get_default_system_prompt()

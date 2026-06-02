@@ -6,7 +6,11 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from chat_modes import get_chat_profile, parse_chat_mode
+from performance_profiles import (
+    PerformanceProfileName,
+    get_performance_profile,
+    parse_performance_profile,
+)
 from config import get_settings
 from paths import PACKAGE_DIR
 DATA_DIR = PACKAGE_DIR / "data"
@@ -20,12 +24,21 @@ DEFAULT_REFERENCE = {
 }
 
 
+def _migrate_profile_key(data: dict[str, Any]) -> str:
+    if "performance_profile" in data:
+        return str(data["performance_profile"])
+    legacy = str(data.get("chat_mode", "fast"))
+    if legacy == "normal":
+        return PerformanceProfileName.QUALITY.value
+    if legacy == "fast":
+        return PerformanceProfileName.FAST.value
+    return parse_performance_profile(get_settings().local_llm_performance_profile).value
+
+
 def _default_ui_state() -> dict[str, Any]:
-    cfg = get_settings()
-    mode = parse_chat_mode(cfg.local_llm_default_chat_mode)
-    profile = get_chat_profile(mode)
+    profile = get_performance_profile()
     return {
-        "chat_mode": mode.value,
+        "performance_profile": profile.name.value,
         "temperature": float(profile.temperature),
         "max_tokens": int(profile.max_tokens),
         "reference_json": json.dumps(DEFAULT_REFERENCE, indent=2),
@@ -40,7 +53,8 @@ def load_ui_state() -> dict[str, Any]:
         data = json.loads(UI_STATE_FILE.read_text(encoding="utf-8"))
         base = _default_ui_state()
         base.update({k: data[k] for k in base if k in data})
-        profile = get_chat_profile(parse_chat_mode(str(base.get("chat_mode", "fast"))))
+        profile = get_performance_profile(_migrate_profile_key(base))
+        base["performance_profile"] = profile.name.value
         if int(base.get("max_tokens", profile.max_tokens)) > profile.max_tokens_cap:
             base["max_tokens"] = profile.max_tokens_cap
         return base
@@ -50,6 +64,7 @@ def load_ui_state() -> dict[str, Any]:
 
 def save_ui_state(
     *,
+    performance_profile: str | None = None,
     chat_mode: str | None = None,
     temperature: float | None = None,
     max_tokens: int | None = None,
@@ -57,8 +72,10 @@ def save_ui_state(
     fragments_text: str | None = None,
 ) -> None:
     state = load_ui_state()
-    if chat_mode is not None:
-        state["chat_mode"] = parse_chat_mode(chat_mode).value
+    if performance_profile is not None:
+        state["performance_profile"] = parse_performance_profile(performance_profile).value
+    elif chat_mode is not None:
+        state["performance_profile"] = _migrate_profile_key({"chat_mode": chat_mode})
     if temperature is not None:
         state["temperature"] = float(temperature)
     if max_tokens is not None:

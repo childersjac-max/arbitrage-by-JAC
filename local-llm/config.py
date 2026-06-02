@@ -31,12 +31,20 @@ class LocalLLMSettings(BaseSettings):
 
     ollama_host: str = Field(default="http://127.0.0.1:11434", validation_alias="OLLAMA_HOST")
     ollama_model: str = Field(
-        default="llama3.1:8b-instruct-q4_K_M",
+        default="qwen2.5:3b-instruct-q4_K_M",
         validation_alias="OLLAMA_MODEL",
     )
     ollama_model_fast: str = Field(
         default="qwen2.5:1.5b-instruct-q4_K_M",
         validation_alias="OLLAMA_MODEL_FAST",
+    )
+    ollama_model_balanced: str = Field(
+        default="qwen2.5:3b-instruct-q4_K_M",
+        validation_alias="OLLAMA_MODEL_BALANCED",
+    )
+    ollama_model_quality: str = Field(
+        default="qwen2.5-coder:7b-instruct-q4_K_M",
+        validation_alias="OLLAMA_MODEL_QUALITY",
     )
 
     vllm_base_url: str = Field(default="http://127.0.0.1:8000/v1", validation_alias="VLLM_BASE_URL")
@@ -56,7 +64,7 @@ class LocalLLMSettings(BaseSettings):
 
     local_llm_max_connections: int = Field(default=32, validation_alias="LOCAL_LLM_MAX_CONNECTIONS")
     local_llm_batch_concurrency: int = Field(
-        default=8,
+        default=1,
         validation_alias="LOCAL_LLM_BATCH_CONCURRENCY",
     )
 
@@ -92,11 +100,75 @@ class LocalLLMSettings(BaseSettings):
         validation_alias="LOCAL_LLM_UI_MAX_TOKENS",
     )
 
-    # Chat modes (web_app.py) — fast = CPU-friendly, normal = full architect prompt
+    # Performance profile: fast | balanced | quality (single switch for CPU tuning)
+    local_llm_performance_profile: str = Field(
+        default="balanced",
+        validation_alias="LOCAL_LLM_PERFORMANCE_PROFILE",
+    )
     local_llm_default_chat_mode: str = Field(
-        default="fast",
+        default="balanced",
         validation_alias="LOCAL_LLM_DEFAULT_CHAT_MODE",
     )
+    # Profile: FAST
+    profile_fast_max_tokens: int = Field(default=192, validation_alias="PROFILE_FAST_MAX_TOKENS")
+    profile_fast_max_tokens_cap: int = Field(
+        default=384, validation_alias="PROFILE_FAST_MAX_TOKENS_CAP"
+    )
+    profile_fast_num_ctx: int = Field(default=768, validation_alias="PROFILE_FAST_NUM_CTX")
+    profile_fast_max_history: int = Field(default=1, validation_alias="PROFILE_FAST_MAX_HISTORY")
+    profile_fast_timeout_sec: float = Field(default=300.0, validation_alias="PROFILE_FAST_TIMEOUT_SEC")
+    profile_fast_temperature: float = Field(default=0.2, validation_alias="PROFILE_FAST_TEMPERATURE")
+    profile_fast_system_prompt_file: str = Field(
+        default="prompts/system_fast.txt",
+        validation_alias="PROFILE_FAST_SYSTEM_PROMPT_FILE",
+    )
+    # Profile: BALANCED
+    profile_balanced_max_tokens: int = Field(
+        default=384, validation_alias="PROFILE_BALANCED_MAX_TOKENS"
+    )
+    profile_balanced_max_tokens_cap: int = Field(
+        default=768, validation_alias="PROFILE_BALANCED_MAX_TOKENS_CAP"
+    )
+    profile_balanced_num_ctx: int = Field(
+        default=1536, validation_alias="PROFILE_BALANCED_NUM_CTX"
+    )
+    profile_balanced_max_history: int = Field(
+        default=2, validation_alias="PROFILE_BALANCED_MAX_HISTORY"
+    )
+    profile_balanced_timeout_sec: float = Field(
+        default=480.0, validation_alias="PROFILE_BALANCED_TIMEOUT_SEC"
+    )
+    profile_balanced_temperature: float = Field(
+        default=0.2, validation_alias="PROFILE_BALANCED_TEMPERATURE"
+    )
+    profile_balanced_system_prompt_file: str = Field(
+        default="prompts/system_balanced.txt",
+        validation_alias="PROFILE_BALANCED_SYSTEM_PROMPT_FILE",
+    )
+    # Profile: QUALITY
+    profile_quality_max_tokens: int = Field(
+        default=512, validation_alias="PROFILE_QUALITY_MAX_TOKENS"
+    )
+    profile_quality_max_tokens_cap: int = Field(
+        default=1024, validation_alias="PROFILE_QUALITY_MAX_TOKENS_CAP"
+    )
+    profile_quality_num_ctx: int = Field(
+        default=2048, validation_alias="PROFILE_QUALITY_NUM_CTX"
+    )
+    profile_quality_max_history: int = Field(
+        default=3, validation_alias="PROFILE_QUALITY_MAX_HISTORY"
+    )
+    profile_quality_timeout_sec: float = Field(
+        default=900.0, validation_alias="PROFILE_QUALITY_TIMEOUT_SEC"
+    )
+    profile_quality_temperature: float = Field(
+        default=0.2, validation_alias="PROFILE_QUALITY_TEMPERATURE"
+    )
+    profile_quality_system_prompt_file: str = Field(
+        default="prompts/system_default.txt",
+        validation_alias="PROFILE_QUALITY_SYSTEM_PROMPT_FILE",
+    )
+    # Legacy chat mode keys (mapped to profiles if still in ui_state.json)
     local_llm_fast_max_tokens: int = Field(
         default=256,
         validation_alias="LOCAL_LLM_FAST_MAX_TOKENS",
@@ -149,8 +221,9 @@ class LocalLLMSettings(BaseSettings):
     )
 
     # Ollama tuning for 8B (larger context + steadier codegen)
-    ollama_num_ctx: int = Field(default=8192, validation_alias="OLLAMA_NUM_CTX")
-    ollama_chat_num_ctx: int = Field(default=2048, validation_alias="OLLAMA_CHAT_NUM_CTX")
+    ollama_num_ctx: int = Field(default=2048, validation_alias="OLLAMA_NUM_CTX")
+    ollama_chat_num_ctx: int = Field(default=1536, validation_alias="OLLAMA_CHAT_NUM_CTX")
+    ollama_num_thread: int | None = Field(default=None, validation_alias="OLLAMA_NUM_THREAD")
     ollama_top_p: float = Field(default=0.9, validation_alias="OLLAMA_TOP_P")
     ollama_repeat_penalty: float = Field(default=1.1, validation_alias="OLLAMA_REPEAT_PENALTY")
 

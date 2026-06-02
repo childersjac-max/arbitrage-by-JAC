@@ -43,12 +43,12 @@ except ModuleNotFoundError:
     )
     raise SystemExit(1) from None
 
-from chat_modes import (
-    ChatMode,
-    get_chat_profile,
+from performance_profiles import (
+    PerformanceProfileName,
+    activate_performance_profile,
+    get_performance_profile,
     load_system_prompt_for_profile,
-    mode_markdown,
-    parse_chat_mode,
+    profile_markdown,
 )
 from config import get_settings, reload_settings
 from local_inference import LocalInferenceClient
@@ -101,8 +101,24 @@ if not ENV_FILE.is_file() and ENV_EXAMPLE.is_file():
 reload_settings()
 
 _SAVED = load_ui_state()
-_INITIAL_MODE = parse_chat_mode(str(_SAVED.get("chat_mode", "fast")))
-_INITIAL_PROFILE = get_chat_profile(_INITIAL_MODE)
+_INITIAL_PROFILE_NAME = str(
+    _SAVED.get("performance_profile", get_settings().local_llm_performance_profile)
+)
+_INITIAL_PROFILE = get_performance_profile(_INITIAL_PROFILE_NAME)
+
+
+async def _reveal_text_chunks(text: str, *, words_per_chunk: int = 4, delay_sec: float = 0.04):
+    """Pseudo-streaming on Windows when true Ollama stream is unavailable."""
+    words = text.split()
+    if not words:
+        yield text
+        return
+    buf: list[str] = []
+    for i in range(0, len(words), words_per_chunk):
+        buf.extend(words[i : i + words_per_chunk])
+        yield " ".join(buf)
+        await asyncio.sleep(delay_sec)
+    yield text
 
 
 def _clamp_ui_max_tokens(value: float, profile) -> int:
@@ -134,21 +150,21 @@ def _build_chat_api_messages(
 
 def _status_markdown() -> str:
     cfg = get_settings()
+    prof = get_performance_profile()
     env_line = f"✅ `{ENV_FILE}`" if ENV_FILE.is_file() else f"⚠️ missing `{ENV_FILE}`"
     return (
         f"**Backend:** `{cfg.local_llm_backend.value}` · "
-        f"**Model:** `{cfg.ollama_model}` · "
+        f"**Profile:** `{prof.name.value}` · **Model:** `{prof.ollama_model}` · "
         f"**Ollama:** `{cfg.ollama_host}` · {env_line}"
     )
 
 
-def _settings_source_markdown(chat_mode: str | None = None, *, reloaded: bool = False) -> str:
-    profile = get_chat_profile(chat_mode or str(_SAVED.get("chat_mode", "fast")))
+def _settings_source_markdown(profile_name: str | None = None, *, reloaded: bool = False) -> str:
+    profile = get_performance_profile(profile_name or _INITIAL_PROFILE_NAME)
     suffix = " _(reloaded just now)_" if reloaded else ""
     return (
-        f"{mode_markdown(profile)}{suffix}\n\n"
-        "Edit the system prompt file for this mode, then click **Reload system prompt** "
-        "or switch mode and back."
+        f"{profile_markdown(profile)}{suffix}\n\n"
+        "One-click env switch: `python scripts/set_profile.py balanced`"
     )
 
 
@@ -266,22 +282,22 @@ def build_ui() -> gr.Blocks:
         with gr.Tabs():
             with gr.Tab("💬 Chat"):
                 gr.Markdown(
-                    "Choose **Fast** for CPU (small model, short prompt) or **Normal** for the full "
-                    "arbitrage architect prompt. First reply on CPU can take minutes — a live timer "
-                    "is shown while Ollama works."
+                    "Choose a **performance profile** (CPU-tuned). **Balanced** is the recommended default "
+                    "(3B model). Only one Ollama job runs at a time to avoid contention."
                 )
-                chat_mode = gr.Radio(
+                perf_profile = gr.Radio(
                     choices=[
-                        ("⚡ Fast (CPU)", ChatMode.FAST.value),
-                        ("📐 Normal", ChatMode.NORMAL.value),
+                        ("⚡ Fast", PerformanceProfileName.FAST.value),
+                        ("⚖️ Balanced (default)", PerformanceProfileName.BALANCED.value),
+                        ("🎯 Quality (7B, slow)", PerformanceProfileName.QUALITY.value),
                     ],
-                    value=_INITIAL_MODE.value,
-                    label="Chat mode",
+                    value=_INITIAL_PROFILE.name.value,
+                    label="Performance profile",
                 )
                 chatbot = gr.Chatbot(height=420, label="Conversation", value=load_chat_history())
                 with gr.Accordion("Advanced", open=True):
                     system_prompt_source = gr.Markdown(
-                        _settings_source_markdown(_INITIAL_MODE.value)
+                        _settings_source_markdown(_INITIAL_PROFILE.name.value)
                     )
                     with gr.Row():
                         load_prompt_btn = gr.Button(
@@ -323,16 +339,17 @@ def build_ui() -> gr.Blocks:
 
                 def persist_settings_only(mode: str, temp: float, max_t: float) -> str:
                     save_ui_state(
-                        chat_mode=mode,
+                        performance_profile=mode,
                         temperature=temp,
                         max_tokens=int(max_t),
                     )
                     return _settings_source_markdown(mode) + " _(saved just now)_"
 
-                def apply_chat_mode(mode: str) -> tuple[float, dict, str, str]:
-                    profile = get_chat_profile(mode)
+                def apply_performance_profile_ui(mode: str) -> tuple[float, dict, str, str]:
+                    activate_performance_profile(mode)
+                    profile = get_performance_profile(mode)
                     save_ui_state(
-                        chat_mode=mode,
+                        performance_profile=mode,
                         temperature=profile.temperature,
                         max_tokens=profile.max_tokens,
                     )
@@ -357,7 +374,8 @@ def build_ui() -> gr.Blocks:
                     temp: float,
                     max_t: float,
                 ):
-                    profile = get_chat_profile(mode)
+                    activate_performance_profile(mode)
+                    profile = get_performance_profile(mode)
                     sys_from_file = load_system_prompt_for_profile(profile)
                     meta = _settings_source_markdown(mode)
                     history = list(history or [])
@@ -368,7 +386,9 @@ def build_ui() -> gr.Blocks:
 
                     max_t = _clamp_ui_max_tokens(max_t, profile)
                     temp = float(temp)
-                    save_ui_state(chat_mode=mode, temperature=temp, max_tokens=max_t)
+                    save_ui_state(
+                        performance_profile=mode, temperature=temp, max_tokens=max_t
+                    )
 
                     ok, preflight = await check_ollama_reachable()
                     if not ok:
@@ -396,7 +416,7 @@ def build_ui() -> gr.Blocks:
                     try:
                         model = await get_effective_ollama_model(
                             requested=profile.ollama_model,
-                            fast=profile.mode == ChatMode.FAST,
+                            fast=profile.use_fast_model_picker,
                         )
                     except Exception as exc:
                         history[-1][1] = format_connection_help(exc)
@@ -412,7 +432,7 @@ def build_ui() -> gr.Blocks:
                     async def pump() -> None:
                         try:
                             if use_buffered and profile.warm_on_send:
-                                await warmup_ollama_model(model)
+                                await warmup_ollama_model(model, num_ctx=profile.num_ctx)
                             if use_buffered:
                                 text = await ollama_chat_completion(
                                     api_messages,
@@ -420,9 +440,10 @@ def build_ui() -> gr.Blocks:
                                     temperature=temp,
                                     max_tokens=max_t,
                                     num_ctx=profile.num_ctx,
+                                    workload_kind="chat",
                                 )
                                 if text:
-                                    await queue.put(("t", text))
+                                    await queue.put(("reveal", text))
                             else:
                                 async for token in ollama_chat_stream(
                                     api_messages,
@@ -444,9 +465,10 @@ def build_ui() -> gr.Blocks:
                                         temperature=temp,
                                         max_tokens=max_t,
                                         num_ctx=profile.num_ctx,
+                                        workload_kind="chat",
                                     )
                                     if text:
-                                        await queue.put(("t", text))
+                                        await queue.put(("reveal", text))
                                 except Exception as exc2:
                                     await queue.put(("e", exc2))
                             else:
@@ -481,10 +503,16 @@ def build_ui() -> gr.Blocks:
                                 yield history, "", meta, sys_from_file
                                 continue
 
+                            if kind == "reveal":
+                                async for chunk in _reveal_text_chunks(str(payload)):
+                                    partial = chunk
+                                    history[-1][1] = chunk
+                                    yield history, "", meta, sys_from_file
+                                continue
                             if kind == "d":
                                 if not partial.strip():
                                     history[-1][1] = (
-                                        f"⚠️ Empty reply. Try **Fast** mode or shorten "
+                                        f"⚠️ Empty reply. Try **Fast** profile or shorten "
                                         f"`{profile.system_prompt_relpath}`."
                                     )
                                 else:
@@ -514,20 +542,20 @@ def build_ui() -> gr.Blocks:
                     clear_chat_history()
                     return [], "", _settings_source_markdown()
 
-                chat_mode.change(
-                    apply_chat_mode,
-                    inputs=[chat_mode],
+                perf_profile.change(
+                    apply_performance_profile_ui,
+                    inputs=[perf_profile],
                     outputs=[temperature, max_tokens, system_prompt, system_prompt_source],
                 )
 
                 send.click(
                     user_submit,
-                    inputs=[msg, chatbot, chat_mode, system_prompt, temperature, max_tokens],
+                    inputs=[msg, chatbot, perf_profile, system_prompt, temperature, max_tokens],
                     outputs=[chatbot, msg, system_prompt_source, system_prompt],
                 )
                 msg.submit(
                     user_submit,
-                    inputs=[msg, chatbot, chat_mode, system_prompt, temperature, max_tokens],
+                    inputs=[msg, chatbot, perf_profile, system_prompt, temperature, max_tokens],
                     outputs=[chatbot, msg, system_prompt_source, system_prompt],
                 )
                 clear.click(
@@ -536,13 +564,13 @@ def build_ui() -> gr.Blocks:
                 )
                 save_settings_btn.click(
                     persist_settings_only,
-                    inputs=[chat_mode, temperature, max_tokens],
+                    inputs=[perf_profile, temperature, max_tokens],
                     outputs=[system_prompt_source],
                 )
                 for field in (temperature, max_tokens):
                     field.change(
                         persist_settings_only,
-                        inputs=[chat_mode, temperature, max_tokens],
+                        inputs=[perf_profile, temperature, max_tokens],
                         outputs=[system_prompt_source],
                     )
 
@@ -618,6 +646,17 @@ def build_ui() -> gr.Blocks:
                     n_phases: float,
                     do_save: bool,
                 ):
+                    prof = get_performance_profile()
+                    if not prof.architect_enabled:
+                        yield (
+                            "⚠️ Architect is **disabled** in **Fast** profile. "
+                            "Switch to **Balanced** or **Quality**, or run: "
+                            "`python scripts/set_profile.py balanced`",
+                            "{}",
+                            "",
+                            "",
+                        )
+                        return
                     if not (mega or "").strip():
                         yield "⚠️ Write a prompt first (or click Reload my prompt file).", "{}", "", ""
                         return
@@ -635,9 +674,12 @@ def build_ui() -> gr.Blocks:
 
                     try:
                         save_mega_prompt_file(mega)
+                        phases = int(n_phases)
+                        if prof.architect_max_phases > 0:
+                            phases = min(phases, prof.architect_max_phases)
                         result = await run_architect(
                             mega,
-                            max_phases=int(n_phases),
+                            max_phases=phases,
                             on_progress=progress,
                         )
                     except Exception as exc:
@@ -701,7 +743,7 @@ def build_ui() -> gr.Blocks:
                 )
 
         def reload_system_prompt_from_file(mode: str) -> tuple[str, str]:
-            profile = get_chat_profile(mode)
+            profile = get_performance_profile(mode)
             text = load_system_prompt_for_profile(profile)
             return text, _settings_source_markdown(mode, reloaded=True)
 
@@ -718,7 +760,7 @@ def build_ui() -> gr.Blocks:
         refresh_btn.click(reload_ollama_only, outputs=health_out)
         load_prompt_btn.click(
             reload_system_prompt_from_file,
-            inputs=[chat_mode],
+            inputs=[perf_profile],
             outputs=[system_prompt, system_prompt_source],
         )
 
@@ -730,11 +772,15 @@ def build_ui() -> gr.Blocks:
                 health = f"❌ {warm_msg}"
             state = load_ui_state()
             history = load_chat_history()
+            prof_name = str(
+                state.get("performance_profile", get_settings().local_llm_performance_profile)
+            )
+            prof = get_performance_profile(prof_name)
             return (
                 health,
                 history,
-                _settings_source_markdown(),
-                get_default_system_prompt(),
+                _settings_source_markdown(prof_name),
+                load_system_prompt_for_profile(prof),
                 float(state["temperature"]),
                 float(state["max_tokens"]),
             )
@@ -776,7 +822,9 @@ def main() -> None:
     print("  LOCAL LLM CHAT (Ollama + Gradio)")
     print(f"  Folder: {PACKAGE_DIR}")
     print(f"  Open:   {url}")
-    print(f"  Model:  {cfg.ollama_model}  (see local-llm/.env)")
+    prof = get_performance_profile()
+    print(f"  Profile: {prof.name.value} · Model: {prof.ollama_model}")
+    print(f"  Switch:  python scripts/set_profile.py fast|balanced|quality")
     print("  NOT the harvester dashboard (that is harvester/web_app.py :8765)")
     print("=" * 60)
 

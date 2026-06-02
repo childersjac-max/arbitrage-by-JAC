@@ -19,6 +19,7 @@ from typing import Any, Mapping, Sequence
 import httpx
 
 from config import Backend, LocalLLMSettings, get_settings
+from performance_profiles import get_performance_profile
 from ollama_connect import (
     get_effective_ollama_model,
     get_ollama_base_url,
@@ -99,7 +100,13 @@ class LocalInferenceClient:
         self._read_timeout_sec = read_seconds
         self._client = httpx_client(limits=limits, timeout=timeout)
         if self._semaphore is None:
-            self._semaphore = asyncio.Semaphore(self.settings.local_llm_batch_concurrency)
+            profile = get_performance_profile()
+            concurrency = (
+                profile.batch_concurrency
+                if not profile.allow_parallel_normalize
+                else self.settings.local_llm_batch_concurrency
+            )
+            self._semaphore = asyncio.Semaphore(max(1, concurrency))
 
     async def close(self) -> None:
         if self._client is not None:
@@ -185,6 +192,7 @@ class LocalInferenceClient:
             )
         )
 
+        workload = "normalize" if json_mode else "chat"
         if backend == Backend.OLLAMA:
             if not stream or prefer_buffered_transport():
                 text = await ollama_chat_completion(
@@ -193,6 +201,7 @@ class LocalInferenceClient:
                     temperature=temp,
                     max_tokens=tokens,
                     json_mode=json_mode,
+                    workload_kind=workload,
                 )
                 if stream and on_token and text:
                     on_token(text)
@@ -357,9 +366,16 @@ class LocalInferenceClient:
         """Normalize raw strings to canonical reference values (JSON mapping)."""
         await self.start(prompt_mode=False)
         assert self._semaphore is not None
+        profile = get_performance_profile()
+        tokens_cap = profile.normalize_max_tokens
 
         async with self._semaphore:
-            return await self._normalize_with_retries(fragments, reference, extra_hints=extra_hints)
+            return await self._normalize_with_retries(
+                fragments,
+                reference,
+                extra_hints=extra_hints,
+                max_tokens_override=tokens_cap,
+            )
 
     async def _normalize_with_retries(
         self,
@@ -367,6 +383,7 @@ class LocalInferenceClient:
         reference: Mapping[str, str],
         *,
         extra_hints: str | None = None,
+        max_tokens_override: int | None = None,
     ) -> InferenceResult:
         max_retries = self.settings.local_llm_max_retries
         user_msg = build_user_message(fragments, reference, extra_hints=extra_hints)
@@ -380,7 +397,15 @@ class LocalInferenceClient:
                     user_msg = build_retry_user_message(
                         fragments, reference, last_output, last_error
                     )
-                raw = await self._chat_completion_normalize(user_msg)
+                raw = await self._invoke_messages(
+                    [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    json_mode=True,
+                    temperature=self.settings.local_llm_temperature,
+                    max_tokens=max_tokens_override or self.settings.local_llm_max_tokens,
+                )
                 last_output = raw
                 parsed = extract_json_object(raw)
                 validated = validate_mapping(parsed, fragments, reference)

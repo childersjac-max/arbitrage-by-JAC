@@ -5,7 +5,8 @@ if not exist ".venv\Scripts\activate.bat" (
   python -m venv .venv
 )
 call .venv\Scripts\activate.bat
-pip install -q -r requirements-app.txt
+python -m pip install --upgrade pip -q
+pip install -r requirements.txt -r requirements-app.txt
 echo.
 echo For BIG prompts: double-click scripts\run_architect_easy.bat instead.
 echo If Ollama is not running, start scripts\start_ollama.bat first.

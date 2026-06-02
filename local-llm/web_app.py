@@ -17,12 +17,31 @@ import asyncio
 import json
 import logging
 import os
+import sys
 import threading
 import time
 import webbrowser
 from pathlib import Path
 
-import gradio as gr
+try:
+    import gradio as gr
+except ModuleNotFoundError:
+    print(
+        "\nERROR: Gradio is not installed in this Python environment.\n\n"
+        "From the local-llm folder, run ONE of:\n\n"
+        "  Git Bash:\n"
+        "    bash scripts/setup.sh\n"
+        "    source .venv/Scripts/activate\n"
+        "    python web_app.py\n\n"
+        "  Windows CMD:\n"
+        "    scripts\\setup.bat\n"
+        "    scripts\\run_app.bat\n\n"
+        "  Or without venv:\n"
+        "    pip install -r requirements.txt -r requirements-app.txt\n"
+        "    python web_app.py\n",
+        file=sys.stderr,
+    )
+    raise SystemExit(1) from None
 
 from config import get_settings, reload_settings
 from local_inference import LocalInferenceClient

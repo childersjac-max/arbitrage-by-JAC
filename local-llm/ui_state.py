@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from chat_modes import get_chat_profile, parse_chat_mode
 from config import get_settings
 from paths import PACKAGE_DIR
 DATA_DIR = PACKAGE_DIR / "data"
@@ -21,9 +22,12 @@ DEFAULT_REFERENCE = {
 
 def _default_ui_state() -> dict[str, Any]:
     cfg = get_settings()
+    mode = parse_chat_mode(cfg.local_llm_default_chat_mode)
+    profile = get_chat_profile(mode)
     return {
-        "temperature": float(cfg.local_llm_prompt_temperature),
-        "max_tokens": int(cfg.local_llm_ui_max_tokens),
+        "chat_mode": mode.value,
+        "temperature": float(profile.temperature),
+        "max_tokens": int(profile.max_tokens),
         "reference_json": json.dumps(DEFAULT_REFERENCE, indent=2),
         "fragments_text": "",
     }
@@ -36,9 +40,9 @@ def load_ui_state() -> dict[str, Any]:
         data = json.loads(UI_STATE_FILE.read_text(encoding="utf-8"))
         base = _default_ui_state()
         base.update({k: data[k] for k in base if k in data})
-        cap = int(get_settings().local_llm_ui_max_tokens)
-        if int(base.get("max_tokens", cap)) > cap:
-            base["max_tokens"] = cap
+        profile = get_chat_profile(parse_chat_mode(str(base.get("chat_mode", "fast"))))
+        if int(base.get("max_tokens", profile.max_tokens)) > profile.max_tokens_cap:
+            base["max_tokens"] = profile.max_tokens_cap
         return base
     except (json.JSONDecodeError, OSError):
         return _default_ui_state()
@@ -46,12 +50,15 @@ def load_ui_state() -> dict[str, Any]:
 
 def save_ui_state(
     *,
+    chat_mode: str | None = None,
     temperature: float | None = None,
     max_tokens: int | None = None,
     reference_json: str | None = None,
     fragments_text: str | None = None,
 ) -> None:
     state = load_ui_state()
+    if chat_mode is not None:
+        state["chat_mode"] = parse_chat_mode(chat_mode).value
     if temperature is not None:
         state["temperature"] = float(temperature)
     if max_tokens is not None:

@@ -37,7 +37,9 @@ async def main() -> int:
     cfg = get_settings()
     print(f"  backend: {cfg.local_llm_backend.value}")
     print(f"  host:    {cfg.ollama_host}")
-    print(f"  model:   {cfg.ollama_model}")
+    print(f"  model (normal): {cfg.ollama_model}")
+    print(f"  model (fast):   {cfg.ollama_model_fast}")
+    print(f"  default mode:   {cfg.local_llm_default_chat_mode}")
     print(f"  ui:      http://{cfg.local_llm_ui_host}:{cfg.local_llm_ui_port}")
 
     sp = get_default_system_prompt()

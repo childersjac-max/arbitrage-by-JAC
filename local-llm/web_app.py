@@ -43,6 +43,13 @@ except ModuleNotFoundError:
     )
     raise SystemExit(1) from None
 
+from chat_modes import (
+    ChatMode,
+    get_chat_profile,
+    load_system_prompt_for_profile,
+    mode_markdown,
+    parse_chat_mode,
+)
 from config import get_settings, reload_settings
 from local_inference import LocalInferenceClient
 from ollama_connect import (
@@ -94,24 +101,26 @@ if not ENV_FILE.is_file() and ENV_EXAMPLE.is_file():
 reload_settings()
 
 _SAVED = load_ui_state()
-_MAX_CHAT_TURNS = 4
+_INITIAL_MODE = parse_chat_mode(str(_SAVED.get("chat_mode", "fast")))
+_INITIAL_PROFILE = get_chat_profile(_INITIAL_MODE)
 
 
-def _clamp_ui_max_tokens(value: float) -> int:
-    cap = int(get_settings().local_llm_ui_max_tokens)
-    return max(128, min(int(value), cap))
+def _clamp_ui_max_tokens(value: float, profile) -> int:
+    return max(128, min(int(value), profile.max_tokens_cap))
 
 
 def _build_chat_api_messages(
     message: str,
     history: list | None,
     system_prompt: str,
+    *,
+    max_history_turns: int,
 ) -> list[dict[str, str]]:
     messages: list[dict[str, str]] = []
     sys_text = (system_prompt or "").strip()
     if sys_text:
         messages.append({"role": "system", "content": sys_text})
-    pairs = [p for p in (history or []) if p][-_MAX_CHAT_TURNS:]
+    pairs = [p for p in (history or []) if p][-max_history_turns:]
     for pair in pairs:
         user_text = pair[0] if len(pair) > 0 else None
         bot_text = pair[1] if len(pair) > 1 else None
@@ -133,19 +142,13 @@ def _status_markdown() -> str:
     )
 
 
-def _system_prompt_source_markdown(*, reloaded: bool = False) -> str:
+def _settings_source_markdown(chat_mode: str | None = None, *, reloaded: bool = False) -> str:
+    profile = get_chat_profile(chat_mode or str(_SAVED.get("chat_mode", "fast")))
     suffix = " _(reloaded just now)_" if reloaded else ""
     return (
-        f"**System prompt:** from `{system_prompt_path()}` "
-        f"(edit that file, then reload the page or click **Reload system prompt from file**).{suffix}"
-    )
-
-
-def _settings_source_markdown() -> str:
-    return (
-        f"{_system_prompt_source_markdown()}\n\n"
-        "**Temperature / max tokens:** restored from `data/ui_state.json`. "
-        "They auto-save when you send a message or change the sliders."
+        f"{mode_markdown(profile)}{suffix}\n\n"
+        "Edit the system prompt file for this mode, then click **Reload system prompt** "
+        "or switch mode and back."
     )
 
 
@@ -263,14 +266,23 @@ def build_ui() -> gr.Blocks:
         with gr.Tabs():
             with gr.Tab("💬 Chat"):
                 gr.Markdown(
-                    "Chat streams tokens as Ollama generates them. "
-                    "First reply on CPU can take **1–5 minutes** — you will see a live timer. "
-                    "Keep **Max tokens** at **512–768** for speed. "
-                    "History saves to `data/chat_history.json`."
+                    "Choose **Fast** for CPU (small model, short prompt) or **Normal** for the full "
+                    "arbitrage architect prompt. First reply on CPU can take minutes — a live timer "
+                    "is shown while Ollama works."
+                )
+                chat_mode = gr.Radio(
+                    choices=[
+                        ("⚡ Fast (CPU)", ChatMode.FAST.value),
+                        ("📐 Normal", ChatMode.NORMAL.value),
+                    ],
+                    value=_INITIAL_MODE.value,
+                    label="Chat mode",
                 )
                 chatbot = gr.Chatbot(height=420, label="Conversation", value=load_chat_history())
                 with gr.Accordion("Advanced", open=True):
-                    system_prompt_source = gr.Markdown(_settings_source_markdown())
+                    system_prompt_source = gr.Markdown(
+                        _settings_source_markdown(_INITIAL_MODE.value)
+                    )
                     with gr.Row():
                         load_prompt_btn = gr.Button(
                             "Reload system prompt from file",
@@ -281,8 +293,8 @@ def build_ui() -> gr.Blocks:
                             variant="secondary",
                         )
                     system_prompt = gr.Textbox(
-                        label="System prompt (from prompts/system_default.txt)",
-                        value=get_default_system_prompt(),
+                        label=f"System prompt ({_INITIAL_PROFILE.system_prompt_relpath})",
+                        value=load_system_prompt_for_profile(_INITIAL_PROFILE),
                         lines=14,
                     )
                     with gr.Row():
@@ -293,13 +305,12 @@ def build_ui() -> gr.Blocks:
                             step=0.1,
                             label="Temperature",
                         )
-                        _ui_token_cap = int(get_settings().local_llm_ui_max_tokens)
                         max_tokens = gr.Slider(
                             128,
-                            max(2048, _ui_token_cap),
+                            _INITIAL_PROFILE.max_tokens_cap,
                             value=int(_SAVED["max_tokens"]),
                             step=64,
-                            label=f"Max tokens (≤{_ui_token_cap} enforced for speed)",
+                            label=f"Max tokens (cap {_INITIAL_PROFILE.max_tokens_cap} in this mode)",
                         )
                 msg = gr.Textbox(
                     label="Your message",
@@ -310,30 +321,54 @@ def build_ui() -> gr.Blocks:
                     send = gr.Button("Send", variant="primary")
                     clear = gr.Button("Clear chat")
 
-                def persist_settings_only(temp: float, max_t: float) -> str:
+                def persist_settings_only(mode: str, temp: float, max_t: float) -> str:
                     save_ui_state(
+                        chat_mode=mode,
                         temperature=temp,
                         max_tokens=int(max_t),
                     )
-                    return _settings_source_markdown() + " _(saved just now)_"
+                    return _settings_source_markdown(mode) + " _(saved just now)_"
+
+                def apply_chat_mode(mode: str) -> tuple[float, dict, str, str]:
+                    profile = get_chat_profile(mode)
+                    save_ui_state(
+                        chat_mode=mode,
+                        temperature=profile.temperature,
+                        max_tokens=profile.max_tokens,
+                    )
+                    return (
+                        profile.temperature,
+                        gr.Slider(
+                            minimum=128,
+                            maximum=profile.max_tokens_cap,
+                            value=profile.max_tokens,
+                            step=64,
+                            label=f"Max tokens (cap {profile.max_tokens_cap} in this mode)",
+                        ),
+                        load_system_prompt_for_profile(profile),
+                        _settings_source_markdown(mode),
+                    )
 
                 async def user_submit(
                     message: str,
                     history: list,
+                    mode: str,
                     _sys_p: str,
                     temp: float,
                     max_t: float,
                 ):
-                    sys_from_file = get_default_system_prompt()
-                    meta = _settings_source_markdown()
+                    profile = get_chat_profile(mode)
+                    sys_from_file = load_system_prompt_for_profile(profile)
+                    meta = _settings_source_markdown(mode)
                     history = list(history or [])
 
                     if not message or not message.strip():
                         yield history, "", meta, sys_from_file
                         return
 
-                    max_t = _clamp_ui_max_tokens(max_t)
-                    save_ui_state(temperature=temp, max_tokens=max_t)
+                    max_t = _clamp_ui_max_tokens(max_t, profile)
+                    temp = float(temp)
+                    save_ui_state(chat_mode=mode, temperature=temp, max_tokens=max_t)
 
                     ok, preflight = await check_ollama_reachable()
                     if not ok:
@@ -351,13 +386,18 @@ def build_ui() -> gr.Blocks:
                     yield history, "", meta, sys_from_file
 
                     api_messages = _build_chat_api_messages(
-                        message, history[:-1], sys_from_file
+                        message,
+                        history[:-1],
+                        sys_from_file,
+                        max_history_turns=profile.max_history_turns,
                     )
-                    cfg = get_settings()
-                    timeout_sec = float(cfg.local_llm_ui_timeout_sec)
+                    timeout_sec = float(profile.timeout_sec)
 
                     try:
-                        model = await get_effective_ollama_model()
+                        model = await get_effective_ollama_model(
+                            requested=profile.ollama_model,
+                            fast=profile.mode == ChatMode.FAST,
+                        )
                     except Exception as exc:
                         history[-1][1] = format_connection_help(exc)
                         save_chat_history(history)
@@ -371,14 +411,15 @@ def build_ui() -> gr.Blocks:
 
                     async def pump() -> None:
                         try:
-                            if use_buffered:
+                            if use_buffered and profile.warm_on_send:
                                 await warmup_ollama_model(model)
+                            if use_buffered:
                                 text = await ollama_chat_completion(
                                     api_messages,
                                     model=model,
-                                    temperature=float(temp),
+                                    temperature=temp,
                                     max_tokens=max_t,
-                                    for_chat_ui=True,
+                                    num_ctx=profile.num_ctx,
                                 )
                                 if text:
                                     await queue.put(("t", text))
@@ -386,8 +427,9 @@ def build_ui() -> gr.Blocks:
                                 async for token in ollama_chat_stream(
                                     api_messages,
                                     model=model,
-                                    temperature=float(temp),
+                                    temperature=temp,
                                     max_tokens=max_t,
+                                    num_ctx=profile.num_ctx,
                                 ):
                                     await queue.put(("t", token))
                         except Exception as exc:
@@ -399,9 +441,9 @@ def build_ui() -> gr.Blocks:
                                     text = await ollama_chat_completion(
                                         api_messages,
                                         model=model,
-                                        temperature=float(temp),
+                                        temperature=temp,
                                         max_tokens=max_t,
-                                        for_chat_ui=True,
+                                        num_ctx=profile.num_ctx,
                                     )
                                     if text:
                                         await queue.put(("t", text))
@@ -418,8 +460,8 @@ def build_ui() -> gr.Blocks:
                             if elapsed > timeout_sec:
                                 task.cancel()
                                 suffix = (
-                                    f"\n\n❌ Timed out after {int(elapsed)}s. "
-                                    "Try **Max tokens** ≤512, keep Ollama running, or test in terminal: "
+                                    f"\n\n❌ Timed out after {int(elapsed)}s ({profile.label}). "
+                                    "Try **Fast** mode, lower max tokens, or: "
                                     f"`ollama run {model}`"
                                 )
                                 history[-1][1] = (partial or "⏳") + suffix
@@ -442,8 +484,8 @@ def build_ui() -> gr.Blocks:
                             if kind == "d":
                                 if not partial.strip():
                                     history[-1][1] = (
-                                        "⚠️ Empty reply. Lower **Max tokens** or shorten "
-                                        "the system prompt in `prompts/system_default.txt`."
+                                        f"⚠️ Empty reply. Try **Fast** mode or shorten "
+                                        f"`{profile.system_prompt_relpath}`."
                                     )
                                 else:
                                     history[-1][1] = partial
@@ -472,14 +514,20 @@ def build_ui() -> gr.Blocks:
                     clear_chat_history()
                     return [], "", _settings_source_markdown()
 
+                chat_mode.change(
+                    apply_chat_mode,
+                    inputs=[chat_mode],
+                    outputs=[temperature, max_tokens, system_prompt, system_prompt_source],
+                )
+
                 send.click(
                     user_submit,
-                    inputs=[msg, chatbot, system_prompt, temperature, max_tokens],
+                    inputs=[msg, chatbot, chat_mode, system_prompt, temperature, max_tokens],
                     outputs=[chatbot, msg, system_prompt_source, system_prompt],
                 )
                 msg.submit(
                     user_submit,
-                    inputs=[msg, chatbot, system_prompt, temperature, max_tokens],
+                    inputs=[msg, chatbot, chat_mode, system_prompt, temperature, max_tokens],
                     outputs=[chatbot, msg, system_prompt_source, system_prompt],
                 )
                 clear.click(
@@ -488,13 +536,13 @@ def build_ui() -> gr.Blocks:
                 )
                 save_settings_btn.click(
                     persist_settings_only,
-                    inputs=[temperature, max_tokens],
+                    inputs=[chat_mode, temperature, max_tokens],
                     outputs=[system_prompt_source],
                 )
                 for field in (temperature, max_tokens):
                     field.change(
                         persist_settings_only,
-                        inputs=[temperature, max_tokens],
+                        inputs=[chat_mode, temperature, max_tokens],
                         outputs=[system_prompt_source],
                     )
 
@@ -652,9 +700,10 @@ def build_ui() -> gr.Blocks:
                     outputs=[norm_out, norm_meta],
                 )
 
-        def reload_system_prompt_from_file() -> tuple[str, str]:
-            text, _ = get_system_prompt_info()
-            return text, _system_prompt_source_markdown(reloaded=True)
+        def reload_system_prompt_from_file(mode: str) -> tuple[str, str]:
+            profile = get_chat_profile(mode)
+            text = load_system_prompt_for_profile(profile)
+            return text, _settings_source_markdown(mode, reloaded=True)
 
         async def reload_ollama_only() -> str:
             reload_settings()
@@ -669,6 +718,7 @@ def build_ui() -> gr.Blocks:
         refresh_btn.click(reload_ollama_only, outputs=health_out)
         load_prompt_btn.click(
             reload_system_prompt_from_file,
+            inputs=[chat_mode],
             outputs=[system_prompt, system_prompt_source],
         )
 

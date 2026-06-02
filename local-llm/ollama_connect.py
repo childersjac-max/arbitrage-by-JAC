@@ -228,9 +228,14 @@ def get_ollama_base_url() -> str:
     return get_settings().ollama_host.rstrip("/")
 
 
-async def get_effective_ollama_model() -> str:
+async def get_effective_ollama_model(*, requested: str | None = None, fast: bool = False) -> str:
     _, names = await resolve_ollama()
-    return pick_ollama_model(get_settings().ollama_model, names)
+    req = requested or get_settings().ollama_model
+    if fast:
+        from chat_modes import pick_fast_ollama_model
+
+        return pick_fast_ollama_model(req, names)
+    return pick_ollama_model(req, names)
 
 
 def _ollama_chat_body(
@@ -242,9 +247,12 @@ def _ollama_chat_body(
     stream: bool,
     json_mode: bool = False,
     for_chat_ui: bool = False,
+    num_ctx: int | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
-    ctx = settings.ollama_chat_num_ctx if for_chat_ui else None
+    ctx = num_ctx
+    if ctx is None and for_chat_ui:
+        ctx = settings.ollama_chat_num_ctx
     body: dict[str, Any] = {
         "model": model,
         "stream": stream,
@@ -267,6 +275,7 @@ async def ollama_chat_stream(
     model: str,
     temperature: float,
     max_tokens: int,
+    num_ctx: int | None = None,
 ) -> AsyncIterator[str]:
     """
     Stream tokens from Ollama /api/chat (httpx, trust_env=False for localhost).
@@ -279,7 +288,8 @@ async def ollama_chat_stream(
         temperature=temperature,
         max_tokens=max_tokens,
         stream=True,
-        for_chat_ui=True,
+        for_chat_ui=num_ctx is None,
+        num_ctx=num_ctx,
     )
     url = f"{host}/api/chat"
     timeout = httpx.Timeout(None, connect=60.0)
@@ -328,6 +338,7 @@ async def ollama_chat_completion(
     max_tokens: int,
     json_mode: bool = False,
     for_chat_ui: bool = False,
+    num_ctx: int | None = None,
 ) -> str:
     """
     POST /api/chat — urllib on Windows (same stack as working curl), httpx as backup.
@@ -343,7 +354,8 @@ async def ollama_chat_completion(
         max_tokens=max_tokens,
         stream=False,
         json_mode=json_mode,
-        for_chat_ui=for_chat_ui,
+        for_chat_ui=for_chat_ui and num_ctx is None,
+        num_ctx=num_ctx,
     )
 
     last_exc: BaseException | None = None

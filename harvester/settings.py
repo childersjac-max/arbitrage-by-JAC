@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from harvester_paths import ENV_FILE
@@ -17,7 +17,10 @@ class HarvesterSettings(BaseSettings):
         extra="ignore",
     )
 
-    odds_api_key: str = Field(default="", validation_alias="ODDS_API_KEY")
+    odds_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("ODDS_API_KEY", "THE_ODDS_API_KEY"),
+    )
     odds_api_base_url: str = Field(
         default="https://api.the-odds-api.com",
         validation_alias="ODDS_API_BASE_URL",

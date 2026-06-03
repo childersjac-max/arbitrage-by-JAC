@@ -1,0 +1,5 @@
+# Harvester pipeline (lawful Odds API ingestion)
+-r ../harvester/requirements.txt
+
+# Optional: only if you add Playwright-based tools yourself (not required for orchestrator)
+# playwright>=1.40.0

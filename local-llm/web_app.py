@@ -64,6 +64,7 @@ from ui.chat_helpers import (
     settings_source_markdown,
 )
 from ui.chat_tab import load_messages_from_disk, mount_copilot_chat_tab
+from gradio_compat import blocks_constructor_kwargs, filter_launch_kwargs, styling_for_launch
 from ui.copilot_styles import COPILOT_CSS, copilot_theme, render_header_html
 from network_urls import resolve_ui_bind
 from remote_access import (
@@ -218,8 +219,11 @@ async def normalize_names(
         return "", format_connection_help(exc)
 
 
-def build_ui() -> gr.Blocks:
-    with gr.Blocks(title="Local Copilot") as demo:
+def build_ui() -> tuple[gr.Blocks, dict]:
+    theme = copilot_theme()
+    blocks_kw = blocks_constructor_kwargs(title="Local Copilot", theme=theme, css=COPILOT_CSS)
+    launch_styling = styling_for_launch(theme=theme, css=COPILOT_CSS)
+    with gr.Blocks(**blocks_kw) as demo:
         with gr.Accordion("Connection & diagnostics", open=False):
             status_md = gr.Markdown(_status_markdown())
             with gr.Row():
@@ -455,7 +459,7 @@ def build_ui() -> gr.Blocks:
             f"Port `{get_settings().local_llm_ui_host}:{get_settings().local_llm_ui_port}`"
         )
 
-    return demo
+    return demo, launch_styling
 
 
 def _open_browser_when_ready(url: str, delay_sec: float = 2.0) -> None:
@@ -518,7 +522,7 @@ def main() -> None:
         daemon=True,
     ).start()
 
-    demo = build_ui()
+    demo, launch_styling = build_ui()
     demo.queue(default_concurrency_limit=1)
     print(f"\n>>> Open on this PC: {local_url}\n")
     if phone_urls and not cfg.local_llm_ui_share:
@@ -534,15 +538,16 @@ def main() -> None:
         "share": cfg.local_llm_ui_share,
         "show_error": True,
         "inbrowser": False,
-        "theme": copilot_theme(),
-        "css": COPILOT_CSS,
+        **launch_styling,
     }
     if auth:
         launch_kw["auth"] = auth
         launch_kw["ssr_mode"] = False
-
     if cfg.local_llm_ui_share:
         launch_kw["prevent_thread_lock"] = True
+    launch_kw = filter_launch_kwargs(launch_kw)
+
+    if cfg.local_llm_ui_share:
         _app, _local, public_url = demo.launch(**launch_kw)
         public_url = (public_url or "").strip()
         if public_url:

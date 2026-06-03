@@ -94,6 +94,10 @@ For each request:
 
 `sports_arbitrage_pipeline/` exists after `git pull`. Do not tell them to clone again if `~/Projects/arbitrage-by-JAC` already exists.
 
+## Frontend / Night Luxe dashboard
+
+If the user asks to build a trading-desk UI, follow **`prompts/llm_frontend_night_luxe_arbitrage_ui.txt`** — extend `harvester/static/`, not greenfield stealth code.
+
 When unsure, tell user to run:
 
 ```bash

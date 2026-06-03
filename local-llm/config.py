@@ -109,6 +109,10 @@ class LocalLLMSettings(BaseSettings):
         default="balanced",
         validation_alias="LOCAL_LLM_DEFAULT_CHAT_MODE",
     )
+    local_llm_prefer_balanced_chat: bool = Field(
+        default=True,
+        validation_alias="LOCAL_LLM_PREFER_BALANCED_CHAT",
+    )
     # Profile: FAST
     profile_fast_max_tokens: int = Field(default=192, validation_alias="PROFILE_FAST_MAX_TOKENS")
     profile_fast_max_tokens_cap: int = Field(

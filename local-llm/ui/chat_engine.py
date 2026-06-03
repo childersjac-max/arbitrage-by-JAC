@@ -8,7 +8,11 @@ import asyncio
 import time
 from collections.abc import AsyncIterator
 
-from performance_profiles import activate_performance_profile, get_performance_profile
+from performance_profiles import (
+    activate_performance_profile,
+    chat_timeout_help,
+    get_performance_profile,
+)
 from ollama_connect import (
     check_ollama_reachable,
     format_connection_help,
@@ -156,10 +160,7 @@ async def stream_chat_turn(
             elapsed = int(time.monotonic() - started)
             if elapsed > timeout_sec:
                 task.cancel()
-                suffix = (
-                    f"\n\n❌ Timed out after {elapsed}s ({profile.label}). "
-                    f"Try **Fast** profile or: `ollama run {model}`"
-                )
+                suffix = chat_timeout_help(profile, elapsed_sec=elapsed)
                 messages = set_last_assistant(messages, (partial or "●") + suffix)
                 break
 

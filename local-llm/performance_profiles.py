@@ -170,8 +170,10 @@ def profile_markdown(profile: PerformanceProfile) -> str:
 def parse_chat_mode(value: str | None) -> PerformanceProfileName:
     if value and value.strip().lower() in ("fast",):
         return PerformanceProfileName.FAST
-    if value and value.strip().lower() in ("normal", "quality"):
+    if value and value.strip().lower() in ("quality",):
         return PerformanceProfileName.QUALITY
+    if value and value.strip().lower() in ("normal",):
+        return PerformanceProfileName.BALANCED
     return parse_performance_profile(value)
 
 
@@ -193,6 +195,34 @@ def activate_performance_profile(name: str | PerformanceProfileName) -> Performa
     os.environ["LOCAL_LLM_PERFORMANCE_PROFILE"] = parsed.value
     reload_settings()
     return get_performance_profile(parsed)
+
+
+def chat_timeout_help(profile: PerformanceProfile, *, elapsed_sec: int | None = None) -> str:
+    """Actionable recovery text after chat timeout (CPU / wrong profile)."""
+    cfg = get_settings()
+    balanced = cfg.ollama_model_balanced
+    fast = cfg.ollama_model_fast
+    elapsed = elapsed_sec if elapsed_sec is not None else int(profile.timeout_sec)
+    if profile.name == PerformanceProfileName.QUALITY:
+        return (
+            f"\n\n❌ Timed out after {elapsed}s ({profile.label} — 7B on CPU is too slow for chat).\n\n"
+            f"**Switch to Balanced (recommended):**\n"
+            f"1. In the UI, select **⚖️ Balanced**\n"
+            f"2. Or run: `python scripts/set_profile.py balanced`\n"
+            f"3. Pull model: `ollama pull {balanced}`\n\n"
+            f"**Faster:** **⚡ Fast** + `ollama pull {fast}`\n\n"
+            f"Quality is for Architect/long jobs — not normal chat on CPU."
+        )
+    if profile.name == PerformanceProfileName.BALANCED:
+        return (
+            f"\n\n❌ Timed out after {elapsed}s ({profile.label}).\n"
+            f"Try **⚡ Fast** profile or: `ollama pull {fast}`\n"
+            f"Keep prompts short; close other heavy apps."
+        )
+    return (
+        f"\n\n❌ Timed out after {elapsed}s ({profile.label}).\n"
+        f"Try a shorter prompt or switch to **⚖️ Balanced**: `ollama pull {balanced}`"
+    )
 
 
 def pick_fast_ollama_model(requested: str, installed: list[str]) -> str:

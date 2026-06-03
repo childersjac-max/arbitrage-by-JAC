@@ -29,7 +29,7 @@ def _migrate_profile_key(data: dict[str, Any]) -> str:
         return str(data["performance_profile"])
     legacy = str(data.get("chat_mode", "fast"))
     if legacy == "normal":
-        return PerformanceProfileName.QUALITY.value
+        return PerformanceProfileName.BALANCED.value
     if legacy == "fast":
         return PerformanceProfileName.FAST.value
     return parse_performance_profile(get_settings().local_llm_performance_profile).value
@@ -53,7 +53,10 @@ def load_ui_state() -> dict[str, Any]:
         data = json.loads(UI_STATE_FILE.read_text(encoding="utf-8"))
         base = _default_ui_state()
         base.update({k: data[k] for k in base if k in data})
-        profile = get_performance_profile(_migrate_profile_key(base))
+        key = _migrate_profile_key(base)
+        if key == PerformanceProfileName.QUALITY.value and get_settings().local_llm_prefer_balanced_chat:
+            key = PerformanceProfileName.BALANCED.value
+        profile = get_performance_profile(key)
         base["performance_profile"] = profile.name.value
         if int(base.get("max_tokens", profile.max_tokens)) > profile.max_tokens_cap:
             base["max_tokens"] = profile.max_tokens_cap

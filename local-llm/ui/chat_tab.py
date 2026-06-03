@@ -63,7 +63,7 @@ def mount_copilot_chat_tab(
                 choices=[
                     ("⚡ Fast", PerformanceProfileName.FAST.value),
                     ("⚖️ Balanced", PerformanceProfileName.BALANCED.value),
-                    ("🎯 Quality", PerformanceProfileName.QUALITY.value),
+                    ("🎯 Quality (7B, slow)", PerformanceProfileName.QUALITY.value),
                 ],
                 value=prof_name,
                 label="Performance",

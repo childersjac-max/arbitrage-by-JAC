@@ -1,0 +1,9 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+data/ui_state.json
+data/chat_history.json
+data/last_mega_prompt.txt
+data/remote_url.txt

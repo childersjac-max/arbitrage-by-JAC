@@ -1,0 +1,7 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+local.env
+.env
+harvester/data/*.json

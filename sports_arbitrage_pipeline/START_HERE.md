@@ -25,6 +25,17 @@ nano ../harvester/.env
 
 Set `ODDS_API_KEY=your_key`
 
+## Playwright (optional — fix `playwright: command not found`)
+
+The orchestrator does **not** need Playwright. If your LLM guide asks for it:
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
+bash install_playwright.sh
+```
+
+Never run bare `playwright install` on Windows — use `python -m playwright install` (the script does that).
+
 ## If `git pull` says branch not found
 
 ```bash

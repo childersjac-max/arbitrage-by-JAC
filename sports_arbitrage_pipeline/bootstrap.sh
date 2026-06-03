@@ -62,6 +62,9 @@ if [[ ! -f "$HARVESTER_DIR/.env" ]] && [[ -f "$ROOT/.env.example" ]]; then
 fi
 
 echo ""
+echo "Optional — Playwright browsers (NOT required for orchestrator):"
+echo "  bash install_playwright.sh"
+echo ""
 echo "Done. Every time you open Git Bash:"
 echo "  cd \"$ROOT\""
 echo "  source ./activate_venv.sh"

@@ -2,6 +2,20 @@
 
 See full text: [`../prompts/llm_operator_arbitrage_repo.txt`](../prompts/llm_operator_arbitrage_repo.txt)
 
+## Stop stealth hallucinations / run real orchestrator
+
+Load: `prompts/llm_execute_arbitrage_engine.txt`  
+Kickoff: *"Operator mode: run harvester orchestrator; do not generate stealth_session."*
+
+---
+
+## Build Night Luxe arbitrage UI
+
+Load: `prompts/llm_frontend_night_luxe_arbitrage_ui.txt`  
+User kickoff: *"Build Phase 1–3 in harvester/static per night luxe prompt."*
+
+---
+
 ## Short version (if context is limited)
 
 ```

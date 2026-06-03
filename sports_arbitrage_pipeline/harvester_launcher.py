@@ -8,7 +8,21 @@ import sys
 from pathlib import Path
 
 
+def _load_local_env() -> None:
+    env_file = Path(__file__).resolve().parent / "local.env"
+    if not env_file.is_file():
+        return
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        if key == "HARVESTER_ROOT" and value.strip():
+            os.environ.setdefault("HARVESTER_ROOT", value.strip())
+
+
 def find_harvester_dir(start: Path | None = None) -> Path:
+    _load_local_env()
     env_root = os.environ.get("HARVESTER_ROOT", "").strip()
     if env_root:
         candidate = Path(env_root).expanduser().resolve()
@@ -22,8 +36,11 @@ def find_harvester_dir(start: Path | None = None) -> Path:
         here / "harvester",
         here.parent / "harvester",
         here.parent.parent / "harvester",
+        here.parent / "arbitrage-by-JAC" / "harvester",
+        here.parent.parent / "arbitrage-by-JAC" / "harvester",
         Path.home() / "Projects" / "arbitrage-by-JAC" / "harvester",
         Path.home() / "arbitrage-by-JAC" / "harvester",
+        Path.home() / "sports_arbitrage_pipeline" / "arbitrage-by-JAC" / "harvester",
     ]
     seen: set[Path] = set()
     for base in candidates:

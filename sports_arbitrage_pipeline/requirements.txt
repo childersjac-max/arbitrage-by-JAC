@@ -1,5 +1,10 @@
-# Harvester pipeline (lawful Odds API ingestion)
--r ../harvester/requirements.txt
+# Sports arbitrage pipeline — harvester dependencies (standalone list)
+httpx[http2]>=0.27.0
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+tzdata>=2024.1
 
-# Optional: only if you add Playwright-based tools yourself (not required for orchestrator)
+# Optional — only if you use Playwright separately (NOT required for orchestrator)
 # playwright>=1.40.0

@@ -1,21 +1,29 @@
 # Sports arbitrage pipeline (Windows / Git Bash entry)
 
-This folder is the **novice-friendly entry point** for the lawful harvester in `../harvester/`.
+This folder contains **`arbitrage_orchestrator.py`** and setup scripts your local LLM guide expects.
 
-Your local LLM guide assumed `arbitrage_orchestrator.py` lives here — it does **after** you use the full repo layout below.
+**Windows:** never run `source venv/bin/activate` — use `source ./activate_venv.sh` or `source venv/Scripts/activate`.
 
-## One-time setup (correct way)
+See **[QUICKSTART_WINDOWS.md](QUICKSTART_WINDOWS.md)** for copy-paste commands.
 
-Do **not** only `mkdir sports_arbitrage_pipeline` in your home folder. Clone the **full** repository:
+## One-time setup
+
+From this directory:
+
+```bash
+bash bootstrap.sh
+```
+
+If `harvester/` is missing, bootstrap **clones** `arbitrage-by-JAC` into `../arbitrage-by-JAC` and writes `local.env`.
+
+## Or: full repo clone (recommended)
 
 ```bash
 cd ~/Projects
 git clone https://github.com/childersjac-max/arbitrage-by-JAC.git
 cd arbitrage-by-JAC/sports_arbitrage_pipeline
-bash setup.sh
+bash bootstrap.sh
 ```
-
-**Windows Git Bash** — same paths; `setup.sh` uses `venv/Scripts/activate`.
 
 Edit API key:
 
@@ -29,7 +37,7 @@ nano ../harvester/.env
 
 ```bash
 cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
-source venv/Scripts/activate
+source ./activate_venv.sh
 python arbitrage_orchestrator.py
 ```
 

@@ -12,8 +12,21 @@ import sys
 from pathlib import Path
 
 
+def _load_local_env() -> None:
+    root = Path(__file__).resolve().parent
+    for env_file in (root / "sports_arbitrage_pipeline" / "local.env", root / "local.env"):
+        if not env_file.is_file():
+            continue
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("HARVESTER_ROOT="):
+                os.environ.setdefault("HARVESTER_ROOT", line.split("=", 1)[1].strip())
+                return
+
+
 def find_harvester_dir(start: Path | None = None) -> Path:
     """Return harvester/ directory containing arbitrage_orchestrator.py."""
+    _load_local_env()
     env_root = os.environ.get("HARVESTER_ROOT", "").strip()
     if env_root:
         candidate = Path(env_root).expanduser().resolve()

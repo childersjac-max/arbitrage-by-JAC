@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Multi-agent local LLM: coder generates, reviewer critiques.
+3-agent local LLM (standalone): Planner → Coder → Reviewer loop.
+
 Standalone — only needs Ollama at http://127.0.0.1:11434
 
 Novice overview:
-  - Model A writes code for your task.
-  - Model B reviews it and scores it.
-  - The loop repeats until the score is good or max rounds hit.
-  - [THOUGHT] lines show what is happening live.
+  - Planner breaks your task into steps (fast 3B model).
+  - Coder writes the implementation (7B coder model).
+  - Reviewer scores and suggests fixes (fast 3B model).
+  - [THOUGHT] lines explain each step; text streams as it is generated.
 """
 
 from __future__ import annotations
@@ -24,9 +25,8 @@ import requests
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
-DEFAULT_MODEL_A = "qwen2.5-coder:7b-instruct-q4_K_M"
-DEFAULT_MODEL_B = "qwen2.5:3b-instruct-q4_K_M"
+# Loaded fully in load_config()
+CFG: dict = {}
 
 
 def load_dotenv() -> None:
@@ -40,8 +40,87 @@ def load_dotenv() -> None:
         os.environ.setdefault(key.strip(), value.strip())
 
 
+def load_config() -> None:
+    load_dotenv()
+    planner = os.environ.get(
+        "MODEL_PLANNER",
+        os.environ.get("MULTI_AGENT_MODEL_PLANNER", "qwen2.5:3b-instruct-q4_K_M"),
+    )
+    coder = os.environ.get(
+        "MODEL_CODER",
+        os.environ.get("MULTI_AGENT_MODEL_A", "qwen2.5-coder:7b-instruct-q4_K_M"),
+    )
+    reviewer = os.environ.get(
+        "MODEL_REVIEWER",
+        os.environ.get("MULTI_AGENT_MODEL_B", "qwen2.5:3b-instruct-q4_K_M"),
+    )
+    CFG.update(
+        {
+            "ollama_url": os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434/api/generate"),
+            "model_planner": planner,
+            "model_coder": coder,
+            "model_reviewer": reviewer,
+            "max_loops": int(os.environ.get("MAX_LOOPS", os.environ.get("MULTI_AGENT_MAX_LOOPS", "3"))),
+            "delay_sec": float(os.environ.get("DELAY_BETWEEN_CALLS", "2")),
+            "min_score_regenerate": int(os.environ.get("MIN_SCORE_REGENERATE", "6")),
+            "stream": os.environ.get("STREAM_OUTPUT", "1").strip() not in ("0", "false", "False"),
+            "timeout_planner": int(os.environ.get("TIMEOUT_PLANNER_SEC", "120")),
+            "timeout_coder": int(os.environ.get("TIMEOUT_CODER_SEC", "600")),
+            "timeout_reviewer": int(os.environ.get("TIMEOUT_REVIEWER_SEC", "180")),
+            "default_task": os.environ.get(
+                "MULTI_AGENT_TASK",
+                "Write a Python function to validate email addresses using only the standard library.",
+            ),
+            "system_planner": os.environ.get(
+                "SYSTEM_PLANNER",
+                """You are a planning assistant.
+
+Break the task into clear steps:
+- Inputs
+- Logic
+- Edge cases
+
+Output concise structured steps only. No code yet.""",
+            ),
+            "system_coder": os.environ.get(
+                "SYSTEM_CODER",
+                """You are a coding assistant.
+Write a clean working implementation.
+Follow the plan exactly.
+Return code with brief comments only where helpful.""",
+            ),
+            "system_reviewer": os.environ.get(
+                "SYSTEM_REVIEWER",
+                """You are a strict code reviewer.
+
+Return exactly:
+
+Bugs:
+- ...
+
+Improvements:
+- ...
+
+Revised Code:
+<full improved code>
+
+Score: X/10
+Confidence: High/Medium/Low""",
+            ),
+        }
+    )
+
+
 def thought(msg: str) -> None:
     print(f"[THOUGHT] {msg}", flush=True)
+
+
+def cpu_pause() -> None:
+    """Novice note: short pause so CPU/RAM can settle between heavy model calls."""
+    delay = CFG["delay_sec"]
+    if delay > 0:
+        thought(f"CPU pause {delay}s (keeps 16GB RAM stable)...")
+        time.sleep(delay)
 
 
 def ask(
@@ -50,39 +129,38 @@ def ask(
     *,
     system: str | None = None,
     role_description: str = "",
-    stream_thoughts: bool = True,
     timeout_sec: int = 600,
 ) -> str:
     """
     Send one request to Ollama /api/generate.
-
-    Novice note: This is the messenger — it sends your prompt to the AI
-    and collects the full reply (streaming tokens to the screen as they arrive).
+    Novice note: messenger between you and the local AI; streams tokens when enabled.
     """
     thought(f"Contacting {model} — {role_description or 'working'}...")
-    payload: dict = {
-        "model": model,
-        "prompt": prompt,
-        "stream": stream_thoughts,
-    }
+    stream = CFG["stream"]
+    payload: dict = {"model": model, "prompt": prompt, "stream": stream}
     if system:
         payload["system"] = system
 
     try:
-        resp = requests.post(OLLAMA_URL, json=payload, stream=stream_thoughts, timeout=timeout_sec)
+        resp = requests.post(
+            CFG["ollama_url"],
+            json=payload,
+            stream=stream,
+            timeout=timeout_sec,
+        )
         resp.raise_for_status()
     except requests.RequestException as exc:
         thought(f"Connection failed: {exc}")
-        thought("Is Ollama running? Start it from the Start menu, then: ollama list")
+        thought("Start Ollama from the Start menu, then: ollama list")
         raise SystemExit(1) from exc
 
-    if not stream_thoughts:
-        data = resp.json()
+    if not stream:
+        text = str(resp.json().get("response", ""))
         thought(f"{model} finished.")
-        return str(data.get("response", ""))
+        return text
 
     parts: list[str] = []
-    print(f"\n--- {model} ({role_description}) ---\n", flush=True)
+    print(f"\n--- {role_description} ({model}) ---\n", flush=True)
     for raw in resp.iter_lines():
         if not raw:
             continue
@@ -102,26 +180,30 @@ def ask(
 
 
 def parse_score(feedback: str) -> int:
-    """Novice note: looks for a line like 'Score: 8/10' and reads the number."""
     for line in feedback.splitlines():
         if "Score:" in line:
             try:
-                tail = line.split(":", 1)[1].strip()
-                return int(tail.split("/")[0].strip())
+                return int(line.split(":", 1)[1].strip().split("/")[0].strip())
             except ValueError:
-                return 0
+                pass
     m = re.search(r"Score:\s*(\d+)\s*/\s*10", feedback, re.I)
     return int(m.group(1)) if m else 0
 
 
+def parse_confidence(feedback: str) -> str:
+    m = re.search(r"Confidence:\s*(High|Medium|Low)", feedback, re.I)
+    return m.group(1).capitalize() if m else "Unknown"
+
+
 def extract_revised_code(feedback: str) -> str | None:
-    """Pull text under 'Revised Code:' if the reviewer formatted correctly."""
     marker = "Revised Code:"
     if marker not in feedback:
         return None
     block = feedback.split(marker, 1)[1]
     if "Score:" in block:
         block = block.split("Score:", 1)[0]
+    if "Confidence:" in block:
+        block = block.split("Confidence:", 1)[0]
     block = block.strip()
     if block.startswith("```"):
         block = re.sub(r"^```\w*\n?", "", block)
@@ -129,116 +211,140 @@ def extract_revised_code(feedback: str) -> str | None:
     return block.strip() or None
 
 
-def run_loop(
-    task: str,
-    *,
-    model_a: str,
-    model_b: str,
-    system_a: str,
-    system_b: str,
-    max_loops: int,
-) -> None:
-    best_solution: str | None = None
+def no_bugs_reported(feedback: str) -> bool:
+    return bool(
+        re.search(r"Bugs:\s*\n\s*-\s*None\b", feedback, re.I)
+        or "Bugs:\n- None" in feedback
+        or "Bugs:\nNone" in feedback
+    )
+
+
+def build_plan(task: str, *, replan: bool = False) -> str:
+    label = "Re-planning" if replan else "Planning"
+    thought(f"{label}: breaking the task into steps (Planner / 3B)...")
+    prompt = task
+    if replan:
+        prompt = (
+            "Previous attempt scored too low. Create a NEW plan from scratch.\n\n"
+            f"TASK:\n{task}"
+        )
+    plan = ask(
+        CFG["model_planner"],
+        prompt,
+        system=CFG["system_planner"],
+        role_description="Planner — task decomposition",
+        timeout_sec=CFG["timeout_planner"],
+    )
+    print("\n=== PLAN ===\n", flush=True)
+    print(plan, flush=True)
+    print("\n", flush=True)
+    return plan
+
+
+def run_pipeline(task: str) -> None:
+    original_task = task
+    plan = build_plan(task)
+    cpu_pause()
+
     best_score = -1
+    best_output = ""
     current_task = task
 
-    for i in range(max_loops):
-        print(f"\n{'=' * 60}\n=== Iteration {i + 1} / {max_loops} ===\n{'=' * 60}", flush=True)
+    for i in range(CFG["max_loops"]):
+        print(f"\n{'=' * 60}\n=== Iteration {i + 1} / {CFG['max_loops']} ===\n{'=' * 60}", flush=True)
 
-        thought("Model A will draft code for the current task.")
+        thought("Coder implements the plan (7B — slowest step on CPU).")
+        code_prompt = f"""Use this plan:
+
+{plan}
+
+Original task:
+{original_task}
+
+Current focus:
+{current_task}
+"""
         solution = ask(
-            model_a,
-            current_task,
-            system=system_a,
-            role_description="Code generation (Model A)",
+            CFG["model_coder"],
+            code_prompt,
+            system=CFG["system_coder"],
+            role_description="Coder — implementation",
+            timeout_sec=CFG["timeout_coder"],
         )
-        print("\nModel A output saved for review.\n", flush=True)
+        cpu_pause()
 
-        thought("Model B will review security, logic, and style.")
-        review_prompt = f"Review the following code and improve it.\n\nCODE:\n{solution}"
+        thought("Reviewer checks bugs, improvements, and score (3B).")
+        review_prompt = f"Review and improve this code:\n\n{solution}"
         feedback = ask(
-            model_b,
+            CFG["model_reviewer"],
             review_prompt,
-            system=system_b,
-            role_description="Code review (Model B)",
+            system=CFG["system_reviewer"],
+            role_description="Reviewer — critique + score",
+            timeout_sec=CFG["timeout_reviewer"],
         )
+        cpu_pause()
 
         score = parse_score(feedback)
-        print(f"\nScore this round: {score}/10\n", flush=True)
+        confidence = parse_confidence(feedback)
+        print(f"\nScore: {score}/10  |  Confidence: {confidence}\n", flush=True)
 
         if score > best_score:
             best_score = score
-            revised = extract_revised_code(feedback) or feedback
-            best_solution = revised
+            best_output = extract_revised_code(feedback) or feedback
 
-        if "Bugs:\n- None" in feedback or "Bugs:\nNone" in feedback or re.search(
-            r"Bugs:\s*\n\s*-\s*None", feedback, re.I
-        ):
-            thought("Reviewer reported no bugs — stopping early.")
+        if no_bugs_reported(feedback) or score >= 9:
+            thought("High quality — stopping early.")
             break
 
-        if score >= 9:
-            thought("High score — stopping early.")
-            break
-
-        thought("Preparing the next round using reviewer feedback.")
-        current_task = f"Improve the solution using this review:\n\n{feedback}"
+        if score < CFG["min_score_regenerate"]:
+            thought(
+                f"Score below {CFG['min_score_regenerate']} — re-planning from scratch next round."
+            )
+            plan = build_plan(original_task, replan=True)
+            cpu_pause()
+            current_task = original_task
+        else:
+            thought("Feeding reviewer feedback into the next coder round.")
+            current_task = f"Improve using this feedback:\n\n{feedback}"
 
     print("\n" + "=" * 60)
-    print("BEST SOLUTION FOUND")
+    print("BEST SOLUTION")
     print("=" * 60 + "\n")
-    print(best_solution or "(none)")
+    print(best_output or "(none)")
     print(f"\nFinal score: {best_score}/10\n")
 
 
-def main() -> None:
-    load_dotenv()
-    model_a = os.environ.get("MULTI_AGENT_MODEL_A", DEFAULT_MODEL_A)
-    model_b = os.environ.get("MULTI_AGENT_MODEL_B", DEFAULT_MODEL_B)
-    max_loops = int(os.environ.get("MULTI_AGENT_MAX_LOOPS", "3"))
-    task = os.environ.get(
-        "MULTI_AGENT_TASK",
-        "Write a Python function to validate email addresses using only the standard library.",
-    )
+def resolve_task() -> str:
     if len(sys.argv) > 1:
-        task = " ".join(sys.argv[1:])
+        if sys.argv[1] in ("-i", "--interactive"):
+            return input("Enter task: ").strip()
+        return " ".join(sys.argv[1:])
+    if sys.environ.get("MULTI_AGENT_TASK"):
+        return os.environ["MULTI_AGENT_TASK"]
+    if sys.environ.get("PROMPT_INTERACTIVE", "").strip() in ("1", "true", "yes"):
+        return input("Enter task: ").strip()
+    return CFG["default_task"]
 
-    system_a = os.environ.get(
-        "MULTI_AGENT_SYSTEM_A",
-        "You are a coding assistant. Produce correct, clean, working Python. Be concise.",
-    )
-    system_b = os.environ.get(
-        "MULTI_AGENT_SYSTEM_B",
-        """You are a strict code reviewer. Always respond in this exact format:
-Bugs:
-- ...
-Improvements:
-- ...
-Revised Code:
-<full improved code>
-Score: X/10""",
-    )
+
+def main() -> None:
+    load_config()
+    task = resolve_task()
 
     print(
         f"""
-Multi-agent runner (standalone)
-  Ollama: {OLLAMA_URL}
-  Model A (coder): {model_a}
-  Model B (reviewer): {model_b}
-  Max loops: {max_loops}
-  Task: {task[:120]}{'...' if len(task) > 120 else ''}
+3-agent multi-agent runner (standalone)
+  Ollama: {CFG['ollama_url']}
+  Planner:  {CFG['model_planner']}
+  Coder:    {CFG['model_coder']}
+  Reviewer: {CFG['model_reviewer']}
+  Max loops: {CFG['max_loops']}  |  Delay: {CFG['delay_sec']}s  |  Stream: {CFG['stream']}
+  Re-plan if score < {CFG['min_score_regenerate']}
+  Task: {task[:100]}{'...' if len(task) > 100 else ''}
 """,
         flush=True,
     )
 
-    run_loop(
-        task,
-        model_a=model_a,
-        model_b=model_b,
-        system_a=system_a,
-        system_b=system_b,
-        max_loops=max_loops,
-    )
+    run_pipeline(task)
 
 
 if __name__ == "__main__":

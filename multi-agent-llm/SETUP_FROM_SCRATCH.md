@@ -48,15 +48,15 @@ MULTI_AGENT_TASK=Write a Python function to validate email addresses
 
 ---
 
-## Step 4 — Pull AI models
+## Step 4 — Pull AI models (3-agent)
 
 ```bash
-ollama pull qwen2.5-coder:7b-instruct-q4_K_M
 ollama pull qwen2.5:3b-instruct-q4_K_M
+ollama pull qwen2.5-coder:7b-instruct-q4_K_M
 ollama list
 ```
 
-**Note:** The sample used `qwen2.5:14b` for Model B — that is too large for 16 GB RAM. This project uses **3B** for the reviewer instead.
+Planner and Reviewer share the **3B** tag; Coder uses **7B**. Do not use `qwen2.5:14b` on 16 GB RAM.
 
 ---
 
@@ -120,10 +120,11 @@ python multi_agent_runner.py "Your task here"
 
 ## What the code does (novice)
 
-1. **`ask()`** — sends prompt to Ollama, prints live tokens.  
-2. **Model A** — writes code.  
-3. **Model B** — reviews with Bugs / Improvements / Revised Code / Score.  
-4. **Loop** — up to 3 times until score is high or no bugs.  
-5. **Print** — best solution at the end.
+1. **Planner** — breaks your task into steps (fast).  
+2. **Coder** — writes code following the plan (slow on CPU).  
+3. **Reviewer** — Bugs / Improvements / Revised Code / Score / Confidence.  
+4. **Loop** — up to 3 rounds; re-plans if score &lt; 6.  
+5. **`DELAY_BETWEEN_CALLS`** — pause between models so RAM stays stable.  
+6. **Print** — best solution at the end.
 
 All logic is in **`multi_agent_runner.py`** — open it in an editor to read the comments.

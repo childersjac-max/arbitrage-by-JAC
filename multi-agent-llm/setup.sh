@@ -24,12 +24,14 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-MODEL_A="${MULTI_AGENT_MODEL_A:-qwen2.5-coder:7b-instruct-q4_K_M}"
-MODEL_B="${MULTI_AGENT_MODEL_B:-qwen2.5:3b-instruct-q4_K_M}"
+PLANNER="${MODEL_PLANNER:-qwen2.5:3b-instruct-q4_K_M}"
+CODER="${MODEL_CODER:-qwen2.5-coder:7b-instruct-q4_K_M}"
+REVIEWER="${MODEL_REVIEWER:-qwen2.5:3b-instruct-q4_K_M}"
 
 echo "Pulling models (may take a while)..."
-ollama pull "$MODEL_A"
-ollama pull "$MODEL_B"
+ollama pull "$PLANNER"
+ollama pull "$CODER"
+ollama pull "$REVIEWER"
 
 if command -v py >/dev/null 2>&1; then
   PY=py -3.14

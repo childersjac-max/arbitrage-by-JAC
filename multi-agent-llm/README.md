@@ -49,8 +49,8 @@ py -3.14 -m venv .venv
 source .venv/Scripts/activate
 python -m pip install -r requirements.txt
 cp .env.example .env
-ollama pull qwen2.5-coder:7b-instruct-q4_K_M
 ollama pull qwen2.5:3b-instruct-q4_K_M
+ollama pull qwen2.5-coder:7b-instruct-q4_K_M
 ```
 
 ### Step 4 — Run

@@ -49,6 +49,13 @@ DELAY_BETWEEN_CALLS=2
 
 On 16GB RAM / CPU, set `MODEL_CODER` to the 3B tag for faster runs.
 
+## Troubleshooting
+
+| Error | Fix |
+|-------|-----|
+| `No module named 'pipeline_core'` | `ls multi-agent-llm/pipeline_core.py` — if missing: `git checkout cursor/gradio-multi-agent-4fea -- multi-agent-llm` then restart `web_app.py` |
+| Multi-agent folder not found | Run `web_app.py` from repo with **both** `local-llm/` and `multi-agent-llm/` siblings |
+
 ## Notes
 
 - Multi-agent turns take **several minutes** on CPU (7B coder step).

@@ -6,7 +6,7 @@ import asyncio
 import time
 from collections.abc import AsyncIterator
 
-from multi_agent_bridge import ensure_multi_agent_import, multi_agent_config_summary
+from multi_agent_bridge import get_pipeline_core, multi_agent_config_summary
 from ollama_connect import check_ollama_reachable, format_connection_help
 from ui.chat_history_fmt import append_turn, messages_to_tuples, set_last_assistant
 from ui_state import save_chat_history
@@ -27,8 +27,10 @@ async def stream_multi_agent_turn(
 
     Runs Planner → Coder → Reviewer in a worker thread; streams tokens into chat.
     """
-    ensure_multi_agent_import()
-    from pipeline_core import PipelineCallbacks, load_config, run_pipeline
+    pc = get_pipeline_core()
+    PipelineCallbacks = pc.PipelineCallbacks
+    load_config = pc.load_config
+    run_pipeline = pc.run_pipeline
 
     messages = list(history or [])
     status_md = multi_agent_config_summary()

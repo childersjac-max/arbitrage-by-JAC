@@ -72,7 +72,15 @@ Output files land in `multi-agent-llm/autogen_workspace/`.
 
 ## Replace your broken `~/agent.py`
 
-Either delete `~/agent.py` and use `multi-agent-llm/autogen_agent.py`, or fix home script:
+**Easiest:** copy the fixed drop-in:
+
+```bash
+cp ~/Projects/multi-agent-llm/agent.py ~/agent.py
+ollama pull qwen2.5:3b-instruct-q4_K_M
+python ~/agent.py
+```
+
+Or use `multi-agent-llm/autogen_agent.py` (reads `.env`). Or fix home script manually:
 
 ```python
 model_client = OllamaChatCompletionClient(

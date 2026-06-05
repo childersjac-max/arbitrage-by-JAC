@@ -7,13 +7,42 @@ import os
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import requests
 
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
+PROMPTS_DIR = ROOT / "prompts"
+
+
+def _read_prompt_file(name: str, fallback: str) -> str:
+    """Load prompt text from prompts/*.txt — safe to edit without breaking Python syntax."""
+    path = PROMPTS_DIR / name
+    if path.is_file():
+        text = path.read_text(encoding="utf-8").strip()
+        if text:
+            return text
+    return fallback
+
+
+def _default_planner_prompt() -> str:
+    return _read_prompt_file("system_planner.txt", "You are a planning assistant. Output steps only, no code.")
+
+
+def _default_coder_prompt() -> str:
+    return _read_prompt_file(
+        "system_coder.txt",
+        "You are a coding assistant. Write clean working code following the plan.",
+    )
+
+
+def _default_reviewer_prompt() -> str:
+    return _read_prompt_file(
+        "system_reviewer.txt",
+        "You are a strict code reviewer. Return Bugs, Improvements, Revised Code, Score X/10, Confidence.",
+    )
 
 
 @dataclass
@@ -29,33 +58,17 @@ class MultiAgentConfig:
     timeout_planner: int = 120
     timeout_coder: int = 600
     timeout_reviewer: int = 180
-    system_planner: str = field(
-        default=(
-            "You are a planning assistant.\n\n"
-            "Break the task into clear steps:\n"
-            "- Inputs\n- Logic\n- Edge cases\n\n"
-            "Output concise structured steps only. No code yet."
-        )
-    )
-    system_coder: str = field(
-        default=(
-            "You are a coding assistant.\n"
-            "Write a clean working implementation.\n"
-            "Follow the plan exactly.\n"
-            "Return code with brief comments only where helpful."
-        )
-    )
-    system_reviewer: str = field(
-        default=(
-            "You are a strict code reviewer.\n\n"
-            "Return exactly:\n\n"
-            "Bugs:\n- ...\n\n"
-            "Improvements:\n- ...\n\n"
-            "Revised Code:\n<full improved code>\n\n"
-            "Score: X/10\n"
-            "Confidence: High/Medium/Low"
-        )
-    )
+    system_planner: str = ""
+    system_coder: str = ""
+    system_reviewer: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.system_planner:
+            self.system_planner = _default_planner_prompt()
+        if not self.system_coder:
+            self.system_coder = _default_coder_prompt()
+        if not self.system_reviewer:
+            self.system_reviewer = _default_reviewer_prompt()
 
 
 @dataclass
@@ -108,25 +121,9 @@ def load_config() -> MultiAgentConfig:
         timeout_planner=int(os.environ.get("TIMEOUT_PLANNER_SEC", "120")),
         timeout_coder=int(os.environ.get("TIMEOUT_CODER_SEC", "600")),
         timeout_reviewer=int(os.environ.get("TIMEOUT_REVIEWER_SEC", "180")),
-        system_planner=os.environ.get("SYSTEM_PLANNER", """You are a planning assistant.
-
-Break the task into clear steps:
-- Inputs
-- Logic
-- Edge cases
-
-Output concise structured steps only. No code yet."""),
-        system_coder=os.environ.get(
-            "SYSTEM_CODER",
-            "You are a coding assistant.\nWrite a clean working implementation.\n"
-            "Follow the plan exactly.\nReturn code with brief comments only where helpful.",
-        ),
-        system_reviewer=os.environ.get(
-            "SYSTEM_REVIEWER",
-            "You are a strict code reviewer.\n\nReturn exactly:\n\nBugs:\n- ...\n\n"
-            "Improvements:\n- ...\n\nRevised Code:\n<full improved code>\n\n"
-            "Score: X/10\nConfidence: High/Medium/Low",
-        ),
+        system_planner=os.environ.get("SYSTEM_PLANNER", ""),
+        system_coder=os.environ.get("SYSTEM_CODER", ""),
+        system_reviewer=os.environ.get("SYSTEM_REVIEWER", ""),
     )
 
 

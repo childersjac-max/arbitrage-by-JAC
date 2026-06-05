@@ -1,0 +1,7 @@
+Outline a modular Python package layout for an arbitrage data pipeline that:
+1) Ingests NBA main markets from The Odds API (paid key in environment variable).
+2) Normalizes team names via the existing local-llm normalize_batch() helper.
+3) Merges feeds into unified JSON and computes arbitrage yield when two comparable prices exist.
+4) Uses lawful public APIs or stubs only for non-Odds-API sources.
+
+List files to create, key functions, and the order I should implement them.

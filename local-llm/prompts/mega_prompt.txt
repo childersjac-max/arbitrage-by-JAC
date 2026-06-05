@@ -1,0 +1,21 @@
+# ============================================================
+# YOUR BIG PROJECT PROMPT — edit this file in Notepad, then save
+# ============================================================
+# How to run (pick one):
+#   A) Double-click:  local-llm\scripts\run_architect_easy.bat
+#   B) Web app:       python web_app.py → tab "Architect (8B)" → green button
+#
+# Lines starting with # are notes (optional). The model reads the rest.
+# ============================================================
+
+You are building a modular Python arbitrage data pipeline on my Windows PC.
+
+Goals:
+- Use my paid The Odds API subscription as the main odds source (API key in environment).
+- Use local Ollama only to normalize messy team/event names to canonical JSON.
+- Create package layout: config, models, integrators (odds_api + stubs for other books), normalization bridge, engine for merge and arbitrage yield.
+- Output unified JSON records with timestamp, normalized_event_name, market_type, per-source odds, arbitrage yield when two prices compare.
+
+Target platforms for future adapters (stubs only unless public API): DraftKings, FanDuel, BetMGM, Kalshi, Polymarket, Betfair, and others.
+
+Deliver production-style async Python with type hints for Git Bash and venv.

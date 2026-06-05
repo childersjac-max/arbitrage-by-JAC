@@ -2,14 +2,21 @@
 
 **Independent project** — does not use `arbitrage-by-JAC`, `harvester`, or `local-llm`.
 
-Two Ollama models cooperate:
+Three Ollama agents:
+
+```text
+Planner (3B) → Coder (7B) → Reviewer (3B) → loop until score ≥ 9 or max rounds
+```
 
 | Role | Default model | Job |
 |------|----------------|-----|
-| **Model A** | `qwen2.5-coder:7b-instruct-q4_K_M` | Writes code |
-| **Model B** | `qwen2.5:3b-instruct-q4_K_M` | Reviews and scores |
+| **Planner** | `qwen2.5:3b-instruct-q4_K_M` | Task decomposition (steps, inputs, edge cases) |
+| **Coder** | `qwen2.5-coder:7b-instruct-q4_K_M` | Implementation |
+| **Reviewer** | `qwen2.5:3b-instruct-q4_K_M` | Critique, revised code, score / confidence |
 
-Live **`[THOUGHT]`** lines explain each step for beginners.
+CPU-safe: **`DELAY_BETWEEN_CALLS`** between steps, small models for planner/reviewer.
+
+Live **`[THOUGHT]`** + optional streaming output.
 
 ---
 
@@ -67,7 +74,15 @@ Custom task:
 python multi_agent_runner.py "Write a FastAPI health check endpoint"
 ```
 
+Interactive prompt:
+
+```bash
+python multi_agent_runner.py --interactive
+```
+
 Or set `MULTI_AGENT_TASK` in `.env`.
+
+**Smart stop:** score ≥ 9 or no bugs · **Re-plan** if score &lt; 6
 
 ---
 
@@ -90,8 +105,19 @@ Or set `MULTI_AGENT_TASK` in `.env`.
 
 ---
 
+## AutoGen (optional)
+
+If you installed `autogen-agentchat` and hit errors with `~/agent.py`:
+
+```bash
+pip install -r requirements-autogen.txt
+python autogen_agent.py "Your task"
+```
+
+See **[AUTOGEN_SETUP.md](AUTOGEN_SETUP.md)** — use `qwen2.5:3b-instruct-q4_K_M`, not `llama3.1`.
+
 ## Not included
 
-- No Gradio UI  
+- No Gradio UI (use `arbitrage-by-JAC/local-llm` separately)  
 - No connection to sports arbitrage / Odds API  
 - No `server.py` / llama.cpp — **Ollama only**

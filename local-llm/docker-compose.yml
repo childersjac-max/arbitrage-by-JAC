@@ -1,0 +1,102 @@
+# Self-hosted local LLM for entity normalization.
+# Profiles:
+#   ollama (default) — simplest path; GGUF + CUDA/Metal via host Ollama or container GPU
+#   vllm             — NVIDIA-only; highest throughput for batched OpenAI-compatible calls
+#
+# Usage:
+#   docker compose --profile ollama up -d
+#   docker compose --profile vllm up -d
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    container_name: local-llm-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_MAX_LOADED_MODELS=1
+    # NVIDIA GPU (Linux). Requires nvidia-container-toolkit.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Optional one-shot pull helper (run: docker compose --profile ollama run --rm ollama-pull)
+  ollama-pull:
+    image: ollama/ollama:latest
+    profiles: ["ollama-pull"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    network_mode: service:ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "Pulling recommended quantized models..."
+        ollama pull llama3.3:70b-instruct-q4_K_M || ollama pull llama3.1:8b-instruct-q4_K_M
+        ollama pull deepseek-r1:8b-llama-distill-q4_K_M || true
+        ollama list
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    profiles: ["vllm"]
+    container_name: local-llm-vllm
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    ipc: host
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+    # Set VLLM_QUANTIZATION=awq|gptq|fp8 when using a pre-quantized weights repo.
+    # For 70B on 24GB VRAM, prefer an AWQ/GPTQ HF repo or use Ollama GGUF instead.
+    command:
+      - --model
+      - ${VLLM_MODEL:-meta-llama/Meta-Llama-3.1-8B-Instruct}
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --dtype
+      - auto
+      - --max-model-len
+      - "8192"
+      - --gpu-memory-utilization
+      - "0.90"
+      - --max-num-seqs
+      - "16"
+      - --enable-prefix-caching
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+volumes:
+  ollama_models:
+  huggingface_cache:

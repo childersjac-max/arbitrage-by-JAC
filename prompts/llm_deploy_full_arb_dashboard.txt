@@ -66,10 +66,14 @@ Variable: `ODDS_API_KEY` (alias `THE_ODDS_API_KEY` also works). Loaded automatic
 ### Auto-verify (run silently at start of PHASE 1 — do not ask user first)
 
 ```bash
-cd ~/Projects/arbitrage-by-JAC/harvester
-source ../sports_arbitrage_pipeline/venv/Scripts/activate 2>/dev/null || true
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
+source venv/Scripts/activate
+# First time only: bash bootstrap.sh && pip install -r requirements.txt
+cd ../harvester
 python cli.py health
 ```
+
+**Wrong venv error:** `ModuleNotFoundError: pydantic_settings` means you used `local-llm/.venv` or system Python. Harvester commands **must** use `sports_arbitrage_pipeline/venv`.
 
 **EXPECT:** `the_odds_api: OK — OK (N sports listed)`  
 If `FAIL` or `ODDS_API_KEY is not set` → **only then** tell user to add key **once** to `harvester/.env` via Notepad (one line: `ODDS_API_KEY=...`). Never ask them to type it in chat.

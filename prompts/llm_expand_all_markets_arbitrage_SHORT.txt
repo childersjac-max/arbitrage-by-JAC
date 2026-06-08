@@ -1,0 +1,13 @@
+Harvester engineer — ~/Projects/arbitrage-by-JAC. Dashboard "1 event, 2 lines" = h2h moneyline only (2 quotes/book). Expand to ALL leagues and ALL lines via The Odds API (lawful HTTP only — no scraping/stealth).
+
+MARKETS REQUIRED: h2h, spreads, alternate_spreads, totals, alternate_totals, player_points, player_rebounds, player_assists, player_threes, player_points_alternate, player_rebounds_alternate, player_assists_alternate (+ sport-specific prop keys).
+
+PHASE A (run first — no code): harvester/.env → ODDS_API_MARKETS=h2h,spreads,totals. Then:
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline && source venv/Scripts/activate && python arbitrage_orchestrator.py --sport basketball_nba --markets h2h spreads totals
+Multi-sport: loop basketball_nba americanfootball_nfl baseball_mlb icehockey_nhl with same --markets. STOP; wait for terminal JSON (events, lines counts).
+
+PHASE B (code): Bulk /odds = featured h2h/spreads/totals only. Props + alternates need per-event GET /v4/sports/{sport}/events/{eventId}/odds. Edit harvester/integrators/odds_api.py + odds_api_fetch.py + arbitrage_orchestrator.py. Env: ODDS_API_DEEP_MARKETS=1, ODDS_API_EVENT_MARKETS=..., ODDS_API_SPORTS=..., ODDS_API_MAX_EVENTS_PER_SPORT=10. Extend engine.py beyond detect_h2h_arbitrage for spreads/totals/props (match line/point). Full spec: prompts/llm_expand_all_markets_arbitrage.txt
+
+Rules: harvester/ + sports_arbitrage_pipeline/ only; output harvester/data/ingestion_snapshot.json; one command per reply; warn credits (1 per market×event on event endpoint).
+
+START PHASE A. Ask: is ODDS_API_KEY set? (yes/no — never paste key).

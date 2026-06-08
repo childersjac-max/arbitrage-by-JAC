@@ -44,6 +44,60 @@ You edit **existing** `harvester/` code and config. You do **NOT** invent `steal
 
 ---
 
+## ODDS API KEY — PERSISTENT (never re-ask the user)
+
+The user's **Odds API key is already saved** in:
+
+```
+~/Projects/arbitrage-by-JAC/harvester/.env
+```
+
+Variable: `ODDS_API_KEY` (alias `THE_ODDS_API_KEY` also works). Loaded automatically by `harvester/settings.py` → `get_settings().odds_api_key`.
+
+### Rules for every phase
+
+1. **Never ask** the user to paste, re-enter, or confirm the API key in chat.
+2. **Never open Notepad** for `.env` unless auto-verify below prints `MISSING`.
+3. **Never echo or print** the key value in terminal output, chat, or logs.
+4. **Never commit** `.env` to git (it is gitignored).
+5. **Always assume** the key is present — run commands that load `harvester/.env` via Python (`get_settings()`) or an env-source script.
+6. If orchestrator fails with "ODDS_API_KEY is not set", fix **path/cwd** (must run from harvester or use launcher), not by asking the user for the key again.
+
+### Auto-verify (run silently at start of PHASE 1 — do not ask user first)
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/harvester
+source ../sports_arbitrage_pipeline/venv/Scripts/activate 2>/dev/null || true
+python cli.py health
+```
+
+**EXPECT:** `the_odds_api: OK — OK (N sports listed)`  
+If `FAIL` or `ODDS_API_KEY is not set` → **only then** tell user to add key **once** to `harvester/.env` via Notepad (one line: `ODDS_API_KEY=...`). Never ask them to type it in chat.
+
+### One-time key file (user already did this — reference only)
+
+```env
+# ~/Projects/arbitrage-by-JAC/harvester/.env  (persistent, gitignored)
+ODDS_API_KEY=<user's key from the-odds-api.com — already on disk, do not repeat>
+ODDS_API_REGIONS=us
+ODDS_API_MARKETS=h2h,spreads,totals
+```
+
+### Code task (PHASE 1b if missing): always load key for every entry point
+
+Ensure **all** run paths read `harvester/.env` without manual export:
+
+| Entry point | Must load harvester/.env |
+|-------------|--------------------------|
+| `harvester/arbitrage_orchestrator.py` | Yes (via `settings.py`) |
+| `harvester/web_app.py` | Yes (via `settings.py`) |
+| `sports_arbitrage_pipeline/arbitrage_orchestrator.py` | Yes — `harvester_launcher.py` chdirs to harvester |
+| `harvester/scripts/run_dashboard.sh` | Add: `set -a; source "$(dirname "$0")/../.env"; set +a` before python |
+
+Add `harvester/scripts/source_env.sh` (and `.bat`) that exports all vars from `harvester/.env` for Git Bash. Document: user runs `source harvester/scripts/source_env.sh` once per terminal if needed — **not** re-enter the key.
+
+---
+
 ## TARGET STATE (definition of done)
 
 ### A. All books considered
@@ -128,36 +182,31 @@ User must be able to open a URL and see live results:
 2. No scraping, TLS spoofing, or stealth sessions
 3. One bash command block per reply; wait for user terminal output
 4. Warn about Odds API credits: bulk = 1 credit × markets per sport; event endpoint = 1 credit × markets × event
-5. Never paste or echo `ODDS_API_KEY`
+5. **Never** paste, echo, or ask the user for `ODDS_API_KEY` — it lives in `harvester/.env` permanently
 6. Success = user opens URL in browser and sees real data (not generated JSON)
 
 ---
 
 ## PHASE 1 — CONFIG (no code, run now)
 
-Ask user: **Is ODDS_API_KEY set in harvester/.env?** (yes/no only)
+**Do not ask about the API key.** Run auto-verify first (see ODDS API KEY section). If health is OK, proceed immediately.
 
-Then give this block. STOP until output pasted.
+Update non-secret settings only (key line already in file — leave `ODDS_API_KEY` untouched):
 
 ```bash
-cd ~/Projects/arbitrage-by-JAC
-notepad harvester/.env
+cd ~/Projects/arbitrage-by-JAC/harvester
+# Append or merge these ONLY if not already present (never overwrite ODDS_API_KEY):
+grep -q '^ODDS_API_REGIONS=' .env || echo 'ODDS_API_REGIONS=us' >> .env
+grep -q '^ODDS_API_MARKETS=' .env || echo 'ODDS_API_MARKETS=h2h,spreads,totals' >> .env
+grep -q '^HARVESTER_DEFAULT_SPORT=' .env || echo 'HARVESTER_DEFAULT_SPORT=basketball_nba' >> .env
+grep -q '^HARVESTER_MIN_ARB_YIELD_PCT=' .env || echo 'HARVESTER_MIN_ARB_YIELD_PCT=0.05' >> .env
+grep -q '^HARVESTER_DASHBOARD_FAST_MODE=' .env || echo 'HARVESTER_DASHBOARD_FAST_MODE=false' >> .env
+grep -q '^HARVESTER_UI_HOST=' .env || echo 'HARVESTER_UI_HOST=127.0.0.1' >> .env
+grep -q '^HARVESTER_UI_PORT=' .env || echo 'HARVESTER_UI_PORT=8765' >> .env
+python cli.py health
 ```
 
-Set:
-
-```env
-ODDS_API_KEY=(already set)
-ODDS_API_REGIONS=us
-ODDS_API_MARKETS=h2h,spreads,totals
-HARVESTER_DEFAULT_SPORT=basketball_nba
-HARVESTER_MIN_ARB_YIELD_PCT=0.05
-HARVESTER_DASHBOARD_FAST_MODE=false
-HARVESTER_UI_HOST=127.0.0.1
-HARVESTER_UI_PORT=8765
-```
-
-Run full featured markets for NBA:
+Run full featured markets for NBA (key auto-loaded from `harvester/.env`):
 
 ```bash
 cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
@@ -191,6 +240,8 @@ Implement (planner lists files; coder edits; reviewer checks):
 - Merge into `UnifiedRecord` via `odds_api_fetch.py`
 
 ### 2b — Settings (`harvester/settings.py` + `.env`)
+
+Append to `harvester/.env` (keep existing `ODDS_API_KEY` line unchanged):
 
 ```env
 ODDS_API_DEEP_MARKETS=1
@@ -249,9 +300,10 @@ Windows Firewall: tell user to allow Python on port 8765 if phone cannot connect
 
 Create `harvester/scripts/run_dashboard.bat` and `harvester/scripts/run_dashboard.sh`:
 
-1. Run orchestrator (all sports, all markets)
-2. Start `python web_app.py`
-3. Print all URLs
+1. `source harvester/scripts/source_env.sh` (loads `ODDS_API_KEY` from `.env` automatically)
+2. Run orchestrator (all sports, all markets)
+3. Start `python web_app.py`
+4. Print all URLs
 
 ### 3c — Public tunnel (optional)
 
@@ -312,7 +364,7 @@ NEXT: Paste terminal output or confirm URL works.
 
 ## START
 
-1. Ask: ODDS_API_KEY set? (yes/no)
+1. Run `python cli.py health` in `harvester/` — key loads from `harvester/.env` automatically; **never ask user for the key**
 2. Run PHASE 1 — do not skip to code until line counts confirm spreads+totals load
 3. Then PHASE 2 (full markets + engine), then PHASE 3 (LAN URL), then PHASE 4 verify
 

@@ -1,5 +1,7 @@
 Harvester engineer — ~/Projects/arbitrage-by-JAC. User wants: (1) ALWAYS scan ALL US books + ALL line types for arbitrage, (2) deploy a live results app with a URL they can open.
 
+ODDS API KEY: Already in ~/Projects/arbitrage-by-JAC/harvester/.env as ODDS_API_KEY. Auto-loaded by settings.py. NEVER ask user to paste/re-enter/confirm key. NEVER echo key. Verify only: cd harvester && python cli.py health. Open Notepad for .env ONLY if health says MISSING.
+
 BOOKS (Odds API us region): draftkings, fanduel, betmgm, caesars/williamhill_us, fanatics, thescore/espnbet — keep via filter_records_to_target_sources in llm_arbitrage.py. Direct-only stubs (kalshi, polymarket, bet365) = "Not connected" until official API.
 
 LINES (must fetch + score): h2h, spreads, alternate_spreads, totals, alternate_totals, player_points/rebounds/assists/threes, player_*_alternate. Bulk /odds = featured only; props+alts need per-event /events/{id}/odds. Extend engine.py beyond detect_h2h_arbitrage — match spreads/totals/props on same line/point.
@@ -16,6 +18,6 @@ PHASE 2: event markets + multi-sport loop + per-market arb in engine.py + dashbo
 
 PHASE 3: LAN bind + startup script. User opens :8765 on PC/phone.
 
-Rules: harvester/ only; no scraping; one command/reply; warn API credits; never echo ODDS_API_KEY.
+Rules: harvester/ only; no scraping; one command/reply; warn API credits; key stays in harvester/.env — never re-ask.
 
-START PHASE 1. Ask: ODDS_API_KEY set? (yes/no)
+START: python cli.py health (harvester/), then PHASE 1. No key questions.

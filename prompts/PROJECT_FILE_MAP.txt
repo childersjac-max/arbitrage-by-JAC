@@ -60,6 +60,8 @@ multi-agent-llm/prompts/project_context.txt             # Optional override of r
 prompts/llm_operator_arbitrage_repo.txt
 prompts/llm_operator_odds_api_harvester.txt
 prompts/llm_operator_odds_api_harvester_SHORT.txt
+prompts/llm_expand_all_markets_arbitrage.txt          # All leagues + all market types (full)
+prompts/llm_expand_all_markets_arbitrage_SHORT.txt   # Same — compact paste for multi-agent
 prompts/llm_execute_arbitrage_engine.txt
 prompts/PROJECT_CONTEXT.txt                            # This project's global context
 prompts/PROJECT_FILE_MAP.txt                           # This file

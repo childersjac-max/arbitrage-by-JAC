@@ -1,6 +1,6 @@
 Harvester engineer — ~/Projects/arbitrage-by-JAC. User wants: (1) ALWAYS scan ALL US books + ALL line types for arbitrage, (2) deploy a live results app with a URL they can open.
 
-ODDS API KEY: Already in harvester/.env. NEVER re-ask. Verify: cd sports_arbitrage_pipeline && source venv/Scripts/activate && cd ../harvester && python cli.py health. Use sports_arbitrage_pipeline/venv NOT local-llm/.venv (fixes pydantic_settings error).
+ODDS API KEY: Always in ~/Projects/arbitrage-by-JAC/harvester/.env (ODDS_API_KEY=). Auto-loaded every run. NEVER ask user to paste/confirm key. Key rotation = user edits .env in Notepad only. Verify: sports_arbitrage_pipeline venv → cd ../harvester → python cli.py health. NOT local-llm/.venv.
 
 BOOKS (Odds API us region): draftkings, fanduel, betmgm, caesars/williamhill_us, fanatics, thescore/espnbet — keep via filter_records_to_target_sources in llm_arbitrage.py. Direct-only stubs (kalshi, polymarket, bet365) = "Not connected" until official API.
 

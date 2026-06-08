@@ -38,30 +38,35 @@ You edit **existing** `harvester/` code and config. You do **NOT** invent `steal
 | Arb math (today) | `harvester/engine.py` → `detect_h2h_arbitrage()` | **Moneyline only** — spreads/totals/props NOT scored yet |
 | Results dashboard | `harvester/web_app.py` (FastAPI) | **Port 8765** — Sources tab + arb opportunities |
 | Snapshot output | `harvester/data/ingestion_snapshot.json` | Written by orchestrator |
+| **API key (persistent)** | `harvester/.env` → `ODDS_API_KEY` | Auto-loaded every run; gitignored; never re-enter in chat |
+| Harvester Python venv | `sports_arbitrage_pipeline/venv` | **Not** `local-llm/.venv` — required for `cli.py`, orchestrator |
 | LAN URLs (local-llm only) | `local-llm/network_urls.py` | Pattern to copy for harvester dashboard |
 
 **Port map:** `:7860` = local-llm chat | `:8765` = **arbitrage results dashboard** (this is what the user opens for arbs)
 
 ---
 
-## ODDS API KEY — PERSISTENT (never re-ask the user)
+## ODDS API KEY — PERSISTENT (always remembered; never re-ask)
 
-The user's **Odds API key is already saved** in:
+The user's **Odds API key is saved on disk** and reloads automatically on every orchestrator and dashboard run:
 
-```
-~/Projects/arbitrage-by-JAC/harvester/.env
-```
-
-Variable: `ODDS_API_KEY` (alias `THE_ODDS_API_KEY` also works). Loaded automatically by `harvester/settings.py` → `get_settings().odds_api_key`.
+| Item | Value |
+|------|--------|
+| **File** | `~/Projects/arbitrage-by-JAC/harvester/.env` |
+| **Variable** | `ODDS_API_KEY` (alias `THE_ODDS_API_KEY`) |
+| **Loader** | `harvester/settings.py` → `get_settings().odds_api_key` |
+| **To rotate key** | User edits `.env` in Notepad once — agent never collects key in chat |
 
 ### Rules for every phase
 
-1. **Never ask** the user to paste, re-enter, or confirm the API key in chat.
-2. **Never open Notepad** for `.env` unless auto-verify below prints `MISSING`.
+1. **Never ask** "Is ODDS_API_KEY set?", "paste your key", or "confirm your API key".
+2. **Never open Notepad** for `.env` unless `cli.py health` fails with key missing.
 3. **Never echo or print** the key value in terminal output, chat, or logs.
 4. **Never commit** `.env` to git (it is gitignored).
-5. **Always assume** the key is present — run commands that load `harvester/.env` via Python (`get_settings()`) or an env-source script.
-6. If orchestrator fails with "ODDS_API_KEY is not set", fix **path/cwd** (must run from harvester or use launcher), not by asking the user for the key again.
+5. **Always assume** the key is on disk — proceed to `cli.py health` then orchestrator.
+6. If `ModuleNotFoundError: pydantic_settings` → wrong venv; use `sports_arbitrage_pipeline/venv`.
+7. If `ODDS_API_KEY is not set` → wrong cwd or empty `.env`; fix path, do not re-prompt for key in chat.
+8. If user says they **rotated the key** → tell them to edit `harvester/.env` in Notepad (one line); then re-run `cli.py health`. Do not ask them to paste the new key.
 
 ### Auto-verify (run silently at start of PHASE 1 — do not ask user first)
 
@@ -198,8 +203,10 @@ User must be able to open a URL and see live results:
 Update non-secret settings only (key line already in file — leave `ODDS_API_KEY` untouched):
 
 ```bash
-cd ~/Projects/arbitrage-by-JAC/harvester
-# Append or merge these ONLY if not already present (never overwrite ODDS_API_KEY):
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
+source venv/Scripts/activate
+cd ../harvester
+# Append non-secret settings ONLY (never touch or overwrite ODDS_API_KEY line):
 grep -q '^ODDS_API_REGIONS=' .env || echo 'ODDS_API_REGIONS=us' >> .env
 grep -q '^ODDS_API_MARKETS=' .env || echo 'ODDS_API_MARKETS=h2h,spreads,totals' >> .env
 grep -q '^HARVESTER_DEFAULT_SPORT=' .env || echo 'HARVESTER_DEFAULT_SPORT=basketball_nba' >> .env
@@ -368,8 +375,9 @@ NEXT: Paste terminal output or confirm URL works.
 
 ## START
 
-1. Run `python cli.py health` in `harvester/` — key loads from `harvester/.env` automatically; **never ask user for the key**
-2. Run PHASE 1 — do not skip to code until line counts confirm spreads+totals load
-3. Then PHASE 2 (full markets + engine), then PHASE 3 (LAN URL), then PHASE 4 verify
+1. Activate `sports_arbitrage_pipeline/venv`, run `python cli.py health` — key auto-loads from `harvester/.env`
+2. **Do not ask about the API key** — it is always remembered on disk
+3. Run PHASE 1 — do not skip to code until line counts confirm spreads+totals load
+4. Then PHASE 2 (full markets + engine), PHASE 3 (LAN URL), PHASE 4 verify
 
 Do NOT build stealth scrapers. Do NOT point user to port 7860 for arb results — that is the LLM chat; **arb dashboard is :8765**.

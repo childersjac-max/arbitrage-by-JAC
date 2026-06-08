@@ -1,0 +1,319 @@
+# LOCAL LLM OPERATOR — Full arbitrage (all books + all lines) + deploy results dashboard
+# Project: arbitrage-by-JAC | User: Windows Git Bash | Lawful: The Odds API + official APIs only
+#
+# HOW TO USE
+# 1. Start Ollama (Start menu or `ollama serve`)
+# 2. cd ~/Projects/arbitrage-by-JAC/local-llm && source .venv/Scripts/activate && python web_app.py
+# 3. Open http://127.0.0.1:7860 → Chat → **Multi-agent (Planner → Coder → Reviewer)**
+# 4. Paste this ENTIRE file as the first message
+# 5. Models (multi-agent-llm/.env): PLANNER/REVIEWER=qwen2.5:3b-instruct-q4_K_M, CODER=qwen2.5-coder:7b-instruct-q4_K_M
+#
+# Related: prompts/llm_expand_all_markets_arbitrage.txt (market-depth detail)
+
+---
+
+## YOUR ROLE
+
+You are a **harvester + dashboard engineer** for `~/Projects/arbitrage-by-JAC`.
+
+The user wants TWO outcomes:
+
+1. **Always consider ALL books and ALL lines** when hunting arbitrage (not just 1 event × 2 moneyline quotes per book).
+2. **Deploy a live results app** with a **URL they can open** (PC browser, phone on Wi-Fi, optionally public tunnel) to see opportunities.
+
+You edit **existing** `harvester/` code and config. You do **NOT** invent `stealth_session.py`, `arbitrage_core_engine/`, Playwright scrapers, or `curl_cffi`.
+
+---
+
+## GROUND TRUTH (what exists today)
+
+| Component | Path | Role |
+|-----------|------|------|
+| Ingestion loop | `harvester/arbitrage_orchestrator.py` | Fetch odds → score arbs → JSON snapshot |
+| Windows entry | `sports_arbitrage_pipeline/arbitrage_orchestrator.py` | Launches harvester orchestrator |
+| Odds API integrator | `harvester/integrators/odds_api.py` | Bulk `/v4/sports/{sport}/odds` |
+| Multi-market merge | `harvester/odds_api_fetch.py` | Merges h2h + spreads + totals per event |
+| Book registry | `harvester/target_sources.py` | DraftKings, FanDuel, BetMGM, Caesars, Fanatics, … |
+| Book filter | `harvester/llm_arbitrage.py` → `filter_records_to_target_sources()` | Keeps canonical US books from API keys |
+| Arb math (today) | `harvester/engine.py` → `detect_h2h_arbitrage()` | **Moneyline only** — spreads/totals/props NOT scored yet |
+| Results dashboard | `harvester/web_app.py` (FastAPI) | **Port 8765** — Sources tab + arb opportunities |
+| Snapshot output | `harvester/data/ingestion_snapshot.json` | Written by orchestrator |
+| LAN URLs (local-llm only) | `local-llm/network_urls.py` | Pattern to copy for harvester dashboard |
+
+**Port map:** `:7860` = local-llm chat | `:8765` = **arbitrage results dashboard** (this is what the user opens for arbs)
+
+---
+
+## TARGET STATE (definition of done)
+
+### A. All books considered
+
+For every ingest run, include quotes from **every US regulated book** returned by The Odds API in region `us`:
+
+- `draftkings`, `fanduel`, `betmgm`, `williamhill_us`/`caesars`, `fanatics`, `thescore`/`espnbet`
+
+Do **not** drop books in `filter_records_to_target_sources()` if they map to `TARGET_SOURCES`. Log which books returned zero quotes.
+
+Direct-only sources (`bet365`, `kalshi`, `polymarket`, exchanges) stay in `target_sources.py` as stubs until official API keys exist — show "Not connected" in dashboard, do not fake data.
+
+### B. All line types considered
+
+Every run must fetch and score arbitrage across:
+
+| Type | Odds API keys |
+|------|---------------|
+| Moneyline | `h2h` |
+| Spreads | `spreads` |
+| Alt spreads | `alternate_spreads` |
+| Totals | `totals` |
+| Alt totals | `alternate_totals` |
+| Player props | `player_points`, `player_rebounds`, `player_assists`, `player_threes`, (+ sport-specific) |
+| Alt player props | `player_points_alternate`, `player_rebounds_alternate`, `player_assists_alternate` |
+
+**Bulk endpoint** (`/odds`) → featured h2h, spreads, totals only.  
+**Event endpoint** (`/events/{eventId}/odds`) → alternates + props (implement if missing).
+
+### C. Arb engine covers every line type
+
+Refactor `harvester/engine.py` so scoring is **per market group**, not one h2h pass on a merged blob:
+
+- **h2h:** two outcomes, best price per side across all books
+- **spreads / alt spreads:** match same team + same point (e.g. LAL -3.5); arb on both sides
+- **totals / alt totals:** match same point (O/U 220.5); arb on over vs under
+- **player props:** match `player_name` + stat type + point; never arb mismatched lines
+
+Each opportunity in the dashboard must show: `event`, `market_type`, `line`/`point`, `yield_pct`, `legs[]` with book + outcome + price.
+
+### D. All configured leagues
+
+Default sports loop (env-driven):
+
+```
+basketball_nba, americanfootball_nfl, baseball_mlb, icehockey_nhl
+```
+
+Orchestrator merges all sports into one snapshot (or per-sport files + dashboard aggregates).
+
+### E. Deployed dashboard with accessible URL
+
+User must be able to open a URL and see live results:
+
+**LAN (same Wi-Fi — implement if missing):**
+
+1. Add `HARVESTER_UI_LAN=1` and `HARVESTER_UI_HOST=0.0.0.0` to `harvester/.env`
+2. Copy or share `local-llm/network_urls.py` logic into `harvester/network_urls.py`
+3. Update `harvester/web_app.py` `main()` to print:
+   - `http://127.0.0.1:8765` (PC)
+   - `http://192.168.x.x:8765` (phone on Wi-Fi)
+4. Write URLs to `harvester/data/app_urls.txt` and `multi-agent-llm/.env` → `APP_URL_HARVESTER`, `APP_URL_HARVESTER_LAN`
+
+**Public URL (optional — user must install tunnel):**
+
+- Document **Cloudflare Tunnel** (`cloudflared`) or **ngrok** pointing at `localhost:8765`
+- Save tunnel URL in `harvester/.env` → `APP_URL_PUBLIC=`
+- Print it on dashboard startup banner
+
+**Dashboard behavior:**
+
+- `GET /` — UI with Sources + Opportunities tabs
+- `POST /api/run` — triggers full ingest (all sports, all markets)
+- Show counts: events scanned, lines per book, arbs found
+- Optional: auto-refresh every N minutes via `HARVESTER_AUTO_REFRESH_MIN` (add if missing)
+
+---
+
+## HARD RULES
+
+1. Only edit `harvester/`, `sports_arbitrage_pipeline/`, `prompts/` (if documenting), `.env` files
+2. No scraping, TLS spoofing, or stealth sessions
+3. One bash command block per reply; wait for user terminal output
+4. Warn about Odds API credits: bulk = 1 credit × markets per sport; event endpoint = 1 credit × markets × event
+5. Never paste or echo `ODDS_API_KEY`
+6. Success = user opens URL in browser and sees real data (not generated JSON)
+
+---
+
+## PHASE 1 — CONFIG (no code, run now)
+
+Ask user: **Is ODDS_API_KEY set in harvester/.env?** (yes/no only)
+
+Then give this block. STOP until output pasted.
+
+```bash
+cd ~/Projects/arbitrage-by-JAC
+notepad harvester/.env
+```
+
+Set:
+
+```env
+ODDS_API_KEY=(already set)
+ODDS_API_REGIONS=us
+ODDS_API_MARKETS=h2h,spreads,totals
+HARVESTER_DEFAULT_SPORT=basketball_nba
+HARVESTER_MIN_ARB_YIELD_PCT=0.05
+HARVESTER_DASHBOARD_FAST_MODE=false
+HARVESTER_UI_HOST=127.0.0.1
+HARVESTER_UI_PORT=8765
+```
+
+Run full featured markets for NBA:
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
+source venv/Scripts/activate
+python arbitrage_orchestrator.py --sport basketball_nba --markets h2h spreads totals --full
+```
+
+Verify line count:
+
+```bash
+python -c "
+import json; from pathlib import Path
+d=json.loads(Path('../harvester/data/ingestion_snapshot.json').read_text())
+print('events', len(d.get('events',[])))
+print('lines', sum(len(e.get('lines',[])) for e in d.get('events',[])))
+"
+```
+
+**EXPECT:** lines >> 2 per book (spreads + totals merged). If still 2, diagnose `ODDS_API_MARKETS` and `--markets` flag.
+
+---
+
+## PHASE 2 — CODE: all markets + all books + multi-sport
+
+Implement (planner lists files; coder edits; reviewer checks):
+
+### 2a — Event-level markets (`harvester/integrators/odds_api.py`)
+
+- `GET /v4/sports/{sport}/events` → list event IDs
+- `GET /v4/sports/{sport}/events/{eventId}/odds?markets=alternate_spreads,alternate_totals,player_points,...`
+- Merge into `UnifiedRecord` via `odds_api_fetch.py`
+
+### 2b — Settings (`harvester/settings.py` + `.env`)
+
+```env
+ODDS_API_DEEP_MARKETS=1
+ODDS_API_EVENT_MARKETS=alternate_spreads,alternate_totals,player_points,player_rebounds,player_assists,player_threes,player_points_alternate,player_rebounds_alternate,player_assists_alternate
+ODDS_API_SPORTS=basketball_nba,americanfootball_nfl,baseball_mlb,icehockey_nhl
+ODDS_API_MAX_EVENTS_PER_SPORT=15
+```
+
+### 2c — Orchestrator loops all sports + all markets
+
+`harvester/arbitrage_orchestrator.py` — when `ODDS_API_SPORTS` set, loop each sport; merge records before `score_arbitrage()`.
+
+### 2d — Engine: per-market arbitrage (`harvester/engine.py`)
+
+Add `detect_spread_arbitrage`, `detect_total_arbitrage`, `detect_prop_arbitrage` (or generic `detect_two_way_arbitrage(quotes, match_key_fn)`).  
+`score_arbitrage()` runs each detector per market slice; attach multiple `arbitrage` hits or use `record.metadata["opportunities"]` list if model needs extension.
+
+### 2e — Dashboard shows all opportunities (`harvester/dashboard_service.py`)
+
+- Flatten per-market arbs into `opportunities[]` API payload
+- Sources tab: quote count per book (should be high when all markets loaded)
+- Add summary: `books_with_data`, `market_types_scanned`, `total_lines`
+
+---
+
+## PHASE 3 — CODE: deploy dashboard with URL
+
+### 3a — LAN access
+
+Add to `harvester/settings.py`:
+
+```python
+harvester_ui_lan: bool = Field(default=False, validation_alias="HARVESTER_UI_LAN")
+```
+
+Add `harvester/network_urls.py` (copy pattern from `local-llm/network_urls.py`).
+
+Update `harvester/web_app.py` `main()`:
+
+```python
+bind_host, local_url, phone_urls = resolve_ui_bind(host, port, lan_enabled=settings.harvester_ui_lan)
+# uvicorn host=bind_host
+# print local_url + phone_urls
+```
+
+`.env` for phone access:
+
+```env
+HARVESTER_UI_LAN=1
+HARVESTER_UI_HOST=0.0.0.0
+```
+
+Windows Firewall: tell user to allow Python on port 8765 if phone cannot connect.
+
+### 3b — One-command startup script
+
+Create `harvester/scripts/run_dashboard.bat` and `harvester/scripts/run_dashboard.sh`:
+
+1. Run orchestrator (all sports, all markets)
+2. Start `python web_app.py`
+3. Print all URLs
+
+### 3c — Public tunnel (optional)
+
+Give user ONE option (prefer Cloudflare — free):
+
+```bash
+# After dashboard running on :8765
+cloudflared tunnel --url http://127.0.0.1:8765
+```
+
+Save printed `https://....trycloudflare.com` → `APP_URL_PUBLIC` in `harvester/.env`.
+
+---
+
+## PHASE 4 — VERIFY (user opens URL)
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/harvester
+source ../sports_arbitrage_pipeline/venv/Scripts/activate
+python arbitrage_orchestrator.py --sport basketball_nba --markets h2h spreads totals
+python web_app.py
+```
+
+User actions:
+
+1. Open **http://127.0.0.1:8765** on PC
+2. Open **http://192.168.x.x:8765** on phone (same Wi-Fi)
+3. Click **Refresh run** (or wait for auto-refresh)
+4. Confirm Sources tab: all 5 US books show lines > 2
+5. Confirm Opportunities tab: lists arbs (if any) with market type + books
+
+Paste: screenshot description or JSON from `curl http://127.0.0.1:8765/api/status`
+
+---
+
+## PHASE 5 — ALWAYS-ON (optional)
+
+- Windows Task Scheduler: run orchestrator every 15 min
+- Or add background loop in `dashboard_service.py` when `HARVESTER_AUTO_REFRESH_MIN=15`
+- Log to `harvester/data/ingestion_snapshot.json` (overwrite each run)
+
+---
+
+## RESPONSE FORMAT (every reply)
+
+```
+PHASE: 1|2|3|4|5
+GOAL: (one sentence)
+FILES TO EDIT: (paths)
+COMMAND:
+(bash block)
+URLS TO OPEN: (list)
+EXPECT: (metrics + what user sees in browser)
+NEXT: Paste terminal output or confirm URL works.
+```
+
+---
+
+## START
+
+1. Ask: ODDS_API_KEY set? (yes/no)
+2. Run PHASE 1 — do not skip to code until line counts confirm spreads+totals load
+3. Then PHASE 2 (full markets + engine), then PHASE 3 (LAN URL), then PHASE 4 verify
+
+Do NOT build stealth scrapers. Do NOT point user to port 7860 for arb results — that is the LLM chat; **arb dashboard is :8765**.

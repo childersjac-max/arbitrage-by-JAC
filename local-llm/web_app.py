@@ -74,6 +74,7 @@ from ui.chat_helpers import (
 )
 from ui.chat_tab import load_messages_from_disk, mount_copilot_chat_tab
 from gradio_compat import blocks_constructor_kwargs, filter_launch_kwargs, styling_for_launch
+from network_urls import resolve_ui_bind
 from ui.copilot_styles import COPILOT_CSS, copilot_theme, render_header_html
 from ui_state import (
     clear_chat_history,
@@ -470,43 +471,81 @@ def _open_browser_when_ready(url: str, delay_sec: float = 2.0) -> None:
     webbrowser.open(url)
 
 
+def _write_app_urls_file(local_url: str, phone_urls: list[str], harvester_url: str) -> None:
+    """Save URLs for copying into multi-agent-llm/.env."""
+    out = PACKAGE_DIR / "data" / "app_urls.txt"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        f"APP_URL_LOCAL_LLM={local_url}",
+        f"APP_URL_HARVESTER={harvester_url}",
+    ]
+    if phone_urls:
+        lines.append(f"APP_URL_LOCAL_LLM_LAN={phone_urls[0]}")
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def main() -> None:
     cfg = get_settings()
-    host = cfg.local_llm_ui_host
     port = cfg.local_llm_ui_port
-    url = f"http://{host}:{port}"
+    bind_host, local_url, phone_urls = resolve_ui_bind(
+        cfg.local_llm_ui_host,
+        port,
+        lan_enabled=cfg.local_llm_ui_lan,
+    )
+    harvester_url = cfg.app_url_harvester
 
     print("=" * 60)
-    print("  LOCAL LLM CHAT (Ollama + Gradio)")
+    print("  LOCAL LLM CHAT (Ollama + Gradio + multi-agent)")
     print(f"  Folder: {PACKAGE_DIR}")
-    print(f"  Open:   {url}")
+    print(f"  On this PC:     {local_url}")
+    if phone_urls:
+        print("  Phone (Wi-Fi):")
+        for phone_url in phone_urls:
+            print(f"    {phone_url}")
+    if cfg.local_llm_ui_share:
+        print("  Public URL:     printed below after Gradio starts (gradio.live)")
+    print(f"  Harvester app:  {harvester_url}")
     prof = get_performance_profile()
     print(f"  Profile: {prof.name.value} · Model: {prof.ollama_model}")
-    print(f"  Switch:  python scripts/set_profile.py fast|balanced|quality")
-    print("  NOT the harvester dashboard (that is harvester/web_app.py :8765)")
+    print("  Project context injected (sports arbitrage) — see prompts/PROJECT_CONTEXT.txt")
+    print("  URL file:       local-llm/data/app_urls.txt")
     print("=" * 60)
+
+    _write_app_urls_file(local_url, phone_urls, harvester_url)
 
     threading.Thread(
         target=_open_browser_when_ready,
-        args=(url,),
+        args=(local_url,),
         daemon=True,
     ).start()
 
     demo, launch_styling = build_ui()
     demo.queue(default_concurrency_limit=1)
-    print(f"\n>>> Open in your browser: {url}\n")
-    print(f">>> Settings: {PACKAGE_DIR / 'data' / 'ui_state.json'}\n")
+    print(f"\n>>> Open on this PC: {local_url}\n")
+    if phone_urls:
+        print(">>> Phone (same Wi-Fi):\n")
+        for phone_url in phone_urls:
+            print(f"    {phone_url}\n")
     launch_kw = filter_launch_kwargs(
         {
-            "server_name": host,
+            "server_name": bind_host,
             "server_port": port,
-            "share": False,
+            "share": cfg.local_llm_ui_share,
             "show_error": True,
             "inbrowser": False,
             **launch_styling,
         }
     )
-    demo.launch(**launch_kw)
+    result = demo.launch(**launch_kw)
+    if cfg.local_llm_ui_share and result:
+        public = result[2] if isinstance(result, tuple) and len(result) > 2 else None
+        if public:
+            print(f"\n>>> PUBLIC APP URL: {public}\n")
+            (PACKAGE_DIR / "data" / "app_urls.txt").write_text(
+                (PACKAGE_DIR / "data" / "app_urls.txt").read_text(encoding="utf-8")
+                + f"APP_URL_PUBLIC={public}\n",
+                encoding="utf-8",
+            )
 
 
 if __name__ == "__main__":

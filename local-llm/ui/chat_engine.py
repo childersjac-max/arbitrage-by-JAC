@@ -59,7 +59,9 @@ async def stream_chat_turn(
     profile = get_performance_profile(mode)
     from performance_profiles import load_system_prompt_for_profile
 
-    sys_from_file = load_system_prompt_for_profile(profile)
+    from project_context import prepend_project_context
+
+    sys_from_file = prepend_project_context(load_system_prompt_for_profile(profile))
     meta = settings_source_markdown(mode)
     messages = list(history or [])
 

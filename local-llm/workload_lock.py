@@ -16,6 +16,7 @@ _active: str | None = None
 
 class WorkloadKind(str, Enum):
     CHAT = "chat"
+    MULTI_AGENT = "multi_agent"
     NORMALIZE = "normalize"
     ARCHITECT = "architect"
     WARMUP = "warmup"

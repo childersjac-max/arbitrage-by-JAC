@@ -119,11 +119,14 @@ async def stream_multi_agent_turn(
 
             if kind == "error":
                 exc = payload
-                err = (
-                    str(exc)
-                    if isinstance(exc, ConnectionError)
-                    else format_connection_help(exc if isinstance(exc, BaseException) else None)
-                )
+                if isinstance(exc, ConnectionError):
+                    err = str(exc)
+                elif isinstance(exc, BaseException):
+                    err = f"**{type(exc).__name__}:** {exc}"
+                    if isinstance(exc, (ConnectionError, OSError)):
+                        err = format_connection_help(exc)
+                else:
+                    err = str(exc)
                 messages = set_last_assistant(messages, partial + f"\n\n❌ {err}" if partial else f"❌ {err}")
                 break
 

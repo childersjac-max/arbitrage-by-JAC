@@ -46,8 +46,27 @@ async def stream_multi_agent_turn(
         yield messages, "", status_md
         return
 
-    messages = append_turn(messages, message.strip(), "● Starting multi-agent pipeline…")
+    messages = append_turn(
+        messages,
+        message.strip(),
+        "● Warming Ollama models (first run on CPU can take 2–5 min)…",
+    )
     yield messages, "", status_md
+    try:
+        from ollama_connect import warmup_ollama_model
+
+        cfg_pre = load_config()
+        await warmup_ollama_model(cfg_pre.model_planner)
+    except Exception as exc:
+        logger_msg = str(exc)
+        messages = set_last_assistant(
+            messages,
+            f"● Warmup warning (continuing): {logger_msg}\n\n● Starting multi-agent pipeline…",
+        )
+        yield messages, "", status_md
+    else:
+        messages = set_last_assistant(messages, "● Models warm — starting multi-agent pipeline…")
+        yield messages, "", status_md
 
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()

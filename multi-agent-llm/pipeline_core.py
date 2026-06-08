@@ -126,7 +126,7 @@ def load_config() -> MultiAgentConfig:
         delay_sec=float(os.environ.get("DELAY_BETWEEN_CALLS", "2")),
         min_score_regenerate=int(os.environ.get("MIN_SCORE_REGENERATE", "6")),
         stream=os.environ.get("STREAM_OUTPUT", "1").strip() not in ("0", "false", "False"),
-        timeout_planner=int(os.environ.get("TIMEOUT_PLANNER_SEC", "120")),
+        timeout_planner=int(os.environ.get("TIMEOUT_PLANNER_SEC", "600")),
         timeout_coder=int(os.environ.get("TIMEOUT_CODER_SEC", "600")),
         timeout_reviewer=int(os.environ.get("TIMEOUT_REVIEWER_SEC", "180")),
         system_planner=os.environ.get("SYSTEM_PLANNER", ""),

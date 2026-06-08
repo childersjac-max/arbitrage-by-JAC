@@ -1,0 +1,2 @@
+# Optional override — leave empty to use repo prompts/PROJECT_CONTEXT.txt
+# Copy from ../prompts/PROJECT_CONTEXT.txt or edit here for multi-agent-only rules.

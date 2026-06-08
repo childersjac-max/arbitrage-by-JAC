@@ -1,0 +1,80 @@
+# PROJECT FILE MAP — arbitrage-by-JAC
+# All paths relative to repo root: ~/Projects/arbitrage-by-JAC
+
+## Entry points (run these)
+sports_arbitrage_pipeline/arbitrage_orchestrator.py   # Launcher → harvester orchestrator
+sports_arbitrage_pipeline/bootstrap.sh                # One-time venv + deps
+sports_arbitrage_pipeline/activate_venv.sh            # Windows Git Bash activate
+harvester/arbitrage_orchestrator.py                   # Master ingest + arb math
+harvester/web_app.py                                  # Dashboard :8765
+harvester/cli.py                                      # CLI alternative
+local-llm/web_app.py                                  # Gradio chat + multi-agent :7860
+multi-agent-llm/multi_agent_runner.py                 # Terminal 3-agent runner
+multi-agent-llm/autogen_agent.py                      # AutoGen + Ollama
+
+## Config / secrets (.env — never commit real keys)
+harvester/.env                                        # ODDS_API_KEY, POLYMARKET_*, HARVESTER_*
+local-llm/.env                                        # OLLAMA_*, LOCAL_LLM_UI_*, profiles
+multi-agent-llm/.env                                  # MODEL_PLANNER/CODER/REVIEWER, PROJECT_*
+sports_arbitrage_pipeline/.env.example                # Template → copy to harvester/.env
+
+## Harvester core
+harvester/models.py                                   # UnifiedRecord, SourceQuote, ArbitrageInfo
+harvester/models_depth.py                             # IngestionSnapshot, EventSnapshot
+harvester/engine.py                                   # Arb detection math
+harvester/settings.py                                 # HarvesterSettings (pydantic)
+harvester/config.py                                   # Shim → settings.py
+harvester/integrator_factory.py                       # Registry of integrators
+harvester/integrators/odds_api.py                     # The Odds API v4 (live)
+harvester/integrators/polymarket.py                   # Polymarket Gamma/CLOB (live)
+harvester/integrators/stubs.py                        # Remaining direct-only stubs
+harvester/odds_api_fetch.py                           # Multi-market Odds API fetch
+harvester/polymarket_fetch.py                         # Polymarket merge helper
+harvester/target_sources.py                           # 14 platform registry
+harvester/snapshot_builder.py                         # Build ingestion snapshot
+harvester/data/ingestion_snapshot.json                # OUTPUT after orchestrator run
+harvester/static/                                     # Dashboard HTML/CSS/JS
+harvester/docs/LAWFUL_PIPELINE.md                     # Architecture rules
+
+## Local LLM
+local-llm/config.py                                   # LocalLLMSettings
+local-llm/performance_profiles.py                       # fast | balanced | quality
+local-llm/ollama_connect.py                           # Ollama HTTP client
+local-llm/ui/chat_tab.py                              # Chat UI + multi-agent toggle
+local-llm/ui/multi_agent_stream.py                    # Multi-agent in browser
+local-llm/multi_agent_bridge.py                       # Loads multi-agent-llm/pipeline_core
+local-llm/project_context.py                          # Injects PROJECT_CONTEXT into chat
+local-llm/prompts/system_balanced.txt                 # Default single-chat system prompt
+local-llm/data/ui_state.json                          # Saved UI preferences
+local-llm/data/chat_history.json                      # Saved chat
+
+## Multi-agent LLM
+multi-agent-llm/pipeline_core.py                        # Planner → Coder → Reviewer
+multi-agent-llm/project_context.py                    # Path + URL resolver
+multi-agent-llm/prompts/system_planner.txt
+multi-agent-llm/prompts/system_coder.txt
+multi-agent-llm/prompts/system_reviewer.txt
+multi-agent-llm/prompts/project_context.txt             # Optional override of repo prompt
+
+## Operator prompts (paste into local LLM)
+prompts/llm_operator_arbitrage_repo.txt
+prompts/llm_operator_odds_api_harvester.txt
+prompts/llm_operator_odds_api_harvester_SHORT.txt
+prompts/llm_expand_all_markets_arbitrage.txt          # All leagues + all market types (full)
+prompts/llm_expand_all_markets_arbitrage_SHORT.txt   # Same — compact paste for multi-agent
+prompts/llm_deploy_full_arb_dashboard.txt             # All books/lines + deploy :8765 dashboard URL
+prompts/llm_deploy_full_arb_dashboard_SHORT.txt     # Same — compact paste for multi-agent
+prompts/llm_execute_arbitrage_engine.txt
+prompts/PROJECT_CONTEXT.txt                            # This project's global context
+prompts/PROJECT_FILE_MAP.txt                           # This file
+
+## Docs
+sports_arbitrage_pipeline/START_HERE.md
+sports_arbitrage_pipeline/DEPLOYMENT_GUIDE.md
+sports_arbitrage_pipeline/RUN_WITH_LOCAL_LLM.md
+multi-agent-llm/SETUP_PROJECT_CONTEXT.md
+local-llm/MULTI_AGENT_CHAT.md
+harvester/README.md
+
+## Do NOT create (hallucination traps)
+stealth_session.py, arbitrage_core_engine/, server.py (llama.cpp), fake models.py at repo root

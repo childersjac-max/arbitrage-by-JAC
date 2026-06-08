@@ -13,7 +13,9 @@ from performance_profiles import (
     get_performance_profile,
     load_system_prompt_for_profile,
 )
+from multi_agent_bridge import multi_agent_config_summary
 from ui.chat_engine import stream_chat_turn
+from ui.multi_agent_stream import stream_multi_agent_turn
 from ui.chat_helpers import settings_source_markdown
 from ui.chat_history_fmt import (
     last_user_message,
@@ -30,6 +32,7 @@ def load_messages_from_disk() -> list[dict[str, str]]:
 
 @dataclass
 class ChatTabRefs:
+    chat_workflow: gr.Radio
     perf_profile: gr.Radio
     header_html: gr.HTML
     status_bar: gr.Markdown
@@ -50,6 +53,9 @@ def mount_copilot_chat_tab(
     """Build Copilot-like chat UI inside the current gr.Blocks context."""
     initial_messages = load_messages_from_disk()
     prof_name = initial_profile.name.value
+    initial_workflow = str(saved_state.get("chat_workflow", "single"))
+    if initial_workflow not in ("single", "multi_agent"):
+        initial_workflow = "single"
 
     with gr.Column(elem_classes=["copilot-app", "copilot-chat-tab"]):
         header_html = gr.HTML(render_header_html(initial_profile))
@@ -57,6 +63,17 @@ def mount_copilot_chat_tab(
             value=f"**Profile:** {initial_profile.label} · **Model:** `{initial_profile.ollama_model}` · Ready",
             elem_classes=["copilot-status-bar"],
         )
+
+        with gr.Row(elem_classes=["copilot-profile"]):
+            chat_workflow = gr.Radio(
+                choices=[
+                    ("💬 Single chat", "single"),
+                    ("🤖 Multi-agent (Planner → Coder → Reviewer)", "multi_agent"),
+                ],
+                value=initial_workflow,
+                label="Chat mode",
+                scale=4,
+            )
 
         with gr.Row(elem_classes=["copilot-profile"]):
             perf_profile = gr.Radio(
@@ -131,6 +148,7 @@ def mount_copilot_chat_tab(
                 )
 
         refs = ChatTabRefs(
+            chat_workflow=chat_workflow,
             perf_profile=perf_profile,
             header_html=header_html,
             status_bar=status_bar,
@@ -171,14 +189,37 @@ def mount_copilot_chat_tab(
                 render_header_html(profile),
             )
 
+        def _status_for_workflow(workflow: str, mode: str) -> str:
+            if workflow == "multi_agent":
+                try:
+                    return multi_agent_config_summary()
+                except FileNotFoundError as exc:
+                    return f"⚠️ {exc}"
+            return _profile_status(mode)
+
         async def run_turn(
             message: str,
             history: list,
+            workflow: str,
             mode: str,
             _sys_p: str,
             temp: float,
             max_t: float,
         ):
+            save_ui_state(chat_workflow=workflow)
+            if workflow == "multi_agent":
+                async for hist, cleared, status in stream_multi_agent_turn(message, history or []):
+                    yield (
+                        hist,
+                        cleared,
+                        status,
+                        _sys_p,
+                        "",
+                        status,
+                        render_header_html(get_performance_profile(mode)),
+                    )
+                return
+
             async for hist, cleared, meta, sys_p, last in stream_chat_turn(
                 message, history or [], mode, temp, max_t
             ):
@@ -192,7 +233,7 @@ def mount_copilot_chat_tab(
                     render_header_html(get_performance_profile(mode)),
                 )
 
-        inputs = [msg, chatbot, perf_profile, system_prompt, temperature, max_tokens]
+        inputs = [msg, chatbot, chat_workflow, perf_profile, system_prompt, temperature, max_tokens]
         outputs = [
             chatbot,
             msg,
@@ -216,20 +257,38 @@ def mount_copilot_chat_tab(
             show_progress="minimal",
         )
 
-        async def regenerate(history, mode, _sys_p, temp, max_t):
+        async def regenerate(history, workflow, mode, _sys_p, temp, max_t):
             hist = strip_trailing_assistant(list(history or []))
             user = last_user_message(hist)
             if not user:
-                yield history, "", settings_source_markdown(mode), _sys_p, "", _profile_status(mode), render_header_html(get_performance_profile(mode))
+                yield (
+                    history,
+                    "",
+                    settings_source_markdown(mode),
+                    _sys_p,
+                    "",
+                    _status_for_workflow(workflow, mode),
+                    render_header_html(get_performance_profile(mode)),
+                )
                 return
-            async for out in run_turn(user, hist, mode, _sys_p, temp, max_t):
+            async for out in run_turn(user, hist, workflow, mode, _sys_p, temp, max_t):
                 yield out
 
         regenerate_btn.click(
             regenerate,
-            inputs=[chatbot, perf_profile, system_prompt, temperature, max_tokens],
+            inputs=[chatbot, chat_workflow, perf_profile, system_prompt, temperature, max_tokens],
             outputs=outputs,
             show_progress="minimal",
+        )
+
+        def on_workflow_change(workflow: str, mode: str) -> str:
+            save_ui_state(chat_workflow=workflow)
+            return _status_for_workflow(workflow, mode)
+
+        chat_workflow.change(
+            on_workflow_change,
+            inputs=[chat_workflow, perf_profile],
+            outputs=[status_bar],
         )
 
         def prepare_edit(history):

@@ -39,6 +39,7 @@ def _default_ui_state() -> dict[str, Any]:
     profile = get_performance_profile()
     return {
         "performance_profile": profile.name.value,
+        "chat_workflow": "single",
         "temperature": float(profile.temperature),
         "max_tokens": int(profile.max_tokens),
         "reference_json": json.dumps(DEFAULT_REFERENCE, indent=2),
@@ -68,6 +69,7 @@ def load_ui_state() -> dict[str, Any]:
 def save_ui_state(
     *,
     performance_profile: str | None = None,
+    chat_workflow: str | None = None,
     chat_mode: str | None = None,
     temperature: float | None = None,
     max_tokens: int | None = None,
@@ -79,6 +81,10 @@ def save_ui_state(
         state["performance_profile"] = parse_performance_profile(performance_profile).value
     elif chat_mode is not None:
         state["performance_profile"] = _migrate_profile_key({"chat_mode": chat_mode})
+    if chat_workflow is not None:
+        state["chat_workflow"] = (
+            chat_workflow if chat_workflow in ("single", "multi_agent") else "single"
+        )
     if temperature is not None:
         state["temperature"] = float(temperature)
     if max_tokens is not None:

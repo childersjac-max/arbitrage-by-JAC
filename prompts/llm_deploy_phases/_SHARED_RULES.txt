@@ -1,0 +1,16 @@
+SHARED RULES (all phases)
+- Repo: ~/Projects/arbitrage-by-JAC | Windows Git Bash
+- Lawful only: The Odds API HTTP — no scraping, stealth_session, curl_cffi, Playwright book scrapers
+- ODDS_API_KEY: ~/Projects/arbitrage-by-JAC/harvester/.env — auto-loaded; NEVER ask user to paste/confirm key
+- Harvester venv: sports_arbitrage_pipeline/venv — NOT local-llm/.venv
+- Arb dashboard: harvester/web_app.py port 8765 | LLM chat: local-llm port 7860
+- One command block per reply; wait for user terminal output before next step
+- Warn API credits: bulk=1×markets/sport; event endpoint=1×markets×game
+
+RESPONSE FORMAT:
+PHASE: N
+GOAL: (one sentence)
+FILES: (paths if code)
+COMMAND: (bash)
+EXPECT: (success criteria)
+NEXT: Paste terminal output.

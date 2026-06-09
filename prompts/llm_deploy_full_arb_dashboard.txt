@@ -5,8 +5,20 @@
 # 1. Start Ollama (Start menu or `ollama serve`)
 # 2. cd ~/Projects/arbitrage-by-JAC/local-llm && source .venv/Scripts/activate && python web_app.py
 # 3. Open http://127.0.0.1:7860 → Chat → **Multi-agent (Planner → Coder → Reviewer)**
-# 4. Paste this ENTIRE file as the first message
-# 5. Models (multi-agent-llm/.env): PLANNER/REVIEWER=qwen2.5:3b-instruct-q4_K_M, CODER=qwen2.5-coder:7b-instruct-q4_K_M
+# 4. Prefer SIX SMALL PHASE FILES (easier on CPU) — one per chat session:
+#    prompts/llm_deploy_phases/00_START_HERE_MULTI_AGENT.md  ← human setup guide
+#    prompts/llm_deploy_phases/PHASE_1_harvester_config_ingest.txt
+#    prompts/llm_deploy_phases/PHASE_2_event_markets_multisport.txt
+#    prompts/llm_deploy_phases/PHASE_3_arb_engine_all_lines.txt
+#    prompts/llm_deploy_phases/PHASE_4_dashboard_lan_url.txt
+#    prompts/llm_deploy_phases/PHASE_5_verify_browser.txt
+#    prompts/llm_deploy_phases/PHASE_6_always_on_optional.txt
+# 5. Or paste this ENTIRE file only if you have time/timeouts ≥600s
+# 6. Models (multi-agent-llm/.env): PLANNER/REVIEWER=qwen2.5:3b-instruct-q4_K_M, CODER=qwen2.5-coder:7b-instruct-q4_K_M
+#
+# ODDS API KEY (already saved — agent must NOT re-ask):
+#   ~/Projects/arbitrage-by-JAC/harvester/.env  →  ODDS_API_KEY=...
+#   User updates key only in that file (Notepad). Never paste key in chat.
 #
 # Related: prompts/llm_expand_all_markets_arbitrage.txt (market-depth detail)
 
@@ -375,9 +387,12 @@ NEXT: Paste terminal output or confirm URL works.
 
 ## START
 
-1. Activate `sports_arbitrage_pipeline/venv`, run `python cli.py health` — key auto-loads from `harvester/.env`
-2. **Do not ask about the API key** — it is always remembered on disk
+**Recommended:** Use `prompts/llm_deploy_phases/PHASE_1_*.txt` through `PHASE_6_*.txt` — one file per multi-agent session.
+
+If using this full file:
+1. Activate `sports_arbitrage_pipeline/venv`, run `python cli.py health`
+2. **Do not ask about the API key**
 3. Run PHASE 1 — do not skip to code until line counts confirm spreads+totals load
-4. Then PHASE 2 (full markets + engine), PHASE 3 (LAN URL), PHASE 4 verify
+4. Then PHASE 2–5 in order
 
 Do NOT build stealth scrapers. Do NOT point user to port 7860 for arb results — that is the LLM chat; **arb dashboard is :8765**.

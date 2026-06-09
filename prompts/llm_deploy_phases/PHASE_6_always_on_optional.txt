@@ -1,0 +1,36 @@
+# PHASE 6 of 6 — Always-on refresh (optional)
+
+Prerequisite: PHASE 5 verified in browser.
+
+SHARED RULES: prompts/llm_deploy_phases/_SHARED_RULES.txt
+
+GOAL: Dashboard auto-refreshes odds on a schedule without manual clicks.
+
+OPTION A — env-driven loop in dashboard_service.py:
+- HARVESTER_AUTO_REFRESH_MIN=15 in harvester/.env
+- Background task calls orchestrator on interval
+
+OPTION B — Windows Task Scheduler (document steps):
+- Trigger every 15 minutes
+- Action: run harvester/scripts/run_dashboard.sh or orchestrator only
+
+Append harvester/.env:
+
+```env
+HARVESTER_AUTO_REFRESH_MIN=15
+```
+
+Verify orchestrator still uses harvester/.env for ODDS_API_KEY automatically.
+
+COMMAND:
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/harvester
+source ../sports_arbitrage_pipeline/venv/Scripts/activate
+python arbitrage_orchestrator.py --sport basketball_nba --markets h2h spreads totals
+ls -la data/ingestion_snapshot.json
+```
+
+EXPECT: snapshot timestamp updates; user sees refreshed data on :8765
+
+DONE — all 6 phases complete.

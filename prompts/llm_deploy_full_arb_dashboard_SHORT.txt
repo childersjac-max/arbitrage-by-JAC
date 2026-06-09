@@ -1,4 +1,6 @@
-Harvester engineer — ~/Projects/arbitrage-by-JAC. User wants: (1) ALWAYS scan ALL US books + ALL line types for arbitrage, (2) deploy a live results app with a URL they can open.
+Harvester engineer — ~/Projects/arbitrage-by-JAC. Use 6 phase files in prompts/llm_deploy_phases/ (paste ONE per session). Full spec: llm_deploy_full_arb_dashboard.txt. Setup guide: llm_deploy_phases/00_START_HERE_MULTI_AGENT.md
+
+User wants: (1) ALL US books + ALL line types for arb, (2) deploy results app with URL (:8765).
 
 ODDS API KEY: Always in ~/Projects/arbitrage-by-JAC/harvester/.env (ODDS_API_KEY=). Auto-loaded every run. NEVER ask user to paste/confirm key. Key rotation = user edits .env in Notepad only. Verify: sports_arbitrage_pipeline venv → cd ../harvester → python cli.py health. NOT local-llm/.venv.
 

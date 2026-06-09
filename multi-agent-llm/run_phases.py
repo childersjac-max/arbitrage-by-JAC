@@ -2,14 +2,11 @@
 """
 Run deploy/UI phase prompts through the 3-agent pipeline unattended.
 
-No Gradio copy-paste between phases — each prompt file runs Planner → Coder → Reviewer
-and logs to multi-agent-llm/logs/.
-
 Usage:
-  python run_phases.py                    # all 6 deploy phases
-  python run_phases.py --from 3 --to 4    # subset
-  python run_phases.py --set ui           # arb card dashboard prompt
-  python run_phases.py --list             # show phases
+  python run_phases.py --set deploy     # 6 ingest/deploy phases
+  python run_phases.py --set ui_card    # 6 UI phases (cards + filters)
+  python run_phases.py --set full       # deploy + ui_card (entire pipeline)
+  python run_phases.py --list
 """
 
 from __future__ import annotations
@@ -31,29 +28,35 @@ If code is needed, output COMPLETE file contents (no TODOs). Then stop.
 
 """
 
-PHASE_SETS: dict[str, list[tuple[str, str]]] = {
-    "deploy": [
-        ("01_config_ingest", "llm_deploy_phases/PHASE_1_harvester_config_ingest.txt"),
-        ("02_event_markets", "llm_deploy_phases/PHASE_2_event_markets_multisport.txt"),
-        ("03_arb_engine", "llm_deploy_phases/PHASE_3_arb_engine_all_lines.txt"),
-        ("04_dashboard_lan", "llm_deploy_phases/PHASE_4_dashboard_lan_url.txt"),
-        ("05_verify_browser", "llm_deploy_phases/PHASE_5_verify_browser.txt"),
-        ("06_always_on", "llm_deploy_phases/PHASE_6_always_on_optional.txt"),
-    ],
-    "ui": [
-        ("ui_arb_cards", "llm_multi_agent_arb_card_dashboard.txt"),
-    ],
-    "all": [],  # filled below
-}
+DEPLOY_PHASES: list[tuple[str, str]] = [
+    ("01_config_ingest", "llm_deploy_phases/PHASE_1_harvester_config_ingest.txt"),
+    ("02_event_markets", "llm_deploy_phases/PHASE_2_event_markets_multisport.txt"),
+    ("03_arb_engine", "llm_deploy_phases/PHASE_3_arb_engine_all_lines.txt"),
+    ("04_dashboard_lan", "llm_deploy_phases/PHASE_4_dashboard_lan_url.txt"),
+    ("05_verify_browser", "llm_deploy_phases/PHASE_5_verify_browser.txt"),
+    ("06_always_on", "llm_deploy_phases/PHASE_6_always_on_optional.txt"),
+]
 
-PHASE_SETS["all"] = PHASE_SETS["deploy"] + PHASE_SETS["ui"]
+UI_CARD_PHASES: list[tuple[str, str]] = [
+    ("ui_A_api", "llm_ui_phases/UI_PHASE_A_api_payload.txt"),
+    ("ui_B_filters_html", "llm_ui_phases/UI_PHASE_B_filters_panel_html.txt"),
+    ("ui_C_card_css", "llm_ui_phases/UI_PHASE_C_card_html_css.txt"),
+    ("ui_D_card_js", "llm_ui_phases/UI_PHASE_D_card_js.txt"),
+    ("ui_E_filters_js", "llm_ui_phases/UI_PHASE_E_filters_js.txt"),
+    ("ui_F_verify", "llm_ui_phases/UI_PHASE_F_verify_polish.txt"),
+]
+
+PHASE_SETS: dict[str, list[tuple[str, str]]] = {
+    "deploy": DEPLOY_PHASES,
+    "ui": [("ui_legacy", "llm_multi_agent_arb_card_dashboard_SHORT.txt")],
+    "ui_card": UI_CARD_PHASES,
+    "full": DEPLOY_PHASES + UI_CARD_PHASES,
+    "all": DEPLOY_PHASES + UI_CARD_PHASES,
+}
 
 
 def _load_prompt(repo: Path, rel: str) -> str:
-    path = repo / "prompts" / rel if not rel.startswith("llm_") else repo / "prompts" / rel
-    if not path.is_file():
-        # rel may already include llm_deploy_phases/
-        path = repo / "prompts" / rel
+    path = repo / "prompts" / rel
     if not path.is_file():
         raise FileNotFoundError(f"Prompt not found: {path}")
     return path.read_text(encoding="utf-8").strip()
@@ -65,12 +68,7 @@ def _log_path(phase_id: str) -> Path:
     return LOG_DIR / f"phase_{phase_id}_{ts}.txt"
 
 
-def run_one_phase(
-    phase_id: str,
-    task: str,
-    *,
-    log_file: Path,
-) -> int:
+def run_one_phase(phase_id: str, task: str, *, log_file: Path) -> int:
     cfg = load_config()
     lines: list[str] = []
 
@@ -116,7 +114,7 @@ def main() -> int:
         "--set",
         choices=list(PHASE_SETS.keys()),
         default="deploy",
-        help="Phase set to run (default: deploy)",
+        help="deploy | ui_card | full (deploy+ui) | ui (legacy single prompt)",
     )
     parser.add_argument("--from", dest="from_idx", type=int, default=1, metavar="N")
     parser.add_argument("--to", dest="to_idx", type=int, default=99, metavar="N")
@@ -127,9 +125,12 @@ def main() -> int:
     phases = PHASE_SETS[args.set]
 
     if args.list:
-        print(f"Repo: {repo}\nSet '{args.set}':")
-        for i, (pid, rel) in enumerate(phases, start=1):
-            print(f"  {i}. {pid}  →  prompts/{rel}")
+        print(f"Repo: {repo}\n")
+        for set_name, set_phases in PHASE_SETS.items():
+            print(f"Set '{set_name}' ({len(set_phases)} phases):")
+            for i, (pid, rel) in enumerate(set_phases, start=1):
+                print(f"  {i}. {pid}  →  prompts/{rel}")
+            print()
         return 0
 
     selected = phases[args.from_idx - 1 : args.to_idx]
@@ -138,7 +139,7 @@ def main() -> int:
         return 1
 
     print(
-        f"Unattended phase run — set={args.set} phases {args.from_idx}-{min(args.to_idx, len(phases))}\n"
+        f"Unattended run — set={args.set} | phases {args.from_idx}-{min(args.to_idx, len(phases))} of {len(phases)}\n"
         f"Repo: {repo}\nLogs: {LOG_DIR}\n",
         flush=True,
     )
@@ -162,7 +163,9 @@ def main() -> int:
             return 1
 
     print(f"\nAll done. Scores: {scores}", flush=True)
-    print(f"Review logs in: {LOG_DIR}", flush=True)
+    print(f"Review logs: {LOG_DIR}", flush=True)
+    if args.set in ("ui_card", "full", "all"):
+        print("Dashboard: http://127.0.0.1:8765", flush=True)
     return 0
 
 

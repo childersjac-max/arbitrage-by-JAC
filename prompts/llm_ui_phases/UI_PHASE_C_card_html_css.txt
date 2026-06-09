@@ -1,0 +1,42 @@
+# UI PHASE C of F — Split-leg arb card HTML + CSS
+
+REFERENCE: prompts/llm_ui_phases/_UI_SHARED_RULES.txt
+
+GOAL: Replace simple `opp-row` with **arb opportunity cards** (reference layout).
+
+### Each `.arb-card` structure:
+
+**Header row**
+- Sport badge (MLB/NBA/NFL from sport_key)
+- `event_name` bold
+- `market_label` + formatted `commence_time`
+- ROI pill top-right: `+$XX.XX • X.X% ROI` (green pill)
+
+**Body — 3 columns (grid)**
+| Leg 1 | Leg 2 | Place Both |
+- Book logo circle + `source_display`
+- Bold outcome + line ("Under 3.5 doubles")
+- Large american odds (blue `#60a5fa`)
+- Small grey market avg american below
+- Stake input `$` + computed payout (green)
+- "Bet First" chip on `is_bet_first` leg
+- Tall "Place Both" button column with lightning icon
+
+**Footer — comparison table**
+- Rows = outcomes from `quote_matrix.outcomes`
+- Cols = Market | Mkt Avg | each book in `quote_matrix.books`
+- Best price per row: green `#22c55e` cell
+- Others muted grey
+
+**CSS tokens**
+- Page bg gradient `#0b0d10` → `#12161a`
+- Card `#181e24`, border `#2a323d`, radius 12px
+- Responsive: stack legs at <640px
+
+Edit `index.html` (card template in JS placeholder div OK) + `styles.css`.
+
+Empty state when no opportunities: keep polished message, no fake cards.
+
+VERIFY: hardcode one sample card in HTML for layout QA if API has 0 opps (remove before commit — or show only when `?demo=1`).
+
+STOP. Next: UI_PHASE_D_card_js.txt

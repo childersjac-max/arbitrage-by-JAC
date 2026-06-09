@@ -1,0 +1,38 @@
+# UI PHASE B of F — Filters modal HTML + CSS (reference: pro arb scanner)
+
+REFERENCE: prompts/llm_ui_phases/_UI_SHARED_RULES.txt
+PREREQUISITE: UI PHASE A filter_options in API
+
+GOAL: Add **Filters** slide-over panel matching reference UI.
+
+### Filters panel (right slide-over or modal, dark theme)
+
+**Header:** "Filters" + close X button
+
+**Controls:**
+1. **Wager Amount** — text input prefixed `$`, default `1000.00` (binds to stake math; replaces bankroll slider OR sync with it)
+2. **Sort By** — radio group:
+   - `ROI %` (value: `roi_pct`) — default selected
+   - `Profit $` (value: `profit_usd`)
+3. **Sportsbooks** — collapsible section, chevron, badge `N Selected`, checkbox list from `filter_options.sportsbooks`, select all / clear
+4. **Sports & Leagues** — collapsible, grouped by `group` (Baseball, Basketball, …), checkbox per `sport_key`
+5. **Market Type** — collapsible, checkbox per market_type (support 100+ types, scrollable list max-height 280px)
+
+**Footer (sticky):**
+- `Reset all` (text button, left)
+- `Save Preset` (outlined button → localStorage `arb_filter_preset`)
+- `Apply Filters` (primary blue `#3b82f6`, black/white text)
+
+**Main page additions:**
+- Top bar button "Filters" with badge showing active filter count
+- Keep existing Refresh run, stats row, Today/Tomorrow/Sources tabs
+
+Edit:
+- `harvester/static/index.html` — filters panel markup, overlay backdrop
+- `harvester/static/styles.css` — `.filters-panel`, `.filters-footer`, `.filter-section`, radio, checkboxes
+
+Do NOT wire JS logic yet (PHASE E). Static layout + CSS only.
+
+VERIFY: open http://127.0.0.1:8765 — Filters panel opens/closes, looks like reference screenshot.
+
+STOP. Next: UI_PHASE_C_card_html_css.txt

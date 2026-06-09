@@ -1,0 +1,48 @@
+# UI PHASE E of F — Filters panel logic (sportsbooks, leagues, market types)
+
+REFERENCE: prompts/llm_ui_phases/_UI_SHARED_RULES.txt
+PREREQUISITE: UI PHASE B markup, UI PHASE D card render
+
+GOAL: Wire Filters panel to filter + sort opportunity cards client-side.
+
+### State object:
+
+```javascript
+const filterState = {
+  wagerUsd: 1000,
+  sortBy: "roi_pct",       // or "profit_usd"
+  sportsbooks: new Set(),  // empty = all selected
+  sportsLeagues: new Set(),
+  marketTypes: new Set(),
+};
+```
+
+### On API load:
+- Populate checkbox lists from `data.filter_options`
+- Default: **all checked** (show counts like "35 Selected", "44 Selected", "1028 Selected")
+- Update section badges when selection changes
+
+### Apply Filters button:
+1. Filter `opportunities` where:
+   - every leg's `source` in selected sportsbooks (or all if empty)
+   - `sport_key` in selected leagues
+   - `market_type` in selected market types
+2. Sort by `roi_pct` DESC or `profit_usd_at_1000` DESC
+3. Re-render card list
+4. Close panel
+
+### Reset all:
+- Check all boxes, wager=1000, sort=ROI %, re-render
+
+### Save Preset:
+- `localStorage.setItem('arb_filter_preset', JSON.stringify({...}))`
+- Load preset on page init if exists
+
+### Filters button badge:
+- Show count of active non-default filters
+
+Edit only `app.js` + minor CSS for `.filter-section--open`.
+
+VERIFY: uncheck one sportsbook → cards hiding that book disappear; sort Profit $ re-orders cards.
+
+STOP. Next: UI_PHASE_F_verify_polish.txt

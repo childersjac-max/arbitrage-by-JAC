@@ -131,7 +131,7 @@ Open **http://127.0.0.1:7860**
 
 ---
 
-## E. Six phase prompts (paste one per session)
+## E. Phase prompts (paste one per Gradio session)
 
 | Order | File | What it does |
 |-------|------|----------------|
@@ -142,13 +142,14 @@ Open **http://127.0.0.1:7860**
 | 4 | `PHASE_4_dashboard_lan_url.txt` | Code: deploy :8765 + phone URL |
 | 5 | `PHASE_5_verify_browser.txt` | Run dashboard, confirm in browser |
 | 6 | `PHASE_6_always_on_optional.txt` | Auto-refresh / scheduled runs |
-| UI | `../llm_multi_agent_arb_card_dashboard.txt` | Split-leg arb cards on :8765 (after Phase 3+) |
+| UI A–F | `../llm_ui_phases/UI_PHASE_*.txt` | Arb cards + Filters panel (:8765) |
+| Auto | `bash run_phases.sh --set full` | Runs deploy + UI phases unattended |
 
 **Do not paste all six manually** unless you prefer step-by-step. Use **unattended mode** below.
 
 ---
 
-## E. Unattended mode (no copy-paste between phases) — RECOMMENDED
+## F. Unattended mode (no copy-paste between phases) — RECOMMENDED
 
 Runs every phase prompt through Planner → Coder → Reviewer automatically. Logs saved to `multi-agent-llm/logs/`.
 
@@ -163,9 +164,9 @@ bash run_phases.sh
 **Subset only:**
 
 ```bash
-bash run_phases.sh --from 1 --to 2          # phases 1-2 only
-bash run_phases.sh --set ui                 # arb card dashboard UI prompt
-bash run_phases.sh --set all                # deploy + UI (long!)
+bash run_phases.sh --from 1 --to 2          # deploy phases 1-2 only
+bash run_phases.sh --set ui_card            # 6 UI phases: cards + Filters panel
+bash run_phases.sh --set full               # deploy 1-6 + UI A-F (entire pipeline)
 python run_phases.py --list
 ```
 
@@ -177,13 +178,15 @@ Review output:
 ls -lt ~/Projects/arbitrage-by-JAC/multi-agent-llm/logs/
 ```
 
-**Gradio one-paste alternative** (may timeout on CPU): paste `prompts/llm_deploy_phases/AUTORUN_ALL_PHASES.txt` once in Multi-agent chat.
+**Gradio one-paste alternatives** (may timeout on CPU):
+- Full pipeline: `prompts/llm_deploy_phases/AUTORUN_ALL_PHASES.txt`
+- UI only (cards + filters): `prompts/llm_ui_phases/AUTORUN_ALL_UI_PHASES.txt`
 
 **Note:** The batch runner calls Ollama directly — it does **not** execute bash on your PC. You still run orchestrator/dashboard commands from the saved logs when the agent outputs them.
 
 ---
 
-## F. Two apps — two ports
+## G. Two apps — two ports
 
 | URL | App |
 |-----|-----|
@@ -192,7 +195,7 @@ ls -lt ~/Projects/arbitrage-by-JAC/multi-agent-llm/logs/
 
 ---
 
-## G. Troubleshooting
+## H. Troubleshooting
 
 | Error | Fix |
 |-------|-----|
@@ -203,7 +206,7 @@ ls -lt ~/Projects/arbitrage-by-JAC/multi-agent-llm/logs/
 
 ---
 
-## H. Terminal-only multi-agent (no browser)
+## I. Terminal-only multi-agent (no browser)
 
 ```bash
 cd ~/Projects/arbitrage-by-JAC/multi-agent-llm

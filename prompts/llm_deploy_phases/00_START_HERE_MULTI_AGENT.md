@@ -142,6 +142,7 @@ Open **http://127.0.0.1:7860**
 | 4 | `PHASE_4_dashboard_lan_url.txt` | Code: deploy :8765 + phone URL |
 | 5 | `PHASE_5_verify_browser.txt` | Run dashboard, confirm in browser |
 | 6 | `PHASE_6_always_on_optional.txt` | Auto-refresh / scheduled runs |
+| UI | `../llm_multi_agent_arb_card_dashboard.txt` | Split-leg arb cards on :8765 (after Phase 3+) |
 
 **Do not paste all six at once.** Finish each phase; paste terminal output; then next phase.
 

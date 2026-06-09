@@ -1,34 +1,41 @@
-# PHASE 5 of 6 — Verify in browser (commands + user checklist)
+# PHASE 5 of 6 — Verify ALL sports in browser
 
-Prerequisite: PHASE 4 dashboard runs. No new code unless refresh fails.
-
+REFERENCE: prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt
 SHARED RULES: prompts/llm_deploy_phases/_SHARED_RULES.txt
 
-GOAL: User sees real odds and arb opportunities at :8765.
+GOAL: User confirms dashboard shows multi-sport, multi-market data.
 
 COMMAND:
 
 ```bash
 cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
 source venv/Scripts/activate
-python arbitrage_orchestrator.py --sport basketball_nba --markets h2h spreads totals --full
+python arbitrage_orchestrator.py --full
 cd ../harvester
 python web_app.py
 ```
 
-USER CHECKLIST (ask user to confirm yes/no):
-1. Open http://127.0.0.1:8765 on PC
-2. Sources tab: DraftKings, FanDuel, BetMGM, Caesars, Fanatics show lines > 2
-3. Click Refresh run — completes without API key error
-4. Opportunities tab loads (arbs may be empty — that is OK)
-5. Phone on same Wi-Fi: http://LAN_IP:8765 works
+USER CHECKLIST:
+1. Open http://127.0.0.1:8765
+2. Sources tab: US books show high line counts
+3. Events span **multiple sports** (not NBA only) — check sport labels / filters
+4. Market types visible: moneyline, spreads, totals (and props if Phase 2 done)
+5. Opportunities tab loads (empty OK if no arbs today)
+6. Refresh run completes without errors
 
-Optional API check:
+API spot-check:
 
 ```bash
-curl -s http://127.0.0.1:8765/api/status | head -c 500
+curl -s "http://127.0.0.1:8765/api/status?day=today" | python -c "
+import sys,json; d=json.load(sys.stdin)
+sports=set()
+for e in d.get('today_events',[]) + d.get('tomorrow_events',[]):
+    sports.add(e.get('sport_key','?'))
+print('sports_in_dashboard', sorted(sports))
+print('event_count', len(d.get('today_events',[]))+len(d.get('tomorrow_events',[])))
+"
 ```
 
-EXPECT: api_key_configured true; events > 0; source rows populated
+EXPECT: `sports_in_dashboard` has 2+ distinct sport keys when in season.
 
-STOP when user confirms browser works. Next: PHASE_6_always_on_optional.txt
+STOP when confirmed. Next: PHASE_6_always_on_optional.txt

@@ -1,36 +1,79 @@
-# PHASE 1 of 6 — Harvester config + featured markets ingest (commands only, no code)
+# PHASE 1 of 6 — Multi-sport ingest: ALL active sports × featured bet types (commands only)
 
-You are harvester engineer for ~/Projects/arbitrage-by-JAC. This phase: verify API key on disk, set non-secret .env, run NBA ingest with h2h+spreads+totals. NO code edits.
+You are harvester engineer for ~/Projects/arbitrage-by-JAC.
 
+GOAL: Ingest **every in-season sport** from The Odds API (not NBA only) with **h2h + spreads + totals + outrights** for max arbitrage line coverage.
+
+REFERENCE: prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt
 SHARED RULES: prompts/llm_deploy_phases/_SHARED_RULES.txt
 
-GOAL: Prove ingestion returns more than 2 lines per book (moneyline + spreads + totals).
+CRITICAL: Do NOT use `--sport basketball_nba` only. Loop all active sports or use discovery command below.
 
-COMMAND (single block for user):
+COMMAND (single block):
 
 ```bash
 cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
 source venv/Scripts/activate
 cd ../harvester
 grep -q '^ODDS_API_REGIONS=' .env || echo 'ODDS_API_REGIONS=us' >> .env
-grep -q '^ODDS_API_MARKETS=' .env || echo 'ODDS_API_MARKETS=h2h,spreads,totals' >> .env
-grep -q '^HARVESTER_DEFAULT_SPORT=' .env || echo 'HARVESTER_DEFAULT_SPORT=basketball_nba' >> .env
-grep -q '^HARVESTER_MIN_ARB_YIELD_PCT=' .env || echo 'HARVESTER_MIN_ARB_YIELD_PCT=0.05' >> .env
+grep -q '^ODDS_API_MARKETS=' .env || echo 'ODDS_API_MARKETS=h2h,spreads,totals,outrights' >> .env
+grep -q '^ODDS_API_SPORTS_MODE=' .env || echo 'ODDS_API_SPORTS_MODE=all_active' >> .env
+grep -q '^ODDS_API_MAX_SPORTS_PER_RUN=' .env || echo 'ODDS_API_MAX_SPORTS_PER_RUN=50' >> .env
+grep -q '^ODDS_API_MAX_EVENTS_PER_SPORT=' .env || echo 'ODDS_API_MAX_EVENTS_PER_SPORT=15' >> .env
 python cli.py health
+python -c "
+import asyncio, json
+from integrators.odds_api import OddsApiIntegrator
+async def main():
+    i = OddsApiIntegrator()
+    ok, msg = await i.health_check()
+    print('health', ok, msg)
+    await i.close()
+asyncio.run(main())
+"
 cd ../sports_arbitrage_pipeline
-python arbitrage_orchestrator.py --sport basketball_nba --markets h2h spreads totals --full
+MARKETS="h2h spreads totals outrights"
+for sport in $(python -c "
+import asyncio, httpx, os
+from pathlib import Path
+# read key from harvester .env
+env={}
+for line in Path('../harvester/.env').read_text().splitlines():
+    if '=' in line and not line.strip().startswith('#'):
+        k,v=line.split('=',1); env[k.strip()]=v.strip()
+key=env.get('ODDS_API_KEY','')
+async def go():
+    async with httpx.AsyncClient(base_url='https://api.the-odds-api.com', timeout=30) as c:
+        r=await c.get('/v4/sports', params={'apiKey':key})
+        r.raise_for_status()
+        for s in r.json():
+            if s.get('active'): print(s['key'])
+asyncio.run(go())
+" 2>/dev/null | head -20); do
+  echo "=== SPORT: $sport ==="
+  python arbitrage_orchestrator.py --sport "$sport" --markets $MARKETS --full || true
+done
 python -c "
 import json; from pathlib import Path
-d=json.loads(Path('../harvester/data/ingestion_snapshot.json').read_text())
+from collections import Counter
+p=Path('../harvester/data/ingestion_snapshot.json')
+if not p.is_file():
+    print('NO SNAPSHOT'); raise SystemExit(1)
+d=json.loads(p.read_text())
+sports=Counter(e.get('sport_key','?') for e in d.get('events',[]))
 print('events', len(d.get('events',[])))
 print('lines', sum(len(e.get('lines',[])) for e in d.get('events',[])))
+print('sports', dict(sports))
 "
 ```
 
-EXPECT: cli.py health OK; lines count >> 2; snapshot at harvester/data/ingestion_snapshot.json
+EXPECT:
+- cli.py health OK
+- Multiple sport keys in output (not only basketball_nba)
+- lines count >> 2
+- Snapshot at harvester/data/ingestion_snapshot.json
 
-If health FAILS key missing: tell user edit harvester/.env in Notepad (ODDS_API_KEY=) — never ask key in chat.
+If sport discovery Python fails: fallback loop:
+`for sport in americanfootball_nfl basketball_nba basketball_ncaab basketball_wnba baseball_mlb icehockey_nhl soccer_usa_mls mma_mixed_martial_arts boxing_boxing; do ...`
 
-If pydantic_settings error: wrong venv — use sports_arbitrage_pipeline/venv.
-
-STOP after user pastes output. Next session: PHASE_2_event_markets_multisport.txt
+STOP for output. Next: PHASE_2_event_markets_multisport.txt

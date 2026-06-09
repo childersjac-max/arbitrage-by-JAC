@@ -1,36 +1,32 @@
-# PHASE 6 of 6 — Always-on refresh (optional)
+# PHASE 6 of 6 — Always-on multi-sport refresh
 
-Prerequisite: PHASE 5 verified in browser.
-
+REFERENCE: prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt
 SHARED RULES: prompts/llm_deploy_phases/_SHARED_RULES.txt
 
-GOAL: Dashboard auto-refreshes odds on a schedule without manual clicks.
+GOAL: Auto-refresh **all active sports** + **all configured markets** on a schedule.
 
-OPTION A — env-driven loop in dashboard_service.py:
-- HARVESTER_AUTO_REFRESH_MIN=15 in harvester/.env
-- Background task calls orchestrator on interval
-
-OPTION B — Windows Task Scheduler (document steps):
-- Trigger every 15 minutes
-- Action: run harvester/scripts/run_dashboard.sh or orchestrator only
-
-Append harvester/.env:
-
+OPTION A — env loop in dashboard_service.py:
 ```env
 HARVESTER_AUTO_REFRESH_MIN=15
+ODDS_API_SPORTS_MODE=all_active
+ODDS_API_MAX_SPORTS_PER_RUN=50
 ```
 
-Verify orchestrator still uses harvester/.env for ODDS_API_KEY automatically.
+OPTION B — Task Scheduler runs:
+```bash
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline && source venv/Scripts/activate && python arbitrage_orchestrator.py --full
+```
 
-COMMAND:
+Verify snapshot updates across sports:
 
 ```bash
-cd ~/Projects/arbitrage-by-JAC/harvester
-source ../sports_arbitrage_pipeline/venv/Scripts/activate
-python arbitrage_orchestrator.py --sport basketball_nba --markets h2h spreads totals
-ls -la data/ingestion_snapshot.json
+python -c "
+import json; from pathlib import Path
+from collections import Counter
+d=json.loads(Path('harvester/data/ingestion_snapshot.json').read_text())
+print('sports', Counter(e.get('sport_key') for e in d.get('events',[])))
+print('total_lines', sum(len(e.get('lines',[])) for e in d.get('events',[])))
+"
 ```
 
-EXPECT: snapshot timestamp updates; user sees refreshed data on :8765
-
-DONE — all 6 phases complete.
+DONE — full multi-sport arbitrage pipeline operational.

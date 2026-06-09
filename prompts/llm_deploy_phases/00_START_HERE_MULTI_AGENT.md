@@ -135,7 +135,8 @@ Open **http://127.0.0.1:7860**
 
 | Order | File | What it does |
 |-------|------|----------------|
-| 1 | `PHASE_1_harvester_config_ingest.txt` | Config + NBA ingest h2h/spreads/totals |
+| 1 | `PHASE_1_harvester_config_ingest.txt` | **All active sports** × h2h/spreads/totals/outrights |
+| — | `ALL_SPORTS_AND_MARKETS.txt` | Canonical sport keys + all bet types |
 | 2 | `PHASE_2_event_markets_multisport.txt` | Code: props, alts, all leagues |
 | 3 | `PHASE_3_arb_engine_all_lines.txt` | Code: arb math for all market types |
 | 4 | `PHASE_4_dashboard_lan_url.txt` | Code: deploy :8765 + phone URL |

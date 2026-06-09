@@ -159,15 +159,20 @@ Refactor `harvester/engine.py` so scoring is **per market group**, not one h2h p
 
 Each opportunity in the dashboard must show: `event`, `market_type`, `line`/`point`, `yield_pct`, `legs[]` with book + outcome + price.
 
-### D. All configured leagues
+### D. All sports (not NBA only)
 
-Default sports loop (env-driven):
+Discover via `GET /v4/sports` (free) → loop every `active==true` sport.
 
+Env:
+```env
+ODDS_API_SPORTS_MODE=all_active
+ODDS_API_MAX_SPORTS_PER_RUN=50
+ODDS_API_MAX_EVENTS_PER_SPORT=15
 ```
-basketball_nba, americanfootball_nfl, baseball_mlb, icehockey_nhl
-```
 
-Orchestrator merges all sports into one snapshot (or per-sport files + dashboard aggregates).
+Minimum US set when discovery unavailable: NFL, NCAAF, NBA, NCAAB, WNBA, MLB, NHL, MLS, top soccer leagues, MMA, boxing, tennis, golf outrights — see `prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt`.
+
+Orchestrator merges **all sports** into one snapshot. Dashboard must show all ingested sports.
 
 ### E. Deployed dashboard with accessible URL
 

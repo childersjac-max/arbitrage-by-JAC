@@ -65,6 +65,7 @@ prompts/llm_expand_all_markets_arbitrage_SHORT.txt   # Same — compact paste fo
 prompts/llm_deploy_full_arb_dashboard.txt             # All books/lines + deploy :8765 (full — use phases instead on CPU)
 prompts/llm_deploy_full_arb_dashboard_SHORT.txt     # Compact index for multi-agent
 prompts/llm_deploy_phases/00_START_HERE_MULTI_AGENT.md  # From-scratch multi-agent setup (human)
+prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt   # All sport keys + all bet types
 prompts/llm_deploy_phases/PHASE_1_harvester_config_ingest.txt
 prompts/llm_deploy_phases/PHASE_2_event_markets_multisport.txt
 prompts/llm_deploy_phases/PHASE_3_arb_engine_all_lines.txt

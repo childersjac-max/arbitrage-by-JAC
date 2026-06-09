@@ -1,11 +1,14 @@
 SHARED RULES (all phases)
 - Repo: ~/Projects/arbitrage-by-JAC | Windows Git Bash
 - Lawful only: The Odds API HTTP — no scraping, stealth_session, curl_cffi, Playwright book scrapers
-- ODDS_API_KEY: ~/Projects/arbitrage-by-JAC/harvester/.env — auto-loaded; NEVER ask user to paste/confirm key
+- ODDS_API_KEY: harvester/.env — auto-loaded; NEVER ask user to paste/confirm key
 - Harvester venv: sports_arbitrage_pipeline/venv — NOT local-llm/.venv
-- Arb dashboard: harvester/web_app.py port 8765 | LLM chat: local-llm port 7860
-- One command block per reply; wait for user terminal output before next step
-- Warn API credits: bulk=1×markets/sport; event endpoint=1×markets×game
+- Arb dashboard: :8765 | LLM chat: :7860
+- **ALL SPORTS**: loop active sports from GET /v4/sports — NEVER NBA-only unless debugging
+- **ALL BET TYPES**: h2h, spreads, totals, outrights + alternates + props (see ALL_SPORTS_AND_MARKETS.txt)
+- Maximize lines considered = more arb chances; cap via ODDS_API_MAX_SPORTS_PER_RUN / MAX_EVENTS_PER_SPORT
+- One command block per reply; wait for terminal output
+- Warn API credits before large multi-sport runs
 
 RESPONSE FORMAT:
 PHASE: N

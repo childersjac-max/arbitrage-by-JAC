@@ -1,29 +1,28 @@
-# PHASE 4 of 6 — Code: deploy arbitrage dashboard with accessible URL
+# PHASE 4 of 6 — Dashboard shows ALL sports (not NBA filter) + LAN URL
 
-Prerequisite: PHASE 3 engine extended. User opens browser to see results.
+Prerequisite: PHASE 3 engine scores multi-sport arbs.
 
+REFERENCE: prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt
 SHARED RULES: prompts/llm_deploy_phases/_SHARED_RULES.txt
 
-GOAL: Run harvester/web_app.py on :8765; print PC + LAN URLs; one-command startup script.
+GOAL: Dashboard at :8765 lists opportunities from **all sports** and all market types.
 
 FILES TO EDIT:
-- harvester/settings.py — HARVESTER_UI_LAN field
-- harvester/network_urls.py — copy pattern from local-llm/network_urls.py
-- harvester/web_app.py main() — bind 0.0.0.0 when LAN enabled; print URLs
-- harvester/scripts/source_env.sh + source_env.bat — load harvester/.env
-- harvester/scripts/run_dashboard.sh + run_dashboard.bat — orchestrator then web_app
+- harvester/dashboard_service.py — remove any basketball_nba-only filter; add sport filter dropdown (all | per sport)
+- harvester/static/index.html (if exists) — sport selector, market_type badges
+- harvester/settings.py — HARVESTER_UI_LAN
+- harvester/network_urls.py + harvester/web_app.py — print PC + LAN URLs
+- harvester/scripts/run_dashboard.sh — full multi-sport orchestrator then web_app
 
 Append harvester/.env:
 
 ```env
 HARVESTER_UI_LAN=1
 HARVESTER_UI_HOST=0.0.0.0
-HARVESTER_UI_PORT=8765
+ODDS_API_SPORTS_MODE=all_active
 ```
 
-Write URLs to harvester/data/app_urls.txt
-
-COMMAND for user after code merged:
+COMMAND:
 
 ```bash
 cd ~/Projects/arbitrage-by-JAC/harvester
@@ -31,8 +30,6 @@ source ../sports_arbitrage_pipeline/venv/Scripts/activate
 python web_app.py
 ```
 
-EXPECT: banner shows http://127.0.0.1:8765 and http://192.168.x.x:8765
+EXPECT: http://127.0.0.1:8765 shows events from NFL, NBA, MLB, NHL, soccer, etc. when in season.
 
-Optional public: cloudflared tunnel --url http://127.0.0.1:8765 → APP_URL_PUBLIC in .env
-
-STOP for user to confirm URLs print. Next: PHASE_5_verify_browser.txt
+STOP when URLs print. Next: PHASE_5_verify_browser.txt

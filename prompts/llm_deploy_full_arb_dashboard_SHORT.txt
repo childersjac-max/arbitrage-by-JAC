@@ -8,13 +8,13 @@ BOOKS (Odds API us region): draftkings, fanduel, betmgm, caesars/williamhill_us,
 
 LINES (must fetch + score): h2h, spreads, alternate_spreads, totals, alternate_totals, player_points/rebounds/assists/threes, player_*_alternate. Bulk /odds = featured only; props+alts need per-event /events/{id}/odds. Extend engine.py beyond detect_h2h_arbitrage — match spreads/totals/props on same line/point.
 
-LEAGUES: basketball_nba, americanfootball_nfl, baseball_mlb, icehockey_nhl (env ODDS_API_SPORTS).
+SPORTS: ALL active via GET /v4/sports (ODDS_API_SPORTS_MODE=all_active). NOT NBA-only. Ref: prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt
 
-DASHBOARD URL: harvester/web_app.py port 8765 (NOT 7860 chat). Add HARVESTER_UI_LAN=1, HARVESTER_UI_HOST=0.0.0.0, network_urls.py (copy from local-llm), print http://127.0.0.1:8765 + http://LAN_IP:8765. Optional public: cloudflared tunnel → APP_URL_PUBLIC. Script: harvester/scripts/run_dashboard.sh runs orchestrator then web_app.
+MARKETS: h2h, spreads, totals, outrights + alternate_spreads/totals + sport-specific player props (max lines for arb).
 
-PHASE 1 (now): harvester/.env ODDS_API_MARKETS=h2h,spreads,totals. Run:
-cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline && source venv/Scripts/activate && python arbitrage_orchestrator.py --sport basketball_nba --markets h2h spreads totals --full
-Verify lines >> 2. STOP for output.
+DASHBOARD: :8765 — must show all sports. See phase files in prompts/llm_deploy_phases/
+
+PHASE 1 (now): multi-sport ingest — see PHASE_1_harvester_config_ingest.txt (loops all active sports × h2h spreads totals outrights).
 
 PHASE 2: event markets + multi-sport loop + per-market arb in engine.py + dashboard opportunities. See prompts/llm_deploy_full_arb_dashboard.txt
 

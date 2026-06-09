@@ -10,6 +10,8 @@ harvester/web_app.py                                  # Dashboard :8765
 harvester/cli.py                                      # CLI alternative
 local-llm/web_app.py                                  # Gradio chat + multi-agent :7860
 multi-agent-llm/multi_agent_runner.py                 # Terminal 3-agent runner
+multi-agent-llm/run_phases.py                         # Unattended phase batch runner
+multi-agent-llm/run_phases.sh / run_phases.bat        # Launch all deploy phases
 multi-agent-llm/autogen_agent.py                      # AutoGen + Ollama
 
 ## Config / secrets (.env — never commit real keys)
@@ -72,6 +74,9 @@ prompts/llm_deploy_phases/PHASE_3_arb_engine_all_lines.txt
 prompts/llm_deploy_phases/PHASE_4_dashboard_lan_url.txt
 prompts/llm_deploy_phases/PHASE_5_verify_browser.txt
 prompts/llm_deploy_phases/PHASE_6_always_on_optional.txt
+prompts/llm_multi_agent_arb_card_dashboard.txt        # Split-leg arb card UI (multi-agent)
+prompts/llm_multi_agent_arb_card_dashboard_SHORT.txt  # Same — compact paste
+prompts/llm_frontend_night_luxe_arbitrage_ui.txt     # Earlier UI spec (superseded by arb card prompt)
 prompts/llm_execute_arbitrage_engine.txt
 prompts/PROJECT_CONTEXT.txt                            # This project's global context
 prompts/PROJECT_FILE_MAP.txt                           # This file

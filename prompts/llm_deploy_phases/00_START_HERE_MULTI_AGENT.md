@@ -144,7 +144,42 @@ Open **http://127.0.0.1:7860**
 | 6 | `PHASE_6_always_on_optional.txt` | Auto-refresh / scheduled runs |
 | UI | `../llm_multi_agent_arb_card_dashboard.txt` | Split-leg arb cards on :8765 (after Phase 3+) |
 
-**Do not paste all six at once.** Finish each phase; paste terminal output; then next phase.
+**Do not paste all six manually** unless you prefer step-by-step. Use **unattended mode** below.
+
+---
+
+## E. Unattended mode (no copy-paste between phases) — RECOMMENDED
+
+Runs every phase prompt through Planner → Coder → Reviewer automatically. Logs saved to `multi-agent-llm/logs/`.
+
+**Git Bash (leave running — can take hours on CPU):**
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/multi-agent-llm
+source .venv/Scripts/activate   # or: bash setup.sh first
+bash run_phases.sh
+```
+
+**Subset only:**
+
+```bash
+bash run_phases.sh --from 1 --to 2          # phases 1-2 only
+bash run_phases.sh --set ui                 # arb card dashboard UI prompt
+bash run_phases.sh --set all                # deploy + UI (long!)
+python run_phases.py --list
+```
+
+**Windows:** double-click `multi-agent-llm/run_phases.bat`
+
+Review output:
+
+```bash
+ls -lt ~/Projects/arbitrage-by-JAC/multi-agent-llm/logs/
+```
+
+**Gradio one-paste alternative** (may timeout on CPU): paste `prompts/llm_deploy_phases/AUTORUN_ALL_PHASES.txt` once in Multi-agent chat.
+
+**Note:** The batch runner calls Ollama directly — it does **not** execute bash on your PC. You still run orchestrator/dashboard commands from the saved logs when the agent outputs them.
 
 ---
 

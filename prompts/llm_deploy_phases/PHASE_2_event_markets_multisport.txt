@@ -1,0 +1,52 @@
+# PHASE 2 of 6 — Code: ALL sports × ALL bet types (event-depth markets)
+
+Prerequisite: PHASE 1 ingested multiple sports. Implement full line depth for arbitrage.
+
+REFERENCE: prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt
+SHARED RULES: prompts/llm_deploy_phases/_SHARED_RULES.txt
+
+GOAL: For **every active sport**, fetch featured + alternate + prop markets. Maximize lines for arb detection.
+
+FILES TO EDIT:
+- harvester/integrators/odds_api.py — `list_active_sports()`, `fetch_event_odds(event_id, markets)`
+- harvester/odds_api_fetch.py — merge bulk + per-event quotes; sport-specific market lists
+- harvester/settings.py — new fields below
+- harvester/arbitrage_orchestrator.py — loop all active sports; merge into one snapshot
+
+Append harvester/.env (keep ODDS_API_KEY unchanged):
+
+```env
+ODDS_API_SPORTS_MODE=all_active
+ODDS_API_MAX_SPORTS_PER_RUN=50
+ODDS_API_MAX_EVENTS_PER_SPORT=15
+ODDS_API_DEEP_MARKETS=1
+ODDS_API_BULK_MARKETS=h2h,spreads,totals,outrights
+ODDS_API_EVENT_MARKETS=alternate_spreads,alternate_totals,alternate_team_totals,player_points,player_rebounds,player_assists,player_threes,player_points_alternate,player_rebounds_alternate,player_pass_yds,player_rush_yds,player_receptions,player_anytime_td,batter_hits,pitcher_strikeouts,player_goals,player_shots_on_goal,btts,draw_no_bet
+```
+
+Implementation rules:
+1. Call `GET /v4/sports` → filter `active==true` → respect `ODDS_API_MAX_SPORTS_PER_RUN`
+2. Per sport: bulk fetch all `ODDS_API_BULK_MARKETS`
+3. Per sport: `GET /events` → for each event (cap `ODDS_API_MAX_EVENTS_PER_SPORT`): `GET /events/{id}/odds` with markets valid for that sport (skip 422 invalid market keys gracefully)
+4. Use sport-specific prop keys from ALL_SPORTS_AND_MARKETS.txt
+5. Store `sport_key` on every UnifiedRecord; dashboard must NOT filter NBA-only
+
+Verify:
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
+source venv/Scripts/activate
+python arbitrage_orchestrator.py --full
+python -c "
+import json; from pathlib import Path
+from collections import Counter
+d=json.loads(Path('../harvester/data/ingestion_snapshot.json').read_text())
+print('sports', Counter(e.get('sport_key') for e in d.get('events',[])))
+print('market_types', Counter(e.get('market_type') for e in d.get('events',[])))
+print('lines', sum(len(e.get('lines',[])) for e in d.get('events',[])))
+"
+```
+
+EXPECT: 3+ sport keys; market_types include spreads/totals; lines much higher than Phase 1.
+
+STOP for output. Next: PHASE_3_arb_engine_all_lines.txt

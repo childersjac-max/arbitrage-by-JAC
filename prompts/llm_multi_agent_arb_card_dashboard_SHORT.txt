@@ -1,0 +1,21 @@
+Multi-agent task: rebuild harvester dashboard (:8765) to show arbitrage cards like pro arb tools — split legs, American odds, stakes, payouts, ROI pill, book comparison table.
+
+EDIT: harvester/dashboard_service.py (extend opportunities JSON), harvester/static/index.html, styles.css, app.js
+
+CARD LAYOUT per opportunity:
+- Header: sport badge, event_name, market_label (humanized), commence_time, green ROI pill (+$profit • X% ROI)
+- 2-column legs: book name, outcome+line, american odds (blue), market avg (grey), editable stake $, green payout, "Bet First" on lower stake_weight leg
+- Right: "Place Both" button
+- Footer table: outcomes × books from quote_matrix, best odds green
+
+API fields to add: market_label, line, legs[].american, market_avg_american, quote_matrix{outcomes, books, prices, market_avg}
+
+JS: bankroll slider $100-$50k (localStorage), decimalToAmerican(), allocateStakes(legs,B), renderOpportunityCard()
+
+Theme: dark #0b0d10, card #181e24, ROI green #22c55e, odds blue #60a5fa
+
+Phases: A=Python API, B=HTML/CSS, C=JS, D=book URLs polish. One phase per session. Complete files only.
+
+VERIFY: orchestrator --full, python web_app.py, http://127.0.0.1:8765. No fake demo arbs when API returns 0.
+
+START UI PHASE A. Never ask for ODDS_API_KEY.

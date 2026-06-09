@@ -1,0 +1,20 @@
+# AUTORUN — all deploy phases in ONE multi-agent session (Gradio paste)
+# Use only if run_phases.py is not available. CPU may timeout — prefer terminal batch runner.
+
+AUTONOMOUS MODE: Execute phases 1→6 below **without asking me to paste terminal output**. After each phase's commands, assume they succeeded and continue to the next phase. Output code as complete files.
+
+Read shared rules: prompts/llm_deploy_phases/_SHARED_RULES.txt
+Read sports/markets: prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt
+
+Then execute in order (summarize each phase in 3 lines, then commands/code):
+
+PHASE 1 — paste and execute: prompts/llm_deploy_phases/PHASE_1_harvester_config_ingest.txt
+PHASE 2 — prompts/llm_deploy_phases/PHASE_2_event_markets_multisport.txt
+PHASE 3 — prompts/llm_deploy_phases/PHASE_3_arb_engine_all_lines.txt
+PHASE 4 — prompts/llm_deploy_phases/PHASE_4_dashboard_lan_url.txt
+PHASE 5 — prompts/llm_deploy_phases/PHASE_5_verify_browser.txt
+PHASE 6 — prompts/llm_deploy_phases/PHASE_6_always_on_optional.txt
+
+UI BONUS — prompts/llm_multi_agent_arb_card_dashboard_SHORT.txt (UI PHASE A only if time)
+
+Do NOT stop between phases. Do NOT ask for ODDS_API_KEY.

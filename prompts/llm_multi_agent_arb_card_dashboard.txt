@@ -1,0 +1,254 @@
+# MULTI-AGENT — Arbitrage card dashboard (split-leg UI like pro arb tools)
+# Paste into: local-llm → Chat → Multi-agent (Planner → Coder → Reviewer)
+# Project: arbitrage-by-JAC | Port: http://127.0.0.1:8765
+#
+# Prerequisite: harvester ingests multi-sport data (see llm_deploy_phases/)
+# Related: prompts/llm_frontend_night_luxe_arbitrage_ui.txt (older spec — this supersedes layout)
+
+---
+
+## YOUR ROLE
+
+You are a **full-stack engineer** shipping the **harvester arbitrage dashboard** at `harvester/static/` + small API tweaks in `harvester/dashboard_service.py`.
+
+**Goal:** Each arbitrage opportunity renders as a **rich card** like a pro arb scanner:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ [MLB] Milwaukee Brewers @ Oakland Athletics    +$19.96 • 2.0% ROI │
+│ Total Doubles · Tue 6/9 @ 10:05pm EDT                          │
+├──────────────────────────────┬──────────────────────────┬──────┤
+│ BETCRIS                      │ DRAFTKINGS               │ PLACE│
+│ Under 3.5 doubles            │ Over 3.5 doubles         │ BOTH │
+│ +119  (avg -104)             │ -110  (avg -126)         │  ⚡  │
+│ Stake $465.74 → Payout $1019.96 │ Stake $534.26 → ...   │      │
+│ [Bet First]                  │                          │      │
+├──────────────────────────────┴──────────────────────────┴──────┤
+│ Market      │ Mkt Avg │ Betcris │ Hard Rock │ DK │ BetMGM    │
+│ Under 3.5   │ -104    │ +119 ✓  │ -105      │... │ ...       │
+│ Over 3.5    │ -126    │ ...     │ -125      │-110✓│ ...       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Use **real data** from `GET /api/status?day=today`. **Never fabricate** demo arbs when API returns 0.
+
+---
+
+## GROUND TRUTH
+
+| Path | Role |
+|------|------|
+| `harvester/web_app.py` | FastAPI :8765 |
+| `harvester/static/index.html` | Dashboard shell |
+| `harvester/static/styles.css` | Dark theme |
+| `harvester/static/app.js` | Fetch + render |
+| `harvester/dashboard_service.py` | `build_dashboard_payload()`, `_opportunity_from_record()` |
+| `harvester/models.py` | `ArbitrageLeg`, `SourceQuote` (`line`, `outcome`, `price`) |
+
+**Forbidden:** stealth scrapers, new React build chain, fake `live_arbitrage_signals.json`.
+
+---
+
+## VISUAL SPEC (match reference screenshot)
+
+### Theme
+- Background: `#0b0d10` → `#12161a` gradient
+- Card: `#181e24`, border `#2a323d`, radius `12px`
+- ROI pill: bg `#132d21`, text `#22c55e` — format `+$XX.XX • X.X% ROI`
+- Best odds: green `#22c55e` highlight
+- Selected leg odds: blue `#60a5fa`
+- Muted: `#94a3b8`
+
+### Card zones (required)
+
+**1. Header**
+- Sport badge (derive from `sport_key`: `baseball_mlb` → MLB)
+- `event_name` (e.g. Milwaukee Brewers @ Oakland Athletics)
+- Humanized `market_label` (e.g. `totals` → Totals, `player_doubles` → Total Doubles, `h2h` → Moneyline)
+- `commence_time` in user local TZ (e.g. Tue 6/9 @ 10:05pm EDT)
+- ROI pill top-right from stake math
+
+**2. Split legs (2-column grid for 2-way arb)**
+Per leg (`legs[]` from API):
+- Book logo placeholder (initials circle) + `source` display name (DraftKings, FanDuel, …)
+- Bold `outcome` + `line` if present (e.g. "Under 3.5 doubles", "Over 3.5")
+- **American odds** large (convert from decimal `price` for display only)
+- Market average odds small grey under price (from `market_avg_american` or compute from `quote_matrix`)
+- Editable stake `$` input — default from bankroll formula
+- Payout in green (stake × decimal price)
+- "Bet First" pill on leg with **lower** `stake_weight` (higher decimal / underdog side)
+
+**3. Place Both**
+- Tall button right column: "Place Both" + lightning icon
+- Click → `alert('Manual placement — link to books below')` OR open book URLs (see BOOK_URLS map)
+
+**4. Comparison table (bottom of card)**
+- Rows: each outcome side (Under 3.5 / Over 3.5)
+- Columns: Market label | Market Avg | one column per book in `quote_matrix`
+- Highlight **best** decimal price per row in green
+- Grey out non-best
+
+### Top of page (above cards)
+- Bankroll slider `$100` – `$50,000` (default `$1000`) — `localStorage`
+- Stats row: total opps, avg ROI, best ROI (from `/api/status` `stats`)
+- Day tabs: Today / Tomorrow / Sources (keep existing tab behavior)
+- Refresh run button (keep `#btn-refresh`)
+
+### Empty state
+When `opportunities.length === 0`: show scanned events list OR message:
+"No arbitrage opportunities right now. Lines are still scanned — try Refresh run or lower HARVESTER_MIN_ARB_YIELD_PCT."
+
+---
+
+## API CONTRACT (extend backend if missing)
+
+### Current `opportunities[]` — extend in `dashboard_service.py`:
+
+```json
+{
+  "id": "event_id",
+  "event_name": "Oakland Athletics @ Milwaukee Brewers",
+  "sport_key": "baseball_mlb",
+  "market_type": "totals",
+  "market_label": "Total Doubles",
+  "line": 3.5,
+  "commence_time": "2026-06-10T02:05:00Z",
+  "yield_pct": 2.0,
+  "implied_sum": 0.9804,
+  "legs": [
+    {
+      "source": "betcris",
+      "source_display": "Betcris",
+      "outcome": "Under",
+      "line": 3.5,
+      "price": 2.19,
+      "american": "+119",
+      "market_avg_price": 1.962,
+      "market_avg_american": "-104",
+      "stake_weight": 0.466,
+      "is_bet_first": true
+    },
+    {
+      "source": "draftkings",
+      "source_display": "DraftKings",
+      "outcome": "Over",
+      "line": 3.5,
+      "price": 1.909,
+      "american": "-110",
+      "market_avg_price": 1.794,
+      "market_avg_american": "-126",
+      "stake_weight": 0.534,
+      "is_bet_first": false
+    }
+  ],
+  "quote_matrix": {
+    "outcomes": ["Under 3.5", "Over 3.5"],
+    "books": ["betcris", "hardrock", "draftkings", "betmgm"],
+    "prices": {
+      "Under 3.5": { "betcris": 2.19, "hardrock": 1.952, "draftkings": null, "betmgm": null },
+      "Over 3.5": { "betcris": null, "hardrock": 1.8, "draftkings": 1.909, "betmgm": 1.85 }
+    },
+    "market_avg": { "Under 3.5": 1.962, "Over 3.5": 1.794 }
+  }
+}
+```
+
+Build `quote_matrix` from `record.sources` quotes matching same `market_type` + `line`.
+
+### Odds helpers (implement in JS + optional Python)
+
+```javascript
+// decimal → american (display only)
+function decimalToAmerican(d) {
+  if (d >= 2) return `+${Math.round((d - 1) * 100)}`;
+  return `${Math.round(-100 / (d - 1))}`;
+}
+
+// stakes for bankroll B
+function allocateStakes(legs, B) {
+  const wSum = legs.reduce((s, l) => s + l.stake_weight, 0);
+  return legs.map(l => ({
+    ...l,
+    stake: B * (l.stake_weight / wSum),
+    payout: B * (l.stake_weight / wSum) * l.price,
+  }));
+}
+// profit = payout - B (equal payouts for valid arb)
+```
+
+---
+
+## IMPLEMENTATION PHASES (one per multi-agent session)
+
+### UI PHASE A — API payload (Python)
+Edit `harvester/dashboard_service.py`:
+- `_opportunity_from_record()` → add `market_label`, `line`, american fields, `quote_matrix`
+- Helper `_humanize_market_type()`, `_build_quote_matrix(record)`
+- Helper `_decimal_to_american()`
+
+Verify: `curl -s http://127.0.0.1:8765/api/status | python -m json.tool | head -80`
+
+### UI PHASE B — Card HTML/CSS
+Edit `harvester/static/index.html` + `styles.css`:
+- Replace simple `opp-row` list with `.arb-card` component markup
+- Bankroll slider in header
+- Responsive: stack legs vertically < 640px
+
+### UI PHASE C — Card JS
+Edit `harvester/static/app.js`:
+- `renderOpportunityCard(opp, bankroll)` builds full card DOM
+- Wire stake inputs → recalc payouts + ROI pill live
+- Render comparison table from `quote_matrix`
+- Persist `bankroll` in `localStorage`
+
+### UI PHASE D — Polish
+- Book deep links map (constants at top of app.js):
+  ```javascript
+  const BOOK_URLS = {
+    draftkings: "https://sportsbook.draftkings.com/",
+    fanduel: "https://sportsbook.fanduel.com/",
+    betmgm: "https://sports.betmgm.com/",
+    caesars: "https://www.caesars.com/sportsbook-and-casino",
+    fanatics: "https://sportsbook.fanatics.com/",
+  };
+  ```
+- "Bet First" opens that book URL
+- Sport icons: emoji or SVG map by sport_key prefix
+
+---
+
+## HARD RULES
+
+1. Only edit `harvester/static/*`, `harvester/dashboard_service.py`, `harvester/web_app.py` if needed
+2. One phase per reply; output **complete file contents** for changed files (no TODOs)
+3. Windows venv: `sports_arbitrage_pipeline/venv/Scripts/activate`
+4. Never ask for ODDS_API_KEY — already in `harvester/.env`
+5. Math uses **decimal** prices from API; American is display-only
+
+---
+
+## VERIFY (every phase)
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
+source venv/Scripts/activate
+python arbitrage_orchestrator.py --full
+cd ../harvester
+python web_app.py
+```
+
+Open **http://127.0.0.1:8765**
+
+Success:
+- Cards render with split legs when opportunities exist
+- Empty state when 0 arbs (no fake cards)
+- Bankroll slider recalculates stakes/payouts/ROI
+- Comparison table shows per-book odds with best highlighted
+
+---
+
+## START
+
+Begin **UI PHASE A** — extend `dashboard_service.py` payload. List files, then implement. Wait for user to confirm API JSON before CSS/JS.
+
+Do NOT use port 7860 for this task — that is the LLM chat only.

@@ -1,0 +1,35 @@
+# PHASE 4 of 6 — Dashboard shows ALL sports (not NBA filter) + LAN URL
+
+Prerequisite: PHASE 3 engine scores multi-sport arbs.
+
+REFERENCE: prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt
+SHARED RULES: prompts/llm_deploy_phases/_SHARED_RULES.txt
+
+GOAL: Dashboard at :8765 lists opportunities from **all sports** and all market types.
+
+FILES TO EDIT:
+- harvester/dashboard_service.py — remove any basketball_nba-only filter; add sport filter dropdown (all | per sport)
+- harvester/static/index.html (if exists) — sport selector, market_type badges
+- harvester/settings.py — HARVESTER_UI_LAN
+- harvester/network_urls.py + harvester/web_app.py — print PC + LAN URLs
+- harvester/scripts/run_dashboard.sh — full multi-sport orchestrator then web_app
+
+Append harvester/.env:
+
+```env
+HARVESTER_UI_LAN=1
+HARVESTER_UI_HOST=0.0.0.0
+ODDS_API_SPORTS_MODE=all_active
+```
+
+COMMAND:
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/harvester
+source ../sports_arbitrage_pipeline/venv/Scripts/activate
+python web_app.py
+```
+
+EXPECT: http://127.0.0.1:8765 shows events from NFL, NBA, MLB, NHL, soccer, etc. when in season.
+
+STOP when URLs print. Next: PHASE_5_verify_browser.txt

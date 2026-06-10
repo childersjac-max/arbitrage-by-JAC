@@ -1,0 +1,116 @@
+# REVIEW — Unattended multi-agent phase runs (read logs, no new features)
+
+You are reviewing **completed** `run_phases.sh` batch runs for **arbitrage-by-JAC**.
+The user ran unattended multi-agent overnight. Your job is to **show results clearly** — not start new phases.
+
+Repo root: `~/Projects/arbitrage-by-JAC` (Windows: `C:\Users\child\Projects\arbitrage-by-JAC`)
+
+---
+
+## STEP 1 — Find last night's log files
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/multi-agent-llm
+ls -lt logs/ | head -30
+```
+
+Log naming: `phase_<phase_id>_<YYYYMMDD_HHMMSS>.txt`
+
+Typical phase IDs from the user's runs:
+| Run | Phase IDs |
+|-----|-----------|
+| Deploy verify | `05_verify_browser`, `06_always_on` |
+| UI cards | `ui_A_api`, `ui_B_filters_html`, `ui_C_card_css`, `ui_D_card_js`, `ui_E_filters_js`, `ui_F_verify` |
+
+Group logs by timestamp clusters (same night = runs within ~1–3 hours).
+
+---
+
+## STEP 2 — For each log file, extract and report
+
+Read the full log. For **each phase**, output this block:
+
+### Phase: `<phase_id>`
+- **Log file:** `multi-agent-llm/logs/<filename>`
+- **Score:** X/10 (from footer `PHASE ... DONE — score`)
+- **What it tried to do:** 1–2 sentences
+- **Deliverable type:** `bash-only` | `python-edits` | `mixed` | `verify-checklist`
+- **Safe to run?** YES / NO / PARTIAL — explain
+- **Already in repo?** Compare suggested file paths to real files:
+  - `harvester/dashboard_service.py` — uses `UnifiedRecord`, NOT ORM `Opportunity.select()`
+  - `harvester/web_app.py` — real FastAPI dashboard (do not replace with stub)
+  - `harvester/settings.py` — pydantic `HarvesterSettings`
+  - `harvester/static/` — index.html, styles.css, app.js
+- **Best snippet:** quote only the **final** `BEST SOLUTION` section (or last Reviewer block if no footer)
+- **Action for user:** one concrete command or "skip — hallucinated"
+
+**Red flags (mark NO):**
+- `Opportunity.select()`, `MarketType.select()`, Peewee/SQLAlchemy ORM
+- `echo ... > harvester/.env` (overwrites API key)
+- `sudo tee` on Windows
+- Replacing entire `web_app.py` with minimal stub
+- `config/urls.txt` or paths that don't exist
+- Placeholder `profit_usd_at_1000: 19.96` in production code
+
+---
+
+## STEP 3 — Cross-run summary table
+
+After all phases, print:
+
+| Phase | Score | Applied to repo? | User action |
+|-------|-------|------------------|-------------|
+| ... | ... | No / Partial / Yes | ... |
+
+**Applied to repo?** = check git status / diff on suggested files. Batch runner never auto-commits.
+
+---
+
+## STEP 4 — What the user should run NOW (verify real dashboard)
+
+Do not re-run `run_phases.sh`. Run the **live** stack:
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
+source venv/Scripts/activate
+python arbitrage_orchestrator.py --full
+```
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/harvester
+source ../sports_arbitrage_pipeline/venv/Scripts/activate
+python web_app.py
+```
+
+```bash
+curl -s "http://127.0.0.1:8765/api/status?day=today" | python -c "
+import sys,json; d=json.load(sys.stdin)
+print('api_key_configured', d.get('api_key_configured'))
+print('opportunities', len(d.get('opportunities',[])))
+print('filter_options', list(d.get('filter_options',{}).keys()))
+print('today_events', len(d.get('today_events',[])))
+"
+```
+
+Open **http://127.0.0.1:8765** — describe what user should see vs what UI phases would add (cards, Filters panel).
+
+---
+
+## STEP 5 — Gap analysis (logs vs goal)
+
+State plainly:
+1. Which **deploy** goals (multi-sport, all markets, LAN URL) are **code-complete** vs **prompt-only**
+2. Which **UI** goals (split-leg cards, Filters panel) are **not implemented** yet
+3. Top 3 **safe** edits worth doing manually or in Cursor (file + one-line why)
+4. Top 3 **unsafe** suggestions from logs to **ignore**
+
+---
+
+## HARD RULES
+
+- Never ask for `ODDS_API_KEY`
+- Never paste hallucinated code into the repo without comparing to real `harvester/` structure
+- Distinguish **log output** (what LLM said) from **disk state** (what git shows)
+- If logs are missing, tell user exact path to check and how to re-list
+
+STOP after the summary. Do not start UI PHASE G or new deploy phases unless user asks.

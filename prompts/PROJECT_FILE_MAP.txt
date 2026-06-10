@@ -76,6 +76,8 @@ prompts/llm_deploy_phases/PHASE_5_verify_browser.txt
 prompts/llm_deploy_phases/PHASE_6_always_on_optional.txt
 prompts/llm_multi_agent_arb_card_dashboard.txt        # UI master index + autorun instructions
 prompts/llm_multi_agent_arb_card_dashboard_SHORT.txt  # Compact UI index
+prompts/llm_review_unattended_phase_logs.txt          # Review overnight run_phases logs (full)
+prompts/llm_review_unattended_phase_logs_SHORT.txt   # Same — compact for Gradio/Cursor
 prompts/llm_ui_phases/UI_PHASE_A_api_payload.txt     # UI auto-chain A: API + filter_options
 prompts/llm_ui_phases/UI_PHASE_B_filters_panel_html.txt
 prompts/llm_ui_phases/UI_PHASE_C_card_html_css.txt

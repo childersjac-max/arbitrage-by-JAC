@@ -39,6 +39,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Live Arbitrage Finder", lifespan=lifespan)
 
+
+def _static_file(name: str, media_type: str) -> FileResponse:
+    path = STATIC_DIR / name
+    if not path.is_file():
+        raise HTTPException(404, f"Static asset not found: {name}")
+    return FileResponse(path, media_type=media_type)
+
+
+@app.get("/static/styles.css")
+async def static_styles() -> FileResponse:
+    return _static_file("styles.css", "text/css")
+
+
+@app.get("/static/app.js")
+async def static_app_js() -> FileResponse:
+    return _static_file("app.js", "application/javascript")
+
+
 if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -106,11 +124,16 @@ def main() -> None:
     host = settings.harvester_ui_host
     port = settings.harvester_ui_port
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    css_ok = (STATIC_DIR / "styles.css").is_file()
+    js_ok = (STATIC_DIR / "app.js").is_file()
     print("=" * 60)
     print("  HARVESTER ARBITRAGE DASHBOARD (FastAPI)")
     print(f"  Open: http://{host}:{port}")
+    print(f"  Static: {STATIC_DIR}  css={'OK' if css_ok else 'MISSING'}  js={'OK' if js_ok else 'MISSING'}")
     print("  For Ollama CHAT use: cd ../local-llm && python web_app.py  →  :7860")
     print("=" * 60)
+    if not css_ok:
+        logging.warning("styles.css missing — dashboard will look unstyled")
     uvicorn.run(
         "web_app:app",
         host=host,

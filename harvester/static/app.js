@@ -87,6 +87,17 @@ const el = {
   segmentTiming: document.getElementById("segment-timing"),
 };
 
+function setVisible(node, visible) {
+  if (!node) return;
+  if (visible) {
+    node.classList.remove("hidden");
+    node.removeAttribute("hidden");
+  } else {
+    node.classList.add("hidden");
+    node.setAttribute("hidden", "");
+  }
+}
+
 function formatPct(n) {
   return `${Number(n).toFixed(2)}%`;
 }
@@ -213,15 +224,19 @@ function savePreset() {
 }
 
 function openFilters() {
+  setVisible(el.filtersPanel, true);
   el.filtersPanel.classList.add("open");
   el.filtersPanel.setAttribute("aria-hidden", "false");
-  el.filtersBackdrop.classList.remove("hidden");
+  setVisible(el.filtersBackdrop, true);
+  el.filtersBackdrop.setAttribute("aria-hidden", "false");
 }
 
 function closeFilters() {
   el.filtersPanel.classList.remove("open");
   el.filtersPanel.setAttribute("aria-hidden", "true");
-  el.filtersBackdrop.classList.add("hidden");
+  setVisible(el.filtersPanel, false);
+  setVisible(el.filtersBackdrop, false);
+  el.filtersBackdrop.setAttribute("aria-hidden", "true");
 }
 
 function updateFilterBadges() {
@@ -425,11 +440,11 @@ function renderArbCard(opp) {
 function renderArbCards(opportunities) {
   el.arbCards.innerHTML = "";
   if (!opportunities.length) {
-    el.arbCards.classList.add("hidden");
+    setVisible(el.arbCards, false);
     return;
   }
-  el.empty.classList.add("hidden");
-  el.arbCards.classList.remove("hidden");
+  setVisible(el.empty, false);
+  setVisible(el.arbCards, true);
   opportunities.forEach((opp) => {
     el.arbCards.appendChild(renderArbCard(opp));
   });
@@ -450,7 +465,7 @@ function renderScannedEvents(events, summary) {
 
   if (!sorted.length) {
     if (!showLowHold && state.viewMode === "arbs") {
-      el.scannedSection.classList.add("hidden");
+      setVisible(el.scannedSection, false);
     }
     const label = state.view === "today" ? "today" : "tomorrow";
     if (summary && summary.events_total > 0 && state.viewMode === "arbs") {
@@ -458,17 +473,17 @@ function renderScannedEvents(events, summary) {
       el.empty.querySelector(".empty-hint").textContent =
         `Scanned ${summary.events_total} event(s) · ${summary.sources_loaded} source(s). Try Low Hold or Filters.`;
     } else if (!sorted.length && showLowHold) {
-      el.scannedSection.classList.add("hidden");
+      setVisible(el.scannedSection, false);
     } else {
       el.emptyMsg.textContent = `No data for ${label}.`;
     }
     return;
   }
 
-  el.scannedSection.classList.remove("hidden");
+  setVisible(el.scannedSection, true);
   if (showLowHold) {
-    el.empty.classList.add("hidden");
-    el.arbCards.classList.add("hidden");
+    setVisible(el.empty, false);
+    setVisible(el.arbCards, false);
   }
 
   sorted.forEach((ev) => {
@@ -520,26 +535,26 @@ function renderFilteredOpportunities() {
   if (state.viewMode === "arbs") {
     renderArbCards(filtered);
     if (!filtered.length) {
-      el.empty.classList.remove("hidden");
+      setVisible(el.empty, true);
     }
   }
 }
 
 function renderMainView() {
   if (state.timing === "ingame") {
-    el.ingameNotice?.classList.remove("hidden");
-    el.arbCards.classList.add("hidden");
-    el.scannedSection.classList.add("hidden");
-    el.empty.classList.add("hidden");
+    setVisible(el.ingameNotice, true);
+    setVisible(el.arbCards, false);
+    setVisible(el.scannedSection, false);
+    setVisible(el.empty, false);
     return;
   }
-  el.ingameNotice?.classList.add("hidden");
+  setVisible(el.ingameNotice, false);
 
   if (state.viewMode === "lowhold") {
-    el.arbCards.classList.add("hidden");
+    setVisible(el.arbCards, false);
     renderScannedEvents(state.scannedEvents, state.runSummary);
     if (!state.scannedEvents.length) {
-      el.empty.classList.remove("hidden");
+      setVisible(el.empty, true);
       el.emptyMsg.textContent = "No scanned markets for this tab.";
     }
     return;
@@ -563,12 +578,12 @@ function renderOpportunities(opportunities, scannedEvents, summary) {
 function renderSources(sources) {
   el.sourceList.innerHTML = "";
   if (!sources?.length) {
-    el.sourcesEmpty.classList.remove("hidden");
-    el.sourceList.classList.add("hidden");
+    setVisible(el.sourcesEmpty, true);
+    setVisible(el.sourceList, false);
     return;
   }
-  el.sourcesEmpty.classList.add("hidden");
-  el.sourceList.classList.remove("hidden");
+  setVisible(el.sourcesEmpty, false);
+  setVisible(el.sourceList, true);
   let lastCategory = "";
   sources.forEach((src) => {
     const catLabel = src.category_label || "";
@@ -597,8 +612,8 @@ function renderSources(sources) {
 
 function updatePanels() {
   const isSources = state.view === "sources";
-  el.panelOpportunities.classList.toggle("hidden", isSources);
-  el.panelSources.classList.toggle("hidden", !isSources);
+  setVisible(el.panelOpportunities, !isSources);
+  setVisible(el.panelSources, isSources);
   document.querySelectorAll(".os-nav-link").forEach((link) => {
     const nav = link.dataset.nav;
     link.classList.toggle("os-nav-link--active", (nav === "sources") === isSources);
@@ -624,9 +639,9 @@ function setTiming(timing) {
 function togglePresetsMenu(open) {
   let show = open;
   if (show === undefined) {
-    show = el.presetsMenu?.classList.contains("hidden");
+    show = el.presetsMenu?.hasAttribute("hidden");
   }
-  el.presetsMenu?.classList.toggle("hidden", !show);
+  setVisible(el.presetsMenu, show);
   el.presetsTrigger?.setAttribute("aria-expanded", show ? "true" : "false");
 }
 
@@ -686,12 +701,12 @@ function applyPayload(data) {
 
   if (data.error && state.view !== "sources") {
     el.error.textContent = data.error;
-    el.error.classList.remove("hidden");
+    setVisible(el.error, true);
   } else if (!data.api_key_configured) {
     el.error.textContent = "ODDS_API_KEY is not set in harvester/.env";
-    el.error.classList.remove("hidden");
+    setVisible(el.error, true);
   } else {
-    el.error.classList.add("hidden");
+    setVisible(el.error, false);
   }
 
   if (state.view === "today" || state.view === "tomorrow") {
@@ -884,6 +899,6 @@ loadPreset();
     if (data.running) startPolling();
   } catch {
     el.error.textContent = "Could not load dashboard. Is the server running?";
-    el.error.classList.remove("hidden");
+    setVisible(el.error, true);
   }
 })();

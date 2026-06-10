@@ -11,9 +11,10 @@ from typing import Any
 
 from engine import HarvesterEngine, best_prices_implied_sum
 from harvester_paths import PACKAGE_DIR
-from models import UnifiedRecord
+from models import ArbitrageLeg, UnifiedRecord
 from settings import get_settings
 from source_status import build_source_report, source_summary
+from target_sources import ODDS_API_KEY_TO_TARGET, TARGET_SOURCE_BY_KEY
 from time_utils import get_tz, today_and_tomorrow, to_local_date
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,188 @@ def _sanitize_record_dict(item: dict[str, Any]) -> dict[str, Any]:
     return item
 
 
+_SPORT_LEAGUE_LABELS: dict[str, str] = {
+    "basketball_nba": "NBA",
+    "basketball_ncaab": "NCAAB",
+    "basketball_wnba": "WNBA",
+    "baseball_mlb": "MLB",
+    "americanfootball_nfl": "NFL",
+    "americanfootball_ncaaf": "NCAAF",
+    "icehockey_nhl": "NHL",
+    "mma_mixed_martial_arts": "MMA",
+    "soccer_epl": "EPL",
+    "soccer_usa_mls": "MLS",
+}
+
+_MARKET_LABELS: dict[str, str] = {
+    "h2h": "Moneyline",
+    "spreads": "Spreads",
+    "totals": "Totals",
+    "outrights": "Outrights",
+}
+
+
+def _decimal_to_american(price: float) -> int:
+    if price <= 1.0:
+        return 0
+    if price >= 2.0:
+        return int(round((price - 1.0) * 100))
+    return int(round(-100 / (price - 1.0)))
+
+
+def _humanize_market_type(market_type: str) -> str:
+    key = (market_type or "").strip().lower()
+    if key in _MARKET_LABELS:
+        return _MARKET_LABELS[key]
+    return key.replace("_", " ").title() if key else "Market"
+
+
+def _sport_group(sport_key: str) -> str:
+    prefix = (sport_key or "").split("_", 1)[0]
+    return {
+        "basketball": "Basketball",
+        "baseball": "Baseball",
+        "americanfootball": "Football",
+        "icehockey": "Hockey",
+        "soccer": "Soccer",
+        "mma": "MMA",
+        "tennis": "Tennis",
+        "golf": "Golf",
+        "boxing": "Boxing",
+    }.get(prefix, prefix.replace("_", " ").title() if prefix else "Other")
+
+
+def _sport_label(sport_key: str) -> str:
+    if sport_key in _SPORT_LEAGUE_LABELS:
+        return _SPORT_LEAGUE_LABELS[sport_key]
+    parts = (sport_key or "").split("_")
+    if len(parts) >= 2:
+        return parts[-1].upper()
+    return sport_key or "Sport"
+
+
+def _canonical_source_key(book_key: str) -> str:
+    return ODDS_API_KEY_TO_TARGET.get(book_key, book_key)
+
+
+def _source_display(book_key: str) -> str:
+    canonical = _canonical_source_key(book_key)
+    target = TARGET_SOURCE_BY_KEY.get(canonical)
+    if target:
+        return target.name
+    return canonical.replace("_", " ").title()
+
+
+def _record_line(record: UnifiedRecord) -> float | None:
+    for quotes in record.sources.values():
+        for quote in quotes:
+            if quote.line is not None:
+                return quote.line
+    return None
+
+
+def _quote_line_for_outcome(record: UnifiedRecord, outcome: str) -> float | None:
+    for quotes in record.sources.values():
+        for quote in quotes:
+            if quote.outcome == outcome and quote.line is not None:
+                return quote.line
+    return None
+
+
+def _build_quote_matrix(record: UnifiedRecord) -> dict[str, Any]:
+    outcomes: list[str] = []
+    seen_outcomes: set[str] = set()
+    books: list[str] = []
+    seen_books: set[str] = set()
+    prices: dict[str, dict[str, float]] = {}
+    sums: dict[str, float] = {}
+    counts: dict[str, int] = {}
+
+    for book_key, quotes in record.sources.items():
+        canonical = _canonical_source_key(book_key)
+        if canonical not in seen_books:
+            seen_books.add(canonical)
+            books.append(canonical)
+        for quote in quotes:
+            if quote.price <= 1.0:
+                continue
+            outcome = quote.outcome
+            if outcome not in seen_outcomes:
+                seen_outcomes.add(outcome)
+                outcomes.append(outcome)
+            prices.setdefault(outcome, {})[canonical] = round(quote.price, 4)
+            sums[outcome] = sums.get(outcome, 0.0) + quote.price
+            counts[outcome] = counts.get(outcome, 0) + 1
+
+    market_avg: dict[str, float] = {}
+    for outcome, total in sums.items():
+        n = counts.get(outcome, 0)
+        if n:
+            market_avg[outcome] = round(total / n, 4)
+
+    return {
+        "outcomes": outcomes,
+        "books": books,
+        "prices": prices,
+        "market_avg": market_avg,
+    }
+
+
+def _enrich_leg(record: UnifiedRecord, leg: ArbitrageLeg, *, quote_matrix: dict[str, Any], bet_first: bool) -> dict[str, Any]:
+    outcome = leg.outcome
+    market_avg_price = quote_matrix.get("market_avg", {}).get(outcome)
+    line = _quote_line_for_outcome(record, outcome)
+    return {
+        "source": _canonical_source_key(leg.source),
+        "source_display": _source_display(leg.source),
+        "outcome": outcome,
+        "line": line,
+        "price": leg.price,
+        "american": _decimal_to_american(leg.price),
+        "market_avg_price": market_avg_price,
+        "market_avg_american": _decimal_to_american(market_avg_price) if market_avg_price else None,
+        "stake_weight": leg.stake_weight,
+        "is_bet_first": bet_first,
+    }
+
+
+def _build_filter_options(records: list[UnifiedRecord]) -> dict[str, Any]:
+    sportsbook_counts: dict[str, int] = {}
+    league_counts: dict[str, int] = {}
+    market_counts: dict[str, int] = {}
+
+    for record in records:
+        market_counts[record.market_type] = market_counts.get(record.market_type, 0) + 1
+        league_counts[record.sport_key] = league_counts.get(record.sport_key, 0) + 1
+        for book_key in record.sources:
+            canonical = _canonical_source_key(book_key)
+            sportsbook_counts[canonical] = sportsbook_counts.get(canonical, 0) + 1
+
+    sportsbooks = [
+        {"key": key, "name": _source_display(key), "count": count}
+        for key, count in sorted(sportsbook_counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    sports_leagues = [
+        {
+            "key": key,
+            "name": _sport_label(key),
+            "group": _sport_group(key),
+            "count": count,
+        }
+        for key, count in sorted(league_counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    market_types = [
+        {"key": key, "label": _humanize_market_type(key), "count": count}
+        for key, count in sorted(market_counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+    return {
+        "sportsbooks": sportsbooks,
+        "sports_leagues": sports_leagues,
+        "market_types": market_types,
+    }
+
+
 def _opportunity_from_record(record: UnifiedRecord) -> dict[str, Any] | None:
     arb = record.arbitrage
     if arb is None:
@@ -76,24 +259,37 @@ def _opportunity_from_record(record: UnifiedRecord) -> dict[str, Any] | None:
     settings = get_settings()
     if arb.yield_pct < settings.min_arb_yield_pct:
         return None
+
+    quote_matrix = _build_quote_matrix(record)
+    min_weight = min(leg.stake_weight for leg in arb.legs) if arb.legs else 0.0
     legs = [
-        {
-            "source": leg.source,
-            "outcome": leg.outcome,
-            "price": leg.price,
-            "stake_weight": leg.stake_weight,
-        }
+        _enrich_leg(
+            record,
+            leg,
+            quote_matrix=quote_matrix,
+            bet_first=leg.stake_weight <= min_weight + 1e-9,
+        )
         for leg in arb.legs
     ]
+    roi_pct = float(arb.yield_pct)
+    profit_usd_at_1000 = round(1000.0 * roi_pct / 100.0, 2)
+
     return {
         "id": record.event_id,
         "event_name": record.normalized_event_name,
         "sport_key": record.sport_key,
+        "sport_group": _sport_group(record.sport_key),
+        "sport_label": _sport_label(record.sport_key),
         "market_type": record.market_type,
+        "market_label": _humanize_market_type(record.market_type),
+        "line": _record_line(record),
         "commence_time": record.commence_time.isoformat() if record.commence_time else None,
         "yield_pct": arb.yield_pct,
+        "roi_pct": roi_pct,
         "implied_sum": arb.implied_sum,
+        "profit_usd_at_1000": profit_usd_at_1000,
         "legs": legs,
+        "quote_matrix": quote_matrix,
         "arb_method": record.metadata.get("arb_method", "math"),
         "llm_reasoning": record.metadata.get("llm_reasoning", ""),
         "sources_used": record.metadata.get("sources_used", []),
@@ -233,6 +429,8 @@ def build_dashboard_payload(
             "run_summary": run_summary,
             "sources": sources,
             "source_summary": source_summary(sources),
+            "filter_options": _build_filter_options(records),
+            "defaults": {"wager_usd": 1000, "sort_by": "roi_pct"},
             "last_run_at": _state.last_run_at.isoformat() if _state.last_run_at else None,
             "running": _state.running,
             "run_status": _state.run_status,

@@ -1,8 +1,32 @@
+const BOOK_URLS = {
+  draftkings: "https://sportsbook.draftkings.com/",
+  fanduel: "https://sportsbook.fanduel.com/",
+  betmgm: "https://sports.betmgm.com/",
+  caesars: "https://www.caesars.com/sportsbook-and-casino",
+  fanatics: "https://sportsbook.fanatics.com/",
+  betcris: "https://www.betcris.com/",
+  bet365: "https://www.bet365.com/",
+  thescore: "https://www.thescore.com/betting",
+};
+
+const STORAGE_KEY = "arb_filter_preset";
+
 const state = {
   view: "today",
   polling: null,
   pollStartedAt: 0,
   maxPollMs: 12 * 60 * 1000,
+  allOpportunities: [],
+  filterOptions: null,
+  defaults: { wager_usd: 1000, sort_by: "roi_pct" },
+  filterState: {
+    wagerUsd: 1000,
+    sortBy: "roi_pct",
+    sportsbooks: new Set(),
+    sportsLeagues: new Set(),
+    marketTypes: new Set(),
+  },
+  cardStakes: new Map(),
 };
 
 const el = {
@@ -14,6 +38,8 @@ const el = {
   countSourcesLoaded: document.getElementById("count-sources-loaded"),
   empty: document.getElementById("empty-state"),
   emptyMsg: document.getElementById("empty-message"),
+  arbCards: document.getElementById("arb-cards"),
+  scannedSection: document.getElementById("scanned-section"),
   list: document.getElementById("opp-list"),
   panelOpportunities: document.getElementById("panel-opportunities"),
   panelSources: document.getElementById("panel-sources"),
@@ -29,20 +55,64 @@ const el = {
   slipYield: document.getElementById("slip-yield"),
   slipLegs: document.getElementById("slip-legs"),
   slipClose: document.getElementById("slip-close"),
+  btnFilters: document.getElementById("btn-filters"),
+  filtersPanel: document.getElementById("filters-panel"),
+  filtersBackdrop: document.getElementById("filters-backdrop"),
+  filtersClose: document.getElementById("filters-close"),
+  filterWager: document.getElementById("filter-wager"),
+  filterApply: document.getElementById("filter-apply"),
+  filterReset: document.getElementById("filter-reset"),
+  filterSave: document.getElementById("filter-save"),
+  filterActiveBadge: document.getElementById("filter-active-badge"),
+  listSportsbooks: document.getElementById("list-sportsbooks"),
+  listLeagues: document.getElementById("list-leagues"),
+  listMarkets: document.getElementById("list-markets"),
+  badgeSportsbooks: document.getElementById("badge-sportsbooks"),
+  badgeLeagues: document.getElementById("badge-leagues"),
+  badgeMarkets: document.getElementById("badge-markets"),
 };
 
 function formatPct(n) {
   return `${Number(n).toFixed(2)}%`;
 }
 
+function formatMoney(n) {
+  return `$${Number(n).toFixed(2)}`;
+}
+
+function formatAmerican(n) {
+  if (n == null || n === 0) return "—";
+  return n > 0 ? `+${n}` : String(n);
+}
+
 function formatLastRun(iso) {
   if (!iso) return "";
   try {
-    const d = new Date(iso);
-    return `Last run: ${d.toLocaleString()}`;
+    return `Last run: ${new Date(iso).toLocaleString()}`;
   } catch {
     return "";
   }
+}
+
+function formatCommence(iso) {
+  if (!iso) return "Time TBD";
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function escapeHtml(s) {
+  const d = document.createElement("div");
+  d.textContent = s ?? "";
+  return d.innerHTML;
 }
 
 function setLoading(loading, statusText) {
@@ -73,11 +143,287 @@ function channelLabel(channel) {
   return "Via Odds API";
 }
 
+function openBook(source) {
+  const url = BOOK_URLS[source];
+  if (url) window.open(url, "_blank", "noopener");
+}
+
+function allocateStakes(legs, wagerUsd) {
+  if (!legs.length) return [];
+  const weights = legs.map((leg) => leg.stake_weight || 1 / legs.length);
+  const sumW = weights.reduce((a, b) => a + b, 0) || 1;
+  return legs.map((leg, i) => ({
+    ...leg,
+    stake: (wagerUsd * weights[i]) / sumW,
+    payout: ((wagerUsd * weights[i]) / sumW) * leg.price,
+  }));
+}
+
+function profitAndRoi(legs, wagerUsd) {
+  const allocated = allocateStakes(legs, wagerUsd);
+  const totalStake = allocated.reduce((s, l) => s + l.stake, 0);
+  const payout = allocated.length ? Math.min(...allocated.map((l) => l.payout)) : 0;
+  const profit = payout - totalStake;
+  const roi = totalStake > 0 ? (profit / totalStake) * 100 : 0;
+  return { profit, roi, allocated };
+}
+
+function loadPreset() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const preset = JSON.parse(raw);
+    if (preset.wagerUsd) state.filterState.wagerUsd = preset.wagerUsd;
+    if (preset.sortBy) state.filterState.sortBy = preset.sortBy;
+    if (Array.isArray(preset.sportsbooks)) state.filterState.sportsbooks = new Set(preset.sportsbooks);
+    if (Array.isArray(preset.sportsLeagues)) state.filterState.sportsLeagues = new Set(preset.sportsLeagues);
+    if (Array.isArray(preset.marketTypes)) state.filterState.marketTypes = new Set(preset.marketTypes);
+    el.filterWager.value = state.filterState.wagerUsd;
+    const sortRadio = document.querySelector(`input[name="sort-by"][value="${state.filterState.sortBy}"]`);
+    if (sortRadio) sortRadio.checked = true;
+  } catch {
+    /* ignore */
+  }
+}
+
+function savePreset() {
+  const payload = {
+    wagerUsd: state.filterState.wagerUsd,
+    sortBy: state.filterState.sortBy,
+    sportsbooks: [...state.filterState.sportsbooks],
+    sportsLeagues: [...state.filterState.sportsLeagues],
+    marketTypes: [...state.filterState.marketTypes],
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+}
+
+function openFilters() {
+  el.filtersPanel.classList.add("open");
+  el.filtersPanel.setAttribute("aria-hidden", "false");
+  el.filtersBackdrop.classList.remove("hidden");
+}
+
+function closeFilters() {
+  el.filtersPanel.classList.remove("open");
+  el.filtersPanel.setAttribute("aria-hidden", "true");
+  el.filtersBackdrop.classList.add("hidden");
+}
+
+function updateFilterBadges() {
+  const sb = state.filterOptions?.sportsbooks?.length || 0;
+  const lg = state.filterOptions?.sports_leagues?.length || 0;
+  const mk = state.filterOptions?.market_types?.length || 0;
+  const sbSel = state.filterState.sportsbooks.size || sb;
+  const lgSel = state.filterState.sportsLeagues.size || lg;
+  const mkSel = state.filterState.marketTypes.size || mk;
+  el.badgeSportsbooks.textContent = `${sbSel} Selected`;
+  el.badgeLeagues.textContent = `${lgSel} Selected`;
+  el.badgeMarkets.textContent = `${mkSel} Selected`;
+
+  let active = 0;
+  if (state.filterState.wagerUsd !== (state.defaults.wager_usd || 1000)) active += 1;
+  if (state.filterState.sortBy !== (state.defaults.sort_by || "roi_pct")) active += 1;
+  if (state.filterState.sportsbooks.size && state.filterState.sportsbooks.size < sb) active += 1;
+  if (state.filterState.sportsLeagues.size && state.filterState.sportsLeagues.size < lg) active += 1;
+  if (state.filterState.marketTypes.size && state.filterState.marketTypes.size < mk) active += 1;
+  el.filterActiveBadge.textContent = String(active);
+  el.filterActiveBadge.classList.toggle("active", active > 0);
+}
+
+function populateFilterLists() {
+  const opts = state.filterOptions;
+  if (!opts) return;
+
+  const fill = (container, items, groupKey, set, keyField = "key", labelFn = (i) => i.name || i.label) => {
+    container.innerHTML = "";
+    const groups = {};
+    items.forEach((item) => {
+      const g = item[groupKey] || "";
+      groups[g] = groups[g] || [];
+      groups[g].push(item);
+    });
+    Object.keys(groups)
+      .sort()
+      .forEach((group) => {
+        if (group && groupKey) {
+          const gl = document.createElement("div");
+          gl.className = "filter-group-label";
+          gl.textContent = group;
+          container.appendChild(gl);
+        }
+        groups[group].forEach((item) => {
+          const id = `${container.id}-${item[keyField]}`;
+          const label = document.createElement("label");
+          label.className = "filter-check";
+          const checked = !set.size || set.has(item[keyField]);
+          label.innerHTML = `<input type="checkbox" id="${id}" data-key="${escapeHtml(item[keyField])}" ${checked ? "checked" : ""} /> ${escapeHtml(labelFn(item))} (${item.count})`;
+          container.appendChild(label);
+        });
+      });
+  };
+
+  fill(el.listSportsbooks, opts.sportsbooks || [], null, state.filterState.sportsbooks, "key", (i) => i.name);
+  fill(el.listLeagues, opts.sports_leagues || [], "group", state.filterState.sportsLeagues, "key", (i) => i.name);
+  fill(el.listMarkets, opts.market_types || [], null, state.filterState.marketTypes, "key", (i) => i.label);
+  updateFilterBadges();
+}
+
+function readFiltersFromUi() {
+  state.filterState.wagerUsd = Number(el.filterWager.value) || 1000;
+  state.filterState.sortBy = document.querySelector('input[name="sort-by"]:checked')?.value || "roi_pct";
+
+  const readSet = (container) => {
+    const set = new Set();
+    container.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      if (cb.checked) set.add(cb.dataset.key);
+    });
+    return set;
+  };
+
+  state.filterState.sportsbooks = readSet(el.listSportsbooks);
+  state.filterState.sportsLeagues = readSet(el.listLeagues);
+  state.filterState.marketTypes = readSet(el.listMarkets);
+}
+
+function resetFilters() {
+  state.filterState.wagerUsd = state.defaults.wager_usd || 1000;
+  state.filterState.sortBy = state.defaults.sort_by || "roi_pct";
+  state.filterState.sportsbooks = new Set();
+  state.filterState.sportsLeagues = new Set();
+  state.filterState.marketTypes = new Set();
+  el.filterWager.value = state.filterState.wagerUsd;
+  document.querySelector(`input[name="sort-by"][value="${state.filterState.sortBy}"]`)?.click();
+  populateFilterLists();
+  savePreset();
+  renderFilteredOpportunities();
+  updateFilterBadges();
+}
+
+function filterOpportunities(opportunities) {
+  const fs = state.filterState;
+  const sbAll = !fs.sportsbooks.size;
+  const lgAll = !fs.sportsLeagues.size;
+  const mkAll = !fs.marketTypes.size;
+
+  let filtered = opportunities.filter((opp) => {
+    if (!lgAll && !fs.sportsLeagues.has(opp.sport_key)) return false;
+    if (!mkAll && !fs.marketTypes.has(opp.market_type)) return false;
+    if (!sbAll) {
+      const legBooks = (opp.legs || []).map((l) => l.source);
+      if (!legBooks.some((b) => fs.sportsbooks.has(b))) return false;
+    }
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    if (fs.sortBy === "profit_usd") {
+      return (b.profit_usd_at_1000 || 0) - (a.profit_usd_at_1000 || 0);
+    }
+    return (b.roi_pct || b.yield_pct || 0) - (a.roi_pct || a.yield_pct || 0);
+  });
+
+  return filtered;
+}
+
+function renderComparisonTable(matrix) {
+  if (!matrix || !matrix.outcomes?.length) return "";
+  const { outcomes, books, prices, market_avg: marketAvg } = matrix;
+  let html = '<div class="arb-comparison"><table><thead><tr><th>Market</th><th>Mkt Avg</th>';
+  books.forEach((b) => {
+    html += `<th>${escapeHtml(b)}</th>`;
+  });
+  html += "</tr></thead><tbody>";
+  outcomes.forEach((outcome) => {
+    const rowPrices = prices[outcome] || {};
+    const best = Math.max(...Object.values(rowPrices).filter(Boolean), 0);
+    html += `<tr><td>${escapeHtml(outcome)}</td>`;
+    const avg = marketAvg[outcome];
+    html += `<td class="muted-odds">${avg ? formatAmerican(Math.round((avg >= 2 ? (avg - 1) * 100 : -100 / (avg - 1)))) : "—"}</td>`;
+    books.forEach((book) => {
+      const p = rowPrices[book];
+      const cls = p && p >= best - 1e-9 ? "best-odds" : "muted-odds";
+      const am = p ? formatAmerican(p >= 2 ? Math.round((p - 1) * 100) : Math.round(-100 / (p - 1))) : "—";
+      html += `<td class="${cls}">${am}</td>`;
+    });
+    html += "</tr>";
+  });
+  html += "</tbody></table></div>";
+  return html;
+}
+
+function renderArbCard(opp) {
+  const wager = state.filterState.wagerUsd;
+  const { profit, roi, allocated } = profitAndRoi(opp.legs, wager);
+  const card = document.createElement("article");
+  card.className = "arb-card";
+  card.dataset.oppId = opp.id;
+
+  const legsHtml = allocated
+    .map((leg, idx) => {
+      const lineStr = leg.line != null ? ` ${leg.line}` : "";
+      return `
+        <div class="arb-leg" data-leg-idx="${idx}">
+          <div class="arb-leg-book">${escapeHtml(leg.source_display || leg.source)}</div>
+          <div class="arb-leg-outcome">${escapeHtml(leg.outcome)}${lineStr}</div>
+          <div class="arb-leg-odds">${formatAmerican(leg.american)}</div>
+          <div class="arb-leg-avg">Mkt avg ${formatAmerican(leg.market_avg_american)}</div>
+          <div class="arb-stake-row">
+            <span>$</span>
+            <input type="number" class="leg-stake-input" min="1" step="1" value="${leg.stake.toFixed(2)}" data-leg="${idx}" />
+          </div>
+          <div class="arb-payout">Payout ${formatMoney(leg.payout)}</div>
+          ${leg.is_bet_first ? '<span class="bet-first-chip">Bet First</span>' : ""}
+          <button type="button" class="btn-bet-leg" data-source="${escapeHtml(leg.source)}">Bet</button>
+        </div>
+      `;
+    })
+    .join("");
+
+  card.innerHTML = `
+    <header class="arb-card-header">
+      <div class="arb-card-title-wrap">
+        <span class="arb-sport-badge">${escapeHtml(opp.sport_label || opp.sport_key)}</span>
+        <div class="arb-event-name">${escapeHtml(opp.event_name)}</div>
+        <div class="arb-market-meta">${escapeHtml(opp.market_label || opp.market_type)} · ${formatCommence(opp.commence_time)}</div>
+      </div>
+      <div class="arb-roi-pill">+${formatMoney(profit)} · ${roi.toFixed(1)}% ROI</div>
+    </header>
+    <div class="arb-card-body">
+      ${legsHtml}
+      <div class="arb-place-both">
+        <button type="button" class="btn-place-both">⚡ Place Both</button>
+      </div>
+    </div>
+    ${renderComparisonTable(opp.quote_matrix)}
+  `;
+
+  card.querySelector(".btn-place-both")?.addEventListener("click", () => {
+    opp.legs.forEach((leg) => openBook(leg.source));
+  });
+  card.querySelectorAll(".btn-bet-leg").forEach((btn) => {
+    btn.addEventListener("click", () => openBook(btn.dataset.source));
+  });
+
+  return card;
+}
+
+function renderArbCards(opportunities) {
+  el.arbCards.innerHTML = "";
+  if (!opportunities.length) {
+    el.arbCards.classList.add("hidden");
+    return;
+  }
+  el.empty.classList.add("hidden");
+  el.arbCards.classList.remove("hidden");
+  opportunities.forEach((opp) => {
+    el.arbCards.appendChild(renderArbCard(opp));
+  });
+}
+
 function renderScannedEvents(events, summary) {
   el.list.innerHTML = "";
   if (!events.length) {
-    el.empty.classList.remove("hidden");
-    el.list.classList.add("hidden");
+    el.scannedSection.classList.add("hidden");
     const label = state.view === "today" ? "today" : "tomorrow";
     if (summary && summary.events_total > 0) {
       el.emptyMsg.textContent = `No games scheduled for ${label} in this sport.`;
@@ -89,8 +435,7 @@ function renderScannedEvents(events, summary) {
     return;
   }
 
-  el.empty.classList.add("hidden");
-  el.list.classList.remove("hidden");
+  el.scannedSection.classList.remove("hidden");
 
   events.forEach((ev) => {
     const row = document.createElement("div");
@@ -111,7 +456,7 @@ function renderScannedEvents(events, summary) {
       <span class="opp-market">${escapeHtml(ev.market_type)}</span>
       ${right}
     `;
-    if (ev.is_opportunity && ev.legs && ev.legs.length) {
+    if (ev.is_opportunity && ev.legs?.length) {
       row.addEventListener("click", () => openSlip(ev));
       row.style.cursor = "pointer";
     }
@@ -119,42 +464,38 @@ function renderScannedEvents(events, summary) {
   });
 }
 
+function renderFilteredOpportunities() {
+  const filtered = filterOpportunities(state.allOpportunities);
+  el.total.textContent = String(filtered.length);
+  if (filtered.length) {
+    const yields = filtered.map((o) => o.roi_pct || o.yield_pct || 0);
+    el.avg.textContent = formatPct(yields.reduce((a, b) => a + b, 0) / yields.length);
+    el.best.textContent = formatPct(Math.max(...yields));
+  }
+  renderArbCards(filtered);
+}
+
 function renderOpportunities(opportunities, scannedEvents, summary) {
+  state.allOpportunities = opportunities || [];
   if (opportunities.length) {
-    el.list.innerHTML = "";
-    el.empty.classList.add("hidden");
-    el.list.classList.remove("hidden");
-    opportunities.forEach((opp) => {
-    const row = document.createElement("div");
-    row.className = "opp-row";
-    const method = opp.arb_method ? ` · ${opp.arb_method}` : "";
-    row.innerHTML = `
-      <div>
-        <div class="opp-event">${escapeHtml(opp.event_name)}</div>
-        <div class="opp-meta">${escapeHtml(opp.sport_key)} · ${formatCommence(opp.commence_time)}${escapeHtml(method)}</div>
-      </div>
-      <span class="opp-market">${escapeHtml(opp.market_type)}</span>
-      <span class="opp-yield">${formatPct(opp.yield_pct)}</span>
-    `;
-    row.addEventListener("click", () => openSlip(opp));
-    el.list.appendChild(row);
-    });
+    renderFilteredOpportunities();
+    renderScannedEvents(scannedEvents || [], summary);
     return;
   }
+  el.arbCards.classList.add("hidden");
+  el.empty.classList.remove("hidden");
   renderScannedEvents(scannedEvents || [], summary);
 }
 
 function renderSources(sources) {
   el.sourceList.innerHTML = "";
-  if (!sources || !sources.length) {
+  if (!sources?.length) {
     el.sourcesEmpty.classList.remove("hidden");
     el.sourceList.classList.add("hidden");
     return;
   }
-
   el.sourcesEmpty.classList.add("hidden");
   el.sourceList.classList.remove("hidden");
-
   let lastCategory = "";
   sources.forEach((src) => {
     const catLabel = src.category_label || "";
@@ -167,17 +508,15 @@ function renderSources(sources) {
     } else if (src.category === "gateway" && catLabel !== lastCategory) {
       lastCategory = catLabel;
     }
-
     const row = document.createElement("div");
     row.className = "source-row";
-    const pillClass = statusPillClass(src.status);
     row.innerHTML = `
       <div>
         <div class="source-name">${escapeHtml(src.name)}</div>
         <div class="source-channel">${escapeHtml(channelLabel(src.channel))}</div>
         <div class="source-message">${escapeHtml(src.message)}</div>
       </div>
-      <span class="status-pill ${pillClass}">${escapeHtml(src.status_label)}</span>
+      <span class="status-pill ${statusPillClass(src.status)}">${escapeHtml(src.status_label)}</span>
     `;
     el.sourceList.appendChild(row);
   });
@@ -189,44 +528,17 @@ function updatePanels() {
   el.panelSources.classList.toggle("hidden", !isSources);
 }
 
-function escapeHtml(s) {
-  const d = document.createElement("div");
-  d.textContent = s ?? "";
-  return d.innerHTML;
-}
-
-function formatCommence(iso) {
-  if (!iso) return "Time TBD";
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 function openSlip(opp) {
   el.slipTitle.textContent = opp.event_name;
   let yieldLine = `Profit: ${formatPct(opp.yield_pct)}`;
   if (opp.arb_method) yieldLine += ` (${opp.arb_method})`;
   el.slipYield.textContent = yieldLine;
-  if (opp.llm_reasoning) {
-    const note = document.createElement("p");
-    note.className = "slip-note";
-    note.textContent = opp.llm_reasoning;
-    el.slipYield.after(note);
-  }
   el.slipLegs.innerHTML = "";
   (opp.legs || []).forEach((leg) => {
     const li = document.createElement("li");
     li.innerHTML = `
       <strong>${escapeHtml(leg.outcome)}</strong>
-      <span class="leg-detail">${escapeHtml(leg.source)} · ${leg.price.toFixed(2)} decimal · stake ${(leg.stake_weight * 100).toFixed(1)}%</span>
+      <span class="leg-detail">${escapeHtml(leg.source_display || leg.source)} · ${leg.price?.toFixed?.(2) ?? leg.price} decimal</span>
     `;
     el.slipLegs.appendChild(li);
   });
@@ -235,18 +547,25 @@ function openSlip(opp) {
 
 function applyPayload(data) {
   const stats = data.stats || {};
-  el.total.textContent = String(stats.total_opportunities ?? 0);
-  el.avg.textContent = formatPct(stats.avg_profit_pct ?? 0);
-  el.best.textContent = formatPct(stats.best_available_pct ?? 0);
+  if (!(data.opportunities || []).length) {
+    el.total.textContent = String(stats.total_opportunities ?? 0);
+    el.avg.textContent = formatPct(stats.avg_profit_pct ?? 0);
+    el.best.textContent = formatPct(stats.best_available_pct ?? 0);
+  }
 
   const counts = data.counts || {};
   el.countToday.textContent = String(counts.today ?? 0);
   el.countTomorrow.textContent = String(counts.tomorrow ?? 0);
-
-  const summary = data.source_summary || {};
-  el.countSourcesLoaded.textContent = String(summary.loaded ?? 0);
-
+  el.countSourcesLoaded.textContent = String(data.source_summary?.loaded ?? 0);
   el.lastRun.textContent = formatLastRun(data.last_run_at);
+
+  if (data.filter_options) {
+    state.filterOptions = data.filter_options;
+    populateFilterLists();
+  }
+  if (data.defaults) {
+    state.defaults = data.defaults;
+  }
 
   if (data.error && state.view !== "sources") {
     el.error.textContent = data.error;
@@ -266,41 +585,26 @@ function applyPayload(data) {
       if (hint && s.events_total) {
         hint.textContent =
           `Scanned ${s.events_total} event(s), ${s.sources_loaded} books loaded. ` +
-          `No arb above threshold for this tab — see game list above or Sources tab.`;
+          `No arb above threshold — use Filters or see scanned games below.`;
       }
     }
   }
 
   renderSources(data.sources || []);
   updatePanels();
-  const statusText = data.run_status || (data.running ? "Running pipeline…" : "");
-  setLoading(Boolean(data.running), statusText);
-
-  if (data.running && data.run_status) {
-    el.error.classList.add("hidden");
-  }
+  setLoading(Boolean(data.running), data.run_status || (data.running ? "Running pipeline…" : ""));
 }
 
 async function fetchStatus() {
   const day = state.view === "tomorrow" ? "tomorrow" : "today";
   const res = await fetch(`/api/status?day=${day}`);
   const text = await res.text();
-  if (!res.ok) {
-    throw new Error(text || res.statusText);
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error("Invalid response from server");
-  }
+  if (!res.ok) throw new Error(text || res.statusText);
+  return JSON.parse(text);
 }
 
 async function triggerRun() {
-  const res = await fetch("/api/run", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  });
+  const res = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || res.statusText);
@@ -316,6 +620,13 @@ async function forceResetRun() {
   }
 }
 
+function stopPolling() {
+  if (state.polling) {
+    clearInterval(state.polling);
+    state.polling = null;
+  }
+}
+
 function startPolling() {
   stopPolling();
   state.pollStartedAt = Date.now();
@@ -324,39 +635,21 @@ function startPolling() {
       stopPolling();
       await forceResetRun();
       setLoading(false);
-      el.error.textContent =
-        "Run took too long and was stopped. Try turning off LLM in harvester/.env " +
-        "(HARVESTER_USE_LLM_ARBITRAGE=false) or ensure Ollama is running.";
+      el.error.textContent = "Run took too long and was stopped.";
       el.error.classList.remove("hidden");
       return;
     }
     try {
       const data = await fetchStatus();
       applyPayload(data);
-      if (!data.running) {
-        stopPolling();
-        if (data.error) {
-          el.error.textContent = data.error;
-          el.error.classList.remove("hidden");
-        }
-      }
+      if (!data.running) stopPolling();
     } catch (e) {
-      console.error(e);
       stopPolling();
       setLoading(false);
-      el.error.textContent =
-        "Could not reach server during run. Restart web_app.py and try again. " +
-        (e.message || String(e));
+      el.error.textContent = e.message || String(e);
       el.error.classList.remove("hidden");
     }
   }, 2000);
-}
-
-function stopPolling() {
-  if (state.polling) {
-    clearInterval(state.polling);
-    state.polling = null;
-  }
 }
 
 async function onRefresh() {
@@ -364,8 +657,7 @@ async function onRefresh() {
     setLoading(true);
     await triggerRun();
     startPolling();
-    const data = await fetchStatus();
-    applyPayload(data);
+    applyPayload(await fetchStatus());
   } catch (e) {
     el.error.textContent = e.message || String(e);
     el.error.classList.remove("hidden");
@@ -383,8 +675,7 @@ el.tabs.forEach((tab) => {
     });
     updatePanels();
     try {
-      const data = await fetchStatus();
-      applyPayload(data);
+      applyPayload(await fetchStatus());
     } catch (e) {
       console.error(e);
     }
@@ -393,6 +684,38 @@ el.tabs.forEach((tab) => {
 
 el.refreshBtn.addEventListener("click", onRefresh);
 el.slipClose.addEventListener("click", () => el.slipDialog.close());
+el.btnFilters.addEventListener("click", openFilters);
+el.filtersClose.addEventListener("click", closeFilters);
+el.filtersBackdrop.addEventListener("click", closeFilters);
+
+el.filterApply.addEventListener("click", () => {
+  readFiltersFromUi();
+  savePreset();
+  renderFilteredOpportunities();
+  updateFilterBadges();
+  closeFilters();
+});
+
+el.filterReset.addEventListener("click", resetFilters);
+el.filterSave.addEventListener("click", () => {
+  readFiltersFromUi();
+  savePreset();
+  updateFilterBadges();
+});
+
+el.filterWager.addEventListener("change", () => {
+  state.filterState.wagerUsd = Number(el.filterWager.value) || 1000;
+  renderFilteredOpportunities();
+});
+
+document.querySelectorAll(".filter-section-toggle").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const body = btn.parentElement.querySelector(".filter-section-body");
+    body?.classList.toggle("filter-section-body--open");
+  });
+});
+
+loadPreset();
 
 (async function init() {
   updatePanels();
@@ -400,7 +723,7 @@ el.slipClose.addEventListener("click", () => el.slipDialog.close());
     const data = await fetchStatus();
     applyPayload(data);
     if (data.running) startPolling();
-  } catch (e) {
+  } catch {
     el.error.textContent = "Could not load dashboard. Is the server running?";
     el.error.classList.remove("hidden");
   }

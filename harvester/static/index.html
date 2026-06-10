@@ -10,10 +10,15 @@
   <div class="page">
     <header class="top-bar">
       <div class="brand">Arbitrage</div>
-      <button type="button" id="btn-refresh" class="btn-refresh" aria-label="Refresh run">
-        <span class="btn-refresh-icon" aria-hidden="true">↻</span>
-        <span id="btn-refresh-label">Refresh run</span>
-      </button>
+      <div class="top-bar-actions">
+        <button type="button" id="btn-filters" class="btn-filters" aria-label="Open filters">
+          Filters <span class="badge badge--filter" id="filter-active-badge">0</span>
+        </button>
+        <button type="button" id="btn-refresh" class="btn-refresh" aria-label="Refresh run">
+          <span class="btn-refresh-icon" aria-hidden="true">↻</span>
+          <span id="btn-refresh-label">Refresh run</span>
+        </button>
+      </div>
     </header>
 
     <section class="stats-row">
@@ -78,7 +83,11 @@
           <p id="empty-message">No opportunities for today.</p>
           <p class="empty-hint">Click <strong>Refresh run</strong> to fetch odds. Real arbs are rare — scanned games still appear below.</p>
         </div>
-        <div class="opp-list hidden" id="opp-list"></div>
+        <div class="arb-cards hidden" id="arb-cards"></div>
+        <div class="scanned-section hidden" id="scanned-section">
+          <h2 class="scanned-heading">Scanned events</h2>
+          <div class="opp-list" id="opp-list"></div>
+        </div>
       </div>
 
       <div class="list-wrap hidden" id="panel-sources">
@@ -93,6 +102,54 @@
       <p class="error-banner hidden" id="error-banner"></p>
     </section>
   </div>
+
+  <div id="filters-backdrop" class="filters-backdrop hidden" aria-hidden="true"></div>
+  <aside id="filters-panel" class="filters-panel" aria-label="Filters" aria-hidden="true">
+    <header class="filters-header">
+      <h2>Filters</h2>
+      <button type="button" id="filters-close" class="filters-close" aria-label="Close filters">×</button>
+    </header>
+    <div class="filters-body">
+      <label class="filter-field">
+        <span class="filter-label">Wager Amount</span>
+        <div class="wager-input-wrap">
+          <span class="wager-prefix">$</span>
+          <input type="number" id="filter-wager" min="100" max="50000" step="100" value="1000" />
+        </div>
+      </label>
+      <fieldset class="filter-field">
+        <legend class="filter-label">Sort By</legend>
+        <label class="radio-row"><input type="radio" name="sort-by" value="roi_pct" checked /> ROI %</label>
+        <label class="radio-row"><input type="radio" name="sort-by" value="profit_usd" /> Profit $</label>
+      </fieldset>
+      <section class="filter-section" data-section="sportsbooks">
+        <button type="button" class="filter-section-toggle">
+          <span>Sportsbooks</span>
+          <span class="filter-section-badge" id="badge-sportsbooks">0 Selected</span>
+        </button>
+        <div class="filter-section-body filter-section-body--open" id="list-sportsbooks"></div>
+      </section>
+      <section class="filter-section" data-section="leagues">
+        <button type="button" class="filter-section-toggle">
+          <span>Sports &amp; Leagues</span>
+          <span class="filter-section-badge" id="badge-leagues">0 Selected</span>
+        </button>
+        <div class="filter-section-body filter-section-body--open" id="list-leagues"></div>
+      </section>
+      <section class="filter-section" data-section="markets">
+        <button type="button" class="filter-section-toggle">
+          <span>Market Type</span>
+          <span class="filter-section-badge" id="badge-markets">0 Selected</span>
+        </button>
+        <div class="filter-section-body filter-section-body--open filter-section-body--scroll" id="list-markets"></div>
+      </section>
+    </div>
+    <footer class="filters-footer">
+      <button type="button" id="filter-reset" class="btn-text">Reset all</button>
+      <button type="button" id="filter-save" class="btn-outline">Save Preset</button>
+      <button type="button" id="filter-apply" class="btn-primary">Apply Filters</button>
+    </footer>
+  </aside>
 
   <dialog id="slip-dialog" class="slip-dialog">
     <div class="slip-dialog-inner">

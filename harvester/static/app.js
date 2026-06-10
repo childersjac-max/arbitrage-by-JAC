@@ -13,10 +13,15 @@ const STORAGE_KEY = "arb_filter_preset";
 
 const state = {
   view: "today",
+  viewMode: "arbs",
+  timing: "pregame",
   polling: null,
   pollStartedAt: 0,
   maxPollMs: 12 * 60 * 1000,
+  autoRefreshTimer: null,
   allOpportunities: [],
+  scannedEvents: [],
+  runSummary: null,
   filterOptions: null,
   defaults: { wager_usd: 1000, sort_by: "roi_pct" },
   filterState: {
@@ -70,6 +75,16 @@ const el = {
   badgeSportsbooks: document.getElementById("badge-sportsbooks"),
   badgeLeagues: document.getElementById("badge-leagues"),
   badgeMarkets: document.getElementById("badge-markets"),
+  metricBooks: document.getElementById("metric-books"),
+  metricLeagues: document.getElementById("metric-leagues"),
+  ingameNotice: document.getElementById("ingame-notice"),
+  presetsDropdown: document.getElementById("presets-dropdown"),
+  presetsMenu: document.getElementById("presets-menu"),
+  presetsTrigger: document.getElementById("presets-trigger"),
+  autoRefreshToggle: document.getElementById("auto-refresh-toggle"),
+  navSources: document.getElementById("nav-sources"),
+  segmentMode: document.getElementById("segment-mode"),
+  segmentTiming: document.getElementById("segment-timing"),
 };
 
 function formatPct(n) {
@@ -420,15 +435,30 @@ function renderArbCards(opportunities) {
   });
 }
 
+function sortLowHoldEvents(events) {
+  return [...events].sort((a, b) => {
+    const av = a.overround_pct ?? 999;
+    const bv = b.overround_pct ?? 999;
+    return av - bv;
+  });
+}
+
 function renderScannedEvents(events, summary) {
   el.list.innerHTML = "";
-  if (!events.length) {
-    el.scannedSection.classList.add("hidden");
+  const showLowHold = state.viewMode === "lowhold";
+  const sorted = showLowHold ? sortLowHoldEvents(events) : events;
+
+  if (!sorted.length) {
+    if (!showLowHold && state.viewMode === "arbs") {
+      el.scannedSection.classList.add("hidden");
+    }
     const label = state.view === "today" ? "today" : "tomorrow";
-    if (summary && summary.events_total > 0) {
-      el.emptyMsg.textContent = `No games scheduled for ${label} in this sport.`;
+    if (summary && summary.events_total > 0 && state.viewMode === "arbs") {
+      el.emptyMsg.textContent = `No arbitrage opportunities for ${label}.`;
       el.empty.querySelector(".empty-hint").textContent =
-        `Scanned ${summary.events_total} total event(s) · ${summary.sources_loaded} source(s) loaded. Try Tomorrow tab.`;
+        `Scanned ${summary.events_total} event(s) · ${summary.sources_loaded} source(s). Try Low Hold or Filters.`;
+    } else if (!sorted.length && showLowHold) {
+      el.scannedSection.classList.add("hidden");
     } else {
       el.emptyMsg.textContent = `No data for ${label}.`;
     }
@@ -436,8 +466,12 @@ function renderScannedEvents(events, summary) {
   }
 
   el.scannedSection.classList.remove("hidden");
+  if (showLowHold) {
+    el.empty.classList.add("hidden");
+    el.arbCards.classList.add("hidden");
+  }
 
-  events.forEach((ev) => {
+  sorted.forEach((ev) => {
     const row = document.createElement("div");
     row.className = ev.is_opportunity ? "opp-row" : "opp-row opp-row--scan";
     let right = "";
@@ -464,27 +498,66 @@ function renderScannedEvents(events, summary) {
   });
 }
 
+function updateMetricStrip() {
+  const books = state.filterOptions?.sportsbooks?.length ?? 0;
+  const leagues = state.filterOptions?.sports_leagues?.length ?? 0;
+  if (el.metricBooks) el.metricBooks.textContent = String(books || state.runSummary?.sources_loaded || 0);
+  if (el.metricLeagues) el.metricLeagues.textContent = String(leagues);
+}
+
 function renderFilteredOpportunities() {
+  if (state.timing === "ingame") return;
   const filtered = filterOpportunities(state.allOpportunities);
   el.total.textContent = String(filtered.length);
   if (filtered.length) {
     const yields = filtered.map((o) => o.roi_pct || o.yield_pct || 0);
     el.avg.textContent = formatPct(yields.reduce((a, b) => a + b, 0) / yields.length);
     el.best.textContent = formatPct(Math.max(...yields));
+  } else if (state.runSummary) {
+    el.avg.textContent = formatPct(0);
+    el.best.textContent = formatPct(0);
   }
-  renderArbCards(filtered);
+  if (state.viewMode === "arbs") {
+    renderArbCards(filtered);
+    if (!filtered.length) {
+      el.empty.classList.remove("hidden");
+    }
+  }
+}
+
+function renderMainView() {
+  if (state.timing === "ingame") {
+    el.ingameNotice?.classList.remove("hidden");
+    el.arbCards.classList.add("hidden");
+    el.scannedSection.classList.add("hidden");
+    el.empty.classList.add("hidden");
+    return;
+  }
+  el.ingameNotice?.classList.add("hidden");
+
+  if (state.viewMode === "lowhold") {
+    el.arbCards.classList.add("hidden");
+    renderScannedEvents(state.scannedEvents, state.runSummary);
+    if (!state.scannedEvents.length) {
+      el.empty.classList.remove("hidden");
+      el.emptyMsg.textContent = "No scanned markets for this tab.";
+    }
+    return;
+  }
+
+  renderFilteredOpportunities();
+  if (state.allOpportunities.length) {
+    renderScannedEvents(state.scannedEvents, state.runSummary);
+  } else {
+    renderScannedEvents(state.scannedEvents, state.runSummary);
+  }
 }
 
 function renderOpportunities(opportunities, scannedEvents, summary) {
   state.allOpportunities = opportunities || [];
-  if (opportunities.length) {
-    renderFilteredOpportunities();
-    renderScannedEvents(scannedEvents || [], summary);
-    return;
-  }
-  el.arbCards.classList.add("hidden");
-  el.empty.classList.remove("hidden");
-  renderScannedEvents(scannedEvents || [], summary);
+  state.scannedEvents = scannedEvents || [];
+  state.runSummary = summary || null;
+  renderMainView();
 }
 
 function renderSources(sources) {
@@ -526,6 +599,49 @@ function updatePanels() {
   const isSources = state.view === "sources";
   el.panelOpportunities.classList.toggle("hidden", isSources);
   el.panelSources.classList.toggle("hidden", !isSources);
+  document.querySelectorAll(".os-nav-link").forEach((link) => {
+    const nav = link.dataset.nav;
+    link.classList.toggle("os-nav-link--active", (nav === "sources") === isSources);
+  });
+}
+
+function setViewMode(mode) {
+  state.viewMode = mode;
+  el.segmentMode?.querySelectorAll(".os-segment-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  });
+  renderMainView();
+}
+
+function setTiming(timing) {
+  state.timing = timing;
+  el.segmentTiming?.querySelectorAll(".os-segment-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.timing === timing);
+  });
+  renderMainView();
+}
+
+function togglePresetsMenu(open) {
+  let show = open;
+  if (show === undefined) {
+    show = el.presetsMenu?.classList.contains("hidden");
+  }
+  el.presetsMenu?.classList.toggle("hidden", !show);
+  el.presetsTrigger?.setAttribute("aria-expanded", show ? "true" : "false");
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  state.autoRefreshTimer = setInterval(() => {
+    onRefresh().catch(() => {});
+  }, 60000);
+}
+
+function stopAutoRefresh() {
+  if (state.autoRefreshTimer) {
+    clearInterval(state.autoRefreshTimer);
+    state.autoRefreshTimer = null;
+  }
 }
 
 function openSlip(opp) {
@@ -562,6 +678,7 @@ function applyPayload(data) {
   if (data.filter_options) {
     state.filterOptions = data.filter_options;
     populateFilterLists();
+    updateMetricStrip();
   }
   if (data.defaults) {
     state.defaults = data.defaults;
@@ -665,21 +782,63 @@ async function onRefresh() {
   }
 }
 
-el.tabs.forEach((tab) => {
-  tab.addEventListener("click", async () => {
-    state.view = tab.dataset.view;
-    el.tabs.forEach((t) => {
-      const active = t === tab;
-      t.classList.toggle("active", active);
-      t.setAttribute("aria-selected", active ? "true" : "false");
-    });
-    updatePanels();
-    try {
-      applyPayload(await fetchStatus());
-    } catch (e) {
-      console.error(e);
-    }
+async function switchView(view) {
+  state.view = view;
+  el.tabs.forEach((t) => {
+    const active = t.dataset.view === view;
+    t.classList.toggle("active", active);
+    t.setAttribute("aria-selected", active ? "true" : "false");
   });
+  updatePanels();
+  try {
+    applyPayload(await fetchStatus());
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+el.tabs.forEach((tab) => {
+  tab.addEventListener("click", () => switchView(tab.dataset.view));
+});
+
+el.navSources?.addEventListener("click", () => switchView("sources"));
+document.querySelector('.os-nav-link[data-nav="arbitrage"]')?.addEventListener("click", () => switchView("today"));
+
+el.segmentMode?.querySelectorAll(".os-segment-btn").forEach((btn) => {
+  btn.addEventListener("click", () => setViewMode(btn.dataset.mode));
+});
+
+el.segmentTiming?.querySelectorAll(".os-segment-btn").forEach((btn) => {
+  btn.addEventListener("click", () => setTiming(btn.dataset.timing));
+});
+
+el.presetsTrigger?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  togglePresetsMenu();
+});
+
+el.presetsMenu?.querySelectorAll(".os-dropdown-item").forEach((item) => {
+  item.addEventListener("click", () => {
+    togglePresetsMenu(false);
+    if (item.dataset.preset === "load") loadPreset();
+    if (item.dataset.preset === "save") {
+      readFiltersFromUi();
+      savePreset();
+      updateFilterBadges();
+    }
+    if (item.dataset.preset === "reset") resetFilters();
+    populateFilterLists();
+    renderMainView();
+  });
+});
+
+document.addEventListener("click", (e) => {
+  if (!el.presetsDropdown?.contains(e.target)) togglePresetsMenu(false);
+});
+
+el.autoRefreshToggle?.addEventListener("change", () => {
+  if (el.autoRefreshToggle.checked) startAutoRefresh();
+  else stopAutoRefresh();
 });
 
 el.refreshBtn.addEventListener("click", onRefresh);

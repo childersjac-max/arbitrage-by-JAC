@@ -3,106 +3,155 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Live Arbitrage Finder</title>
+  <title>Arbitrage Bet Finder Tool</title>
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <div class="page">
-    <header class="top-bar">
-      <div class="brand">Arbitrage</div>
-      <div class="top-bar-actions">
-        <button type="button" id="btn-filters" class="btn-filters" aria-label="Open filters">
-          Filters <span class="badge badge--filter" id="filter-active-badge">0</span>
-        </button>
-        <button type="button" id="btn-refresh" class="btn-refresh" aria-label="Refresh run">
-          <span class="btn-refresh-icon" aria-hidden="true">↻</span>
-          <span id="btn-refresh-label">Refresh run</span>
-        </button>
+  <div class="os-app">
+    <!-- Top app bar (OddsShopper-style) -->
+    <header class="os-header">
+      <div class="os-header-inner">
+        <a class="os-logo" href="/" aria-label="Home">
+          <span class="os-logo-mark">OS</span>
+          <span class="os-logo-text">Arbitrage <em>Finder</em></span>
+        </a>
+        <nav class="os-nav" aria-label="Main">
+          <button type="button" class="os-nav-link os-nav-link--active" data-nav="arbitrage">Arbitrage</button>
+          <button type="button" class="os-nav-link" data-nav="sources" id="nav-sources">Sources</button>
+        </nav>
+        <div class="os-header-actions">
+          <button type="button" id="btn-refresh" class="os-btn os-btn--ghost" aria-label="Refresh run">
+            <span class="btn-refresh-icon" aria-hidden="true">↻</span>
+            <span id="btn-refresh-label">Refresh</span>
+          </button>
+        </div>
       </div>
     </header>
 
-    <section class="stats-row">
-      <article class="stat-card stat-card--blue">
-        <div class="stat-card-accent"></div>
-        <div class="stat-card-body">
-          <div class="stat-card-top">
-            <span class="stat-label">Total Opportunities</span>
-            <svg class="stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 12h4l3-9 4 18 3-9h4"/>
+    <main class="os-main">
+      <!-- Page title -->
+      <div class="os-page-head">
+        <h1 class="os-page-title">Arbitrage Bet Finder Tool</h1>
+        <p class="os-page-meta" id="last-run"></p>
+      </div>
+
+      <!-- Primary toolbar: mode toggles + Filters / Presets / Auto Refresh -->
+      <div class="os-toolbar">
+        <div class="os-toolbar-group">
+          <div class="os-segment" role="group" aria-label="View mode" id="segment-mode">
+            <button type="button" class="os-segment-btn active" data-mode="arbs">Arbs Only</button>
+            <button type="button" class="os-segment-btn" data-mode="lowhold">Low Hold</button>
+          </div>
+          <div class="os-segment" role="group" aria-label="Game timing" id="segment-timing">
+            <button type="button" class="os-segment-btn active" data-timing="pregame">Pre-Game</button>
+            <button type="button" class="os-segment-btn" data-timing="ingame">In-Game</button>
+          </div>
+        </div>
+        <div class="os-toolbar-group os-toolbar-group--right">
+          <button type="button" id="btn-filters" class="os-btn os-btn--outline">
+            <svg class="os-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M4 6h16M7 12h10M10 18h4"/>
             </svg>
+            Filters
+            <span class="os-badge" id="filter-active-badge">0</span>
+          </button>
+          <div class="os-dropdown" id="presets-dropdown">
+            <button type="button" class="os-btn os-btn--outline os-dropdown-trigger" id="presets-trigger" aria-expanded="false" aria-haspopup="true">
+              Presets
+              <svg class="os-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="os-dropdown-menu hidden" id="presets-menu" role="menu">
+              <button type="button" class="os-dropdown-item" data-preset="load" role="menuitem">Load saved preset</button>
+              <button type="button" class="os-dropdown-item" data-preset="save" role="menuitem">Save current preset</button>
+              <button type="button" class="os-dropdown-item" data-preset="reset" role="menuitem">Reset to defaults</button>
+            </div>
           </div>
-          <p class="stat-value" id="stat-total">0</p>
-        </div>
-      </article>
-
-      <article class="stat-card stat-card--purple">
-        <div class="stat-card-accent"></div>
-        <div class="stat-card-body">
-          <div class="stat-card-top">
-            <span class="stat-label">Avg Profit</span>
-            <span class="stat-icon stat-icon--text">%</span>
-          </div>
-          <p class="stat-value" id="stat-avg">0.00%</p>
-        </div>
-      </article>
-
-      <article class="stat-card stat-card--green">
-        <div class="stat-card-accent"></div>
-        <div class="stat-card-body">
-          <div class="stat-card-top">
-            <span class="stat-label">Best Available</span>
-          </div>
-          <p class="stat-value stat-value--green" id="stat-best">0.00%</p>
-        </div>
-      </article>
-    </section>
-
-    <section class="main-panel">
-      <div class="main-panel-header">
-        <div>
-          <h1>Live Arbitrage Finder</h1>
-          <p class="subtitle">Tap any row to open the bet slip — fast mode uses Odds API + math (no Ollama wait)</p>
-        </div>
-        <p class="last-run" id="last-run"></p>
-      </div>
-
-      <div class="tabs" role="tablist">
-        <button type="button" class="tab active" data-view="today" role="tab" aria-selected="true">
-          Today <span class="badge" id="count-today">0</span>
-        </button>
-        <button type="button" class="tab" data-view="tomorrow" role="tab" aria-selected="false">
-          Tomorrow <span class="badge" id="count-tomorrow">0</span>
-        </button>
-        <button type="button" class="tab" data-view="sources" role="tab" aria-selected="false">
-          Sources <span class="badge badge--muted" id="count-sources-loaded">0</span>
-        </button>
-      </div>
-
-      <div class="list-wrap" id="panel-opportunities">
-        <div class="empty-state" id="empty-state">
-          <p id="empty-message">No opportunities for today.</p>
-          <p class="empty-hint">Click <strong>Refresh run</strong> to fetch odds. Real arbs are rare — scanned games still appear below.</p>
-        </div>
-        <div class="arb-cards hidden" id="arb-cards"></div>
-        <div class="scanned-section hidden" id="scanned-section">
-          <h2 class="scanned-heading">Scanned events</h2>
-          <div class="opp-list" id="opp-list"></div>
+          <label class="os-toggle" title="Auto refresh every 60s">
+            <input type="checkbox" id="auto-refresh-toggle" />
+            <span class="os-toggle-track"></span>
+            <span class="os-toggle-label">Auto Refresh</span>
+          </label>
         </div>
       </div>
 
-      <div class="list-wrap hidden" id="panel-sources">
-        <p class="sources-intro">Books and platforms considered for arbitrage on the last refresh.</p>
+      <!-- Trust / capability strip (OddsShopper-style) -->
+      <div class="os-capability-strip">
+        <div class="os-capability">
+          <span class="os-capability-value" id="metric-books">0</span>
+          <span class="os-capability-label">books</span>
+        </div>
+        <div class="os-capability-divider"></div>
+        <div class="os-capability">
+          <span class="os-capability-value" id="metric-leagues">0</span>
+          <span class="os-capability-label">leagues</span>
+        </div>
+        <div class="os-capability-divider"></div>
+        <div class="os-capability">
+          <span class="os-capability-value os-capability-value--green" id="stat-total">0</span>
+          <span class="os-capability-label">arbs found</span>
+        </div>
+        <div class="os-capability-divider"></div>
+        <div class="os-capability">
+          <span class="os-capability-value os-capability-value--green" id="stat-best">0.00%</span>
+          <span class="os-capability-label">best ROI</span>
+        </div>
+        <div class="os-capability-divider"></div>
+        <div class="os-capability">
+          <span class="os-capability-value" id="stat-avg">0.00%</span>
+          <span class="os-capability-label">avg profit</span>
+        </div>
+        <div class="os-capability os-capability--tag">Guaranteed profit</div>
+        <div class="os-capability os-capability--tag">Auto stake math</div>
+      </div>
+
+      <!-- Day / schedule tabs -->
+      <div class="os-subtabs" role="tablist">
+        <button type="button" class="os-subtab tab active" data-view="today" role="tab" aria-selected="true">
+          Today <span class="os-count" id="count-today">0</span>
+        </button>
+        <button type="button" class="os-subtab tab" data-view="tomorrow" role="tab" aria-selected="false">
+          Tomorrow <span class="os-count" id="count-tomorrow">0</span>
+        </button>
+        <button type="button" class="os-subtab tab" data-view="sources" role="tab" aria-selected="false">
+          Sources <span class="os-count os-count--muted" id="count-sources-loaded">0</span>
+        </button>
+      </div>
+
+      <!-- In-game notice (hidden by default) -->
+      <div class="os-notice hidden" id="ingame-notice">
+        <p>Live in-game arbitrage requires real-time odds streaming. Pre-game arbs are shown when <strong>Pre-Game</strong> is selected.</p>
+      </div>
+
+      <!-- Results panel -->
+      <section class="os-results-card" id="panel-opportunities">
+        <div class="os-results-inner">
+          <div class="empty-state" id="empty-state">
+            <div class="os-empty-icon" aria-hidden="true">◎</div>
+            <p id="empty-message">No arbitrage opportunities right now.</p>
+            <p class="empty-hint">Click <strong>Refresh</strong> to scan 110+ market types across US books. Real arbs are rare — switch to <strong>Low Hold</strong> to browse scanned games.</p>
+          </div>
+          <div class="arb-cards" id="arb-cards"></div>
+          <div class="scanned-section hidden" id="scanned-section">
+            <h2 class="scanned-heading">Low hold markets</h2>
+            <div class="opp-list" id="opp-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="os-results-card hidden" id="panel-sources">
+        <p class="sources-intro">Sportsbooks and data sources on the last refresh.</p>
         <div class="empty-state" id="sources-empty">
           <p>No source status yet.</p>
-          <p class="empty-hint">Click <strong>Refresh run</strong> to load sportsbook status.</p>
+          <p class="empty-hint">Click <strong>Refresh</strong> to load sportsbook status.</p>
         </div>
         <div class="source-list hidden" id="source-list"></div>
-      </div>
+      </section>
 
       <p class="error-banner hidden" id="error-banner"></p>
-    </section>
+    </main>
   </div>
 
+  <!-- Filters slide-over (OddsShopper-style) -->
   <div id="filters-backdrop" class="filters-backdrop hidden" aria-hidden="true"></div>
   <aside id="filters-panel" class="filters-panel" aria-label="Filters" aria-hidden="true">
     <header class="filters-header">

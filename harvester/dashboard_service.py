@@ -421,8 +421,8 @@ def build_dashboard_payload(
             "day": day,
             "stats": _compute_stats(active),
             "counts": {
-                "today": events_today,
-                "tomorrow": events_tomorrow,
+                "today": len(today_opps),
+                "tomorrow": len(tomorrow_opps),
             },
             "opportunities": active,
             "run_summary": run_summary,

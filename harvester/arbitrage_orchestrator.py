@@ -21,7 +21,12 @@ from integrator_factory import IntegratorFactory
 from llm_arbitrage import filter_records_to_target_sources
 from models import UnifiedRecord
 from models_depth import IngestionSnapshot
-from odds_api_fetch import fetch_odds_api_multi_market
+from odds_api_fetch import (
+  discover_and_resolve_sport_keys,
+  fetch_odds_api_all_sports,
+  fetch_odds_api_multi_market,
+  resolve_sport_keys,
+)
 from settings import get_settings
 from snapshot_builder import build_snapshot
 from source_status import build_source_report
@@ -36,14 +41,26 @@ async def run_ingestion(
   markets: list[str] | None = None,
 ) -> tuple[list[UnifiedRecord], IngestionSnapshot]:
   settings = get_settings()
-  sport = sport_key or settings.default_sport_key
   market_list = markets or [m.strip() for m in settings.odds_api_markets.split(",") if m.strip()]
 
   factory = IntegratorFactory()
   errors: list[str] = []
 
   try:
-    records = await fetch_odds_api_multi_market(factory, sport, market_list)
+    if sport_key:
+      sport_keys = [sport_key]
+    elif settings.odds_api_sports.strip():
+      sport_keys = resolve_sport_keys(settings)
+    elif (settings.odds_api_sports_mode or "").strip().lower() in {"all_active", "all"}:
+      sport_keys = await discover_and_resolve_sport_keys(factory)
+    else:
+      sport_keys = [settings.default_sport_key]
+
+    if len(sport_keys) == 1:
+      records = await fetch_odds_api_multi_market(factory, sport_keys[0], market_list)
+    else:
+      records = await fetch_odds_api_all_sports(factory, sport_keys, market_list)
+
     records = filter_records_to_target_sources(records)
 
     for src in factory.direct_only_sources():
@@ -66,7 +83,8 @@ async def run_ingestion(
     report = build_source_report(records)
     status_map = {row["key"]: row["status_label"] for row in report}
 
-    snapshot = build_snapshot(records, sport_key=sport, source_status=status_map, errors=errors)
+    snapshot_sport = sport_keys[0] if len(sport_keys) == 1 else "multi"
+    snapshot = build_snapshot(records, sport_key=snapshot_sport, source_status=status_map, errors=errors)
     return records, snapshot
   finally:
     await factory.close()

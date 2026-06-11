@@ -77,6 +77,7 @@ const el = {
   badgeMarkets: document.getElementById("badge-markets"),
   metricBooks: document.getElementById("metric-books"),
   metricLeagues: document.getElementById("metric-leagues"),
+  metricCombinations: document.getElementById("metric-combinations"),
   ingameNotice: document.getElementById("ingame-notice"),
   presetsDropdown: document.getElementById("presets-dropdown"),
   presetsMenu: document.getElementById("presets-menu"),
@@ -100,6 +101,10 @@ function setVisible(node, visible) {
 
 function formatPct(n) {
   return `${Number(n).toFixed(2)}%`;
+}
+
+function formatNumber(n) {
+  return Number(n || 0).toLocaleString();
 }
 
 function formatMoney(n) {
@@ -515,9 +520,12 @@ function renderScannedEvents(events, summary) {
 
 function updateMetricStrip() {
   const books = state.filterOptions?.sportsbooks?.length ?? 0;
-  const leagues = state.filterOptions?.sports_leagues?.length ?? 0;
+  const scan = state.runSummary?.scan_stats;
+  const leagues = scan?.leagues_scanned ?? state.filterOptions?.sports_leagues?.length ?? 0;
+  const combinations = scan?.combinations_considered ?? 0;
   if (el.metricBooks) el.metricBooks.textContent = String(books || state.runSummary?.sources_loaded || 0);
   if (el.metricLeagues) el.metricLeagues.textContent = String(leagues);
+  if (el.metricCombinations) el.metricCombinations.textContent = formatNumber(combinations);
 }
 
 function renderFilteredOpportunities() {
@@ -572,6 +580,7 @@ function renderOpportunities(opportunities, scannedEvents, summary) {
   state.allOpportunities = opportunities || [];
   state.scannedEvents = scannedEvents || [];
   state.runSummary = summary || null;
+  updateMetricStrip();
   renderMainView();
 }
 
@@ -693,7 +702,6 @@ function applyPayload(data) {
   if (data.filter_options) {
     state.filterOptions = data.filter_options;
     populateFilterLists();
-    updateMetricStrip();
   }
   if (data.defaults) {
     state.defaults = data.defaults;
@@ -723,6 +731,7 @@ function applyPayload(data) {
   }
 
   renderSources(data.sources || []);
+  updateMetricStrip();
   updatePanels();
   setLoading(Boolean(data.running), data.run_status || (data.running ? "Running pipeline…" : ""));
 }

@@ -50,6 +50,29 @@ class OddsApiIntegrator(OddsIntegrator):
             await self._client.aclose()
             self._client = None
 
+    async def list_active_sports(self, *, all_sports: bool = False) -> list[str]:
+        """Return sport keys where active==true (in-season or all catalog)."""
+        settings = get_settings()
+        if not settings.odds_api_key:
+            raise RuntimeError("Set ODDS_API_KEY in harvester/.env or the environment")
+
+        client = await self._get_client()
+        params: dict[str, str] = {"apiKey": settings.odds_api_key}
+        if all_sports:
+            params["all"] = "true"
+        resp = await client.get("/v4/sports", params=params)
+        resp.raise_for_status()
+        keys: list[str] = []
+        for item in resp.json():
+            if not isinstance(item, dict):
+                continue
+            if not item.get("active"):
+                continue
+            key = str(item.get("key") or "").strip()
+            if key:
+                keys.append(key)
+        return keys
+
     async def health_check(self) -> tuple[bool, str]:
         settings = get_settings()
         if not settings.odds_api_key:

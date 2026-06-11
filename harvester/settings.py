@@ -30,6 +30,26 @@ class HarvesterSettings(BaseSettings):
         default="h2h,spreads,totals",
         validation_alias="ODDS_API_MARKETS",
     )
+    odds_api_sports_mode: str = Field(
+        default="single",
+        validation_alias="ODDS_API_SPORTS_MODE",
+    )
+    odds_api_sports: str = Field(
+        default="",
+        validation_alias="ODDS_API_SPORTS",
+    )
+    odds_api_sports_exclude: str = Field(
+        default="",
+        validation_alias="ODDS_API_SPORTS_EXCLUDE",
+    )
+    odds_api_max_sports_per_run: int = Field(
+        default=50,
+        validation_alias="ODDS_API_MAX_SPORTS_PER_RUN",
+    )
+    odds_api_max_events_per_sport: int = Field(
+        default=15,
+        validation_alias="ODDS_API_MAX_EVENTS_PER_SPORT",
+    )
     odds_api_odds_format: str = Field(default="decimal", validation_alias="ODDS_API_ODDS_FORMAT")
     default_sport_key: str = Field(
         default="basketball_nba",

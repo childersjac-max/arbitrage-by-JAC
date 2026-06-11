@@ -188,19 +188,36 @@ class HarvesterEngine:
         fast: bool = False,
     ) -> list[UnifiedRecord]:
         settings = get_settings()
-        sport = sport_key or settings.default_sport_key
         from integrator_factory import IntegratorFactory
-        from odds_api_fetch import fetch_odds_api_multi_market
+        from odds_api_fetch import (
+            discover_and_resolve_sport_keys,
+            fetch_odds_api_all_sports,
+            fetch_odds_api_multi_market,
+            resolve_sport_keys,
+        )
 
         markets = [m.strip() for m in settings.odds_api_markets.split(",") if m.strip()]
         factory = IntegratorFactory()
         try:
-            if len(markets) <= 1:
-                records = await factory.odds_api_integrator().fetch_records(
-                    sport, market_types=markets or None
-                )
+            if sport_key:
+                sport_keys = [sport_key]
+            elif settings.odds_api_sports.strip():
+                sport_keys = resolve_sport_keys(settings)
+            elif (settings.odds_api_sports_mode or "").strip().lower() in {"all_active", "all"}:
+                sport_keys = await discover_and_resolve_sport_keys(factory)
             else:
-                records = await fetch_odds_api_multi_market(factory, sport, markets)
+                sport_keys = [settings.default_sport_key]
+
+            if len(sport_keys) == 1:
+                sport = sport_keys[0]
+                if len(markets) <= 1:
+                    records = await factory.odds_api_integrator().fetch_records(
+                        sport, market_types=markets or None
+                    )
+                else:
+                    records = await fetch_odds_api_multi_market(factory, sport, markets)
+            else:
+                records = await fetch_odds_api_all_sports(factory, sport_keys, markets)
         finally:
             await factory.close()
 

@@ -11,7 +11,7 @@ from typing import Any
 
 from engine import HarvesterEngine, best_prices_implied_sum
 from harvester_paths import PACKAGE_DIR
-from models import ArbitrageLeg, UnifiedRecord
+from models import ArbitrageLeg, SourceQuote, UnifiedRecord
 from settings import get_settings
 from source_status import build_source_report, source_summary
 from target_sources import ODDS_API_KEY_TO_TARGET, TARGET_SOURCE_BY_KEY
@@ -364,6 +364,52 @@ def _scanned_event_from_record(record: UnifiedRecord) -> dict[str, Any]:
     }
 
 
+def _outcome_side_key(quote: SourceQuote, market_type: str) -> str:
+    """Group quotes into arb sides (outcome + line for spreads/totals)."""
+    if quote.line is not None:
+        return f"{quote.outcome}|{quote.line:g}"
+    return quote.outcome
+
+
+def _combinations_for_record(record: UnifiedRecord) -> int:
+    """
+    Count book-outcome combinations evaluated for arb on this line.
+
+    For n arb sides with m_i books each, this is the product m_1 × m_2 × …
+    (every way to pick one book per side).
+    """
+    sides: dict[str, set[str]] = {}
+    for book_key, quotes in record.sources.items():
+        for quote in quotes:
+            if quote.price <= 1.0:
+                continue
+            key = _outcome_side_key(quote, record.market_type)
+            sides.setdefault(key, set()).add(book_key)
+
+    if len(sides) < 2:
+        return 0
+
+    total = 1
+    for books in sides.values():
+        total *= len(books)
+    return total
+
+
+def _compute_scan_stats(records: list[UnifiedRecord]) -> dict[str, Any]:
+    combinations = sum(_combinations_for_record(r) for r in records)
+    leagues = {r.sport_key for r in records if r.sport_key}
+    events = {r.event_id for r in records}
+    quotes = sum(len(qs) for r in records for qs in r.sources.values())
+    return {
+        "combinations_considered": combinations,
+        "leagues_scanned": len(leagues),
+        "quote_lines": len(records),
+        "quotes_total": quotes,
+        "events_scanned": len(events),
+        "sport_keys": sorted(leagues),
+    }
+
+
 def _compute_stats(opportunities: list[dict[str, Any]]) -> dict[str, Any]:
     if not opportunities:
         return {
@@ -407,6 +453,8 @@ def build_dashboard_payload(
             if ev.get("has_arbitrage"):
                 best_edge = max(best_edge, float(ev.get("yield_pct") or 0))
 
+        scan_stats = _compute_scan_stats(records)
+
         run_summary = {
             "events_total": len(records),
             "events_today": len(today_events),
@@ -415,6 +463,7 @@ def build_dashboard_payload(
             "arbs_tomorrow": len(tomorrow_opps),
             "sources_loaded": loaded_sources,
             "best_edge_pct": round(best_edge, 2),
+            "scan_stats": scan_stats,
         }
 
         return {

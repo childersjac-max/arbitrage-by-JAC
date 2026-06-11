@@ -1,0 +1,55 @@
+# UI PHASE A of F — API payload for arb cards + filter metadata
+
+REFERENCE: prompts/llm_ui_phases/_UI_SHARED_RULES.txt
+GOAL: Extend `/api/status` JSON so frontend can render split-leg cards AND filters panel.
+
+Edit `harvester/dashboard_service.py` (and `harvester/models.py` only if needed).
+
+### Extend each `opportunities[]` item:
+
+```json
+{
+  "id", "event_name", "sport_key", "sport_group", "sport_label",
+  "market_type", "market_label", "line",
+  "commence_time", "yield_pct", "implied_sum",
+  "legs": [{
+    "source", "source_display", "outcome", "line", "price",
+    "american", "market_avg_price", "market_avg_american",
+    "stake_weight", "is_bet_first"
+  }],
+  "quote_matrix": {
+    "outcomes": ["Under 3.5", "Over 3.5"],
+    "books": ["draftkings", "fanduel", ...],
+    "prices": { "Under 3.5": { "draftkings": 2.19, ... } },
+    "market_avg": { "Under 3.5": 1.96, ... }
+  },
+  "profit_usd_at_1000": 19.96,
+  "roi_pct": 2.0
+}
+```
+
+Helpers: `_decimal_to_american()`, `_humanize_market_type()`, `_build_quote_matrix(record)`, `_sport_label(sport_key)`.
+
+### Add top-level filter metadata to payload:
+
+```json
+{
+  "filter_options": {
+    "sportsbooks": [{ "key": "draftkings", "name": "DraftKings", "count": 12 }],
+    "sports_leagues": [{ "key": "baseball_mlb", "name": "MLB", "group": "Baseball", "count": 5 }],
+    "market_types": [{ "key": "totals", "label": "Totals", "count": 40 }, { "key": "player_points", "label": "Player Points", "count": 120 }]
+  },
+  "defaults": { "wager_usd": 1000, "sort_by": "roi_pct" }
+}
+```
+
+Build `filter_options` by scanning ALL records (not only arbs) so counts are accurate.
+
+VERIFY:
+```bash
+cd ~/Projects/arbitrage-by-JAC/harvester && source ../sports_arbitrage_pipeline/venv/Scripts/activate
+python web_app.py &
+sleep 2 && curl -s "http://127.0.0.1:8765/api/status?day=today" | python -c "import sys,json;d=json.load(sys.stdin);print('opps',len(d.get('opportunities',[])));print('filters',list(d.get('filter_options',{}).keys()))"
+```
+
+STOP. Next: UI_PHASE_B_filters_panel_html.txt

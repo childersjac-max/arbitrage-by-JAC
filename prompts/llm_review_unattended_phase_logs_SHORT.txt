@@ -1,0 +1,11 @@
+Review my last night's unattended run_phases.sh logs in multi-agent-llm/logs/
+
+Runs: (1) deploy phases 05_verify_browser + 06_always_on  (2) ui_card ui_A through ui_F
+
+For each log: score, BEST SOLUTION summary, safe-to-run YES/NO, vs real repo (UnifiedRecord in dashboard_service.py — NOT Opportunity.select ORM).
+
+List logs: ls -lt multi-agent-llm/logs/ | head -30
+
+Then: summary table | gap analysis (what's built vs prompt-only) | 3 safe edits | 3 ignore | verify commands for :8765
+
+Never ask ODDS_API_KEY. Don't start new phases.

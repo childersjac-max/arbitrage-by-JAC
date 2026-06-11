@@ -1,0 +1,68 @@
+# UI PHASES A–F — Git Bash commands (apply real dashboard code)
+
+IMPORTANT:
+- `bash run_phases.sh --set ui_card` only runs Ollama and saves LOGS.
+  It does NOT edit harvester/ files on your PC.
+- To apply the built UI (cards + Filters), pull the code branch below and restart :8765.
+
+═══════════════════════════════════════════════════════════════
+STEP 1 — Pull implemented UI (no branch switch; keeps your local-llm edits)
+═══════════════════════════════════════════════════════════════
+
+cd ~/Projects/arbitrage-by-JAC
+git fetch origin cursor/ui-card-filters-autorun-4fea
+git checkout origin/cursor/ui-card-filters-autorun-4fea -- \
+  harvester/dashboard_service.py \
+  harvester/static/index.html \
+  harvester/static/styles.css \
+  harvester/static/app.js
+
+═══════════════════════════════════════════════════════════════
+STEP 2 — Restart dashboard
+═══════════════════════════════════════════════════════════════
+
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
+source venv/Scripts/activate
+python arbitrage_orchestrator.py --full
+
+# New terminal — leave running:
+cd ~/Projects/arbitrage-by-JAC/harvester
+source ../sports_arbitrage_pipeline/venv/Scripts/activate
+python web_app.py
+
+Open: http://127.0.0.1:8765
+Hard refresh browser: Ctrl+Shift+R
+
+═══════════════════════════════════════════════════════════════
+STEP 3 — Verify UI phases A–F
+═══════════════════════════════════════════════════════════════
+
+curl -s "http://127.0.0.1:8765/api/status?day=today" | python -c "
+import sys,json;d=json.load(sys.stdin)
+print('filter_options', list(d.get('filter_options',{}).keys()))
+print('opportunities', len(d.get('opportunities',[])))
+"
+
+Browser checklist:
+- Filters button opens panel (wager, sort, sportsbooks, leagues, market types)
+- Apply / Reset / Save Preset work
+- When arbs exist: split-leg cards with odds, stakes, Place Both, comparison table
+- 0 arbs: scanned events list still shows (no fake demo cards)
+
+═══════════════════════════════════════════════════════════════
+OPTIONAL — Re-run LLM phase chain (logs only, for ideas)
+═══════════════════════════════════════════════════════════════
+
+cd ~/Projects/arbitrage-by-JAC/multi-agent-llm
+source .venv/Scripts/activate
+bash run_phases.sh --set ui_card 2>&1 | tee ../local-llm/runs/ui_card_$(date +%Y%m%d_%H%M%S).txt
+
+Phase chain (automatic order):
+  A  ui_A_api          → dashboard_service.py API + filter_options
+  B  ui_B_filters_html → Filters panel HTML/CSS
+  C  ui_C_card_css     → Arb card layout
+  D  ui_D_card_js      → Card render + stake math
+  E  ui_E_filters_js   → Filter/sort logic
+  F  ui_F_verify       → QA checklist
+
+Logs: multi-agent-llm/logs/phase_ui_*.txt

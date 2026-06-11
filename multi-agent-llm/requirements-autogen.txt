@@ -1,0 +1,3 @@
+-r requirements.txt
+autogen-agentchat>=0.4.0
+autogen-ext[ollama]>=0.4.0

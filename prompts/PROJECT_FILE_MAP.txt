@@ -1,0 +1,103 @@
+# PROJECT FILE MAP — arbitrage-by-JAC
+# All paths relative to repo root: ~/Projects/arbitrage-by-JAC
+
+## Entry points (run these)
+sports_arbitrage_pipeline/arbitrage_orchestrator.py   # Launcher → harvester orchestrator
+sports_arbitrage_pipeline/bootstrap.sh                # One-time venv + deps
+sports_arbitrage_pipeline/activate_venv.sh            # Windows Git Bash activate
+harvester/arbitrage_orchestrator.py                   # Master ingest + arb math
+harvester/web_app.py                                  # Dashboard :8765
+harvester/cli.py                                      # CLI alternative
+local-llm/web_app.py                                  # Gradio chat + multi-agent :7860
+multi-agent-llm/multi_agent_runner.py                 # Terminal 3-agent runner
+multi-agent-llm/run_phases.py                         # Unattended phase batch runner
+multi-agent-llm/run_phases.sh / run_phases.bat        # Launch all deploy phases
+multi-agent-llm/autogen_agent.py                      # AutoGen + Ollama
+
+## Config / secrets (.env — never commit real keys)
+harvester/.env                                        # ODDS_API_KEY, POLYMARKET_*, HARVESTER_*
+local-llm/.env                                        # OLLAMA_*, LOCAL_LLM_UI_*, profiles
+multi-agent-llm/.env                                  # MODEL_PLANNER/CODER/REVIEWER, PROJECT_*
+sports_arbitrage_pipeline/.env.example                # Template → copy to harvester/.env
+
+## Harvester core
+harvester/models.py                                   # UnifiedRecord, SourceQuote, ArbitrageInfo
+harvester/models_depth.py                             # IngestionSnapshot, EventSnapshot
+harvester/engine.py                                   # Arb detection math
+harvester/settings.py                                 # HarvesterSettings (pydantic)
+harvester/config.py                                   # Shim → settings.py
+harvester/integrator_factory.py                       # Registry of integrators
+harvester/integrators/odds_api.py                     # The Odds API v4 (live)
+harvester/integrators/polymarket.py                   # Polymarket Gamma/CLOB (live)
+harvester/integrators/stubs.py                        # Remaining direct-only stubs
+harvester/odds_api_fetch.py                           # Multi-market Odds API fetch
+harvester/polymarket_fetch.py                         # Polymarket merge helper
+harvester/target_sources.py                           # 14 platform registry
+harvester/snapshot_builder.py                         # Build ingestion snapshot
+harvester/data/ingestion_snapshot.json                # OUTPUT after orchestrator run
+harvester/static/                                     # Dashboard HTML/CSS/JS
+harvester/docs/LAWFUL_PIPELINE.md                     # Architecture rules
+
+## Local LLM
+local-llm/config.py                                   # LocalLLMSettings
+local-llm/performance_profiles.py                       # fast | balanced | quality
+local-llm/ollama_connect.py                           # Ollama HTTP client
+local-llm/ui/chat_tab.py                              # Chat UI + multi-agent toggle
+local-llm/ui/multi_agent_stream.py                    # Multi-agent in browser
+local-llm/multi_agent_bridge.py                       # Loads multi-agent-llm/pipeline_core
+local-llm/project_context.py                          # Injects PROJECT_CONTEXT into chat
+local-llm/prompts/system_balanced.txt                 # Default single-chat system prompt
+local-llm/data/ui_state.json                          # Saved UI preferences
+local-llm/data/chat_history.json                      # Saved chat
+
+## Multi-agent LLM
+multi-agent-llm/pipeline_core.py                        # Planner → Coder → Reviewer
+multi-agent-llm/project_context.py                    # Path + URL resolver
+multi-agent-llm/prompts/system_planner.txt
+multi-agent-llm/prompts/system_coder.txt
+multi-agent-llm/prompts/system_reviewer.txt
+multi-agent-llm/prompts/project_context.txt             # Optional override of repo prompt
+
+## Operator prompts (paste into local LLM)
+prompts/llm_operator_arbitrage_repo.txt
+prompts/llm_operator_odds_api_harvester.txt
+prompts/llm_operator_odds_api_harvester_SHORT.txt
+prompts/llm_expand_all_markets_arbitrage.txt          # All leagues + all market types (full)
+prompts/llm_expand_all_markets_arbitrage_SHORT.txt   # Same — compact paste for multi-agent
+prompts/llm_deploy_full_arb_dashboard.txt             # All books/lines + deploy :8765 (full — use phases instead on CPU)
+prompts/llm_deploy_full_arb_dashboard_SHORT.txt     # Compact index for multi-agent
+prompts/llm_deploy_phases/00_START_HERE_MULTI_AGENT.md  # From-scratch multi-agent setup (human)
+prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt   # All sport keys + all bet types
+prompts/llm_deploy_phases/PHASE_1_harvester_config_ingest.txt
+prompts/llm_deploy_phases/PHASE_2_event_markets_multisport.txt
+prompts/llm_deploy_phases/PHASE_3_arb_engine_all_lines.txt
+prompts/llm_deploy_phases/PHASE_4_dashboard_lan_url.txt
+prompts/llm_deploy_phases/PHASE_5_verify_browser.txt
+prompts/llm_deploy_phases/PHASE_6_always_on_optional.txt
+prompts/llm_multi_agent_arb_card_dashboard.txt        # UI master index + autorun instructions
+prompts/llm_multi_agent_arb_card_dashboard_SHORT.txt  # Compact UI index
+prompts/llm_review_unattended_phase_logs.txt          # Review overnight run_phases logs (full)
+prompts/llm_review_unattended_phase_logs_SHORT.txt   # Same — compact for Gradio/Cursor
+prompts/llm_ui_phases/UI_PHASE_A_api_payload.txt     # UI auto-chain A: API + filter_options
+prompts/llm_ui_phases/UI_PHASE_B_filters_panel_html.txt
+prompts/llm_ui_phases/UI_PHASE_C_card_html_css.txt
+prompts/llm_ui_phases/UI_PHASE_D_card_js.txt
+prompts/llm_ui_phases/UI_PHASE_E_filters_js.txt
+prompts/llm_ui_phases/UI_PHASE_F_verify_polish.txt
+prompts/llm_ui_phases/AUTORUN_ALL_UI_PHASES.txt   # One Gradio paste — UI A-F chain
+prompts/llm_ui_phases/_UI_SHARED_RULES.txt
+prompts/llm_frontend_night_luxe_arbitrage_ui.txt     # Earlier UI spec (superseded by arb card prompt)
+prompts/llm_execute_arbitrage_engine.txt
+prompts/PROJECT_CONTEXT.txt                            # This project's global context
+prompts/PROJECT_FILE_MAP.txt                           # This file
+
+## Docs
+sports_arbitrage_pipeline/START_HERE.md
+sports_arbitrage_pipeline/DEPLOYMENT_GUIDE.md
+sports_arbitrage_pipeline/RUN_WITH_LOCAL_LLM.md
+multi-agent-llm/SETUP_PROJECT_CONTEXT.md
+local-llm/MULTI_AGENT_CHAT.md
+harvester/README.md
+
+## Do NOT create (hallucination traps)
+stealth_session.py, arbitrage_core_engine/, server.py (llama.cpp), fake models.py at repo root

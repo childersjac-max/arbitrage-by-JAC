@@ -1,0 +1,33 @@
+# UI PHASE F of F — Verify + polish entire dashboard
+
+REFERENCE: prompts/llm_ui_phases/_UI_SHARED_RULES.txt
+
+GOAL: End-to-end QA of arb cards + filters on :8765.
+
+### Checklist (implement fixes if any fail):
+- [ ] Filters panel: wager, sort ROI/Profit, sportsbooks, sports/leagues, market types
+- [ ] Apply / Reset / Save Preset work
+- [ ] Cards: split legs, american odds, market avg, stakes, payouts, ROI pill
+- [ ] Comparison table highlights best odds green
+- [ ] Multi-sport opportunities show correct sport badges (not NBA only)
+- [ ] Empty state when 0 arbs (no fake data)
+- [ ] Mobile responsive 390px
+- [ ] `localStorage` restores wager + filters on reload
+
+### Optional LAN (if Phase 4 deploy done):
+- `HARVESTER_UI_LAN=1` in harvester/.env
+
+VERIFY commands:
+```bash
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
+source venv/Scripts/activate
+python arbitrage_orchestrator.py --full
+cd ../harvester
+python web_app.py
+```
+
+Open **http://127.0.0.1:8765**
+
+USER confirms: Filters + cards match pro arb scanner layout.
+
+DONE — UI phase chain complete.

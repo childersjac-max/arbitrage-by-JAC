@@ -74,7 +74,6 @@
         <div class="os-toolbar-group">
           <div class="os-segment" role="group" aria-label="View mode" id="segment-mode">
             <button type="button" class="os-segment-btn active" data-mode="arbs">Arbs Only</button>
-            <button type="button" class="os-segment-btn" data-mode="lowhold">Low Hold</button>
           </div>
           <div class="os-segment" role="group" aria-label="Game timing" id="segment-timing">
             <button type="button" class="os-segment-btn active" data-timing="pregame">Pre-Game</button>
@@ -167,13 +166,9 @@
           <div class="empty-state" id="empty-state">
             <div class="os-empty-icon" aria-hidden="true">◎</div>
             <p id="empty-message">No arbitrage opportunities right now.</p>
-            <p class="empty-hint">Click <strong>Refresh</strong> to scan 110+ market types across US books. Real arbs are rare — switch to <strong>Low Hold</strong> to browse scanned games.</p>
+            <p class="empty-hint">Click <strong>Refresh</strong> to scan moneylines, spreads, totals, props, and alternates across US books.</p>
           </div>
           <div class="arb-cards" id="arb-cards"></div>
-          <div class="scanned-section hidden" id="scanned-section" hidden>
-            <h2 class="scanned-heading">Low hold markets</h2>
-            <div class="opp-list" id="opp-list"></div>
-          </div>
         </div>
       </section>
 

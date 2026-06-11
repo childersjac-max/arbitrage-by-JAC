@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from arb_line_engine import detect_best_arb_for_record, expand_records_to_lines
 from config import get_settings
-from integrators.odds_api import OddsApiIntegrator
 from llm_arbitrage import analyze_arbitrage_with_llm, filter_records_to_target_sources
 from models import ArbitrageInfo, ArbitrageLeg, SourceQuote, UnifiedRecord
 from normalization.bridge import build_reference_from_names, normalize_team_labels
@@ -13,48 +13,11 @@ from normalization.bridge import build_reference_from_names, normalize_team_labe
 logger = logging.getLogger(__name__)
 
 
-def detect_h2h_arbitrage(record: UnifiedRecord) -> ArbitrageInfo | None:
+def best_prices_implied_sum(
+    record: UnifiedRecord,
+) -> tuple[float | None, int, dict[str, tuple[float, str]]]:
     """
-    Find two-way arb using best decimal price per outcome across target sources.
-
-    Arb exists when sum(1/price_i) < 1 for the best prices on each side.
-    """
-    best_by_outcome: dict[str, tuple[float, str]] = {}
-
-    for book_key, quotes in record.sources.items():
-        for quote in quotes:
-            if quote.price <= 1.0:
-                continue
-            current = best_by_outcome.get(quote.outcome)
-            if current is None or quote.price > current[0]:
-                best_by_outcome[quote.outcome] = (quote.price, book_key)
-
-    if len(best_by_outcome) < 2:
-        return None
-
-    implied_sum = sum(1.0 / price for price, _ in best_by_outcome.values())
-    if implied_sum >= 1.0:
-        return None
-
-    yield_pct = (1.0 / implied_sum - 1.0) * 100.0
-    legs: list[ArbitrageLeg] = []
-    for outcome, (price, book) in best_by_outcome.items():
-        weight = (1.0 / price) / implied_sum
-        legs.append(
-            ArbitrageLeg(
-                source=book,
-                outcome=outcome,
-                price=price,
-                stake_weight=round(weight, 6),
-            )
-        )
-
-    return ArbitrageInfo(yield_pct=round(yield_pct, 4), implied_sum=round(implied_sum, 6), legs=legs)
-
-
-def best_prices_implied_sum(record: UnifiedRecord) -> tuple[float | None, int, dict[str, tuple[float, str]]]:
-    """
-    Best decimal price per outcome across all books.
+    Best decimal price per outcome across all books on the record's primary line.
     Returns (implied_sum, outcome_count, best_by_outcome).
     """
     best_by_outcome: dict[str, tuple[float, str]] = {}
@@ -142,20 +105,22 @@ async def score_arbitrage(
     *,
     use_llm: bool | None = None,
 ) -> list[UnifiedRecord]:
-    """Math + optional local LLM arbitrage scoring across target sources."""
+    """Per-line math arb (+ optional LLM) across all market types."""
     settings = get_settings()
     min_yield = settings.min_arb_yield_pct
     llm_enabled = settings.use_llm_arbitrage if use_llm is None else use_llm
 
+    line_records = expand_records_to_lines(records)
+
     llm_hits: dict[str, dict] = {}
     if llm_enabled:
         try:
-            llm_hits = await analyze_arbitrage_with_llm(records)
+            llm_hits = await analyze_arbitrage_with_llm(line_records)
         except Exception as exc:
             logger.warning("LLM arbitrage pass skipped: %s", exc)
 
-    for record in records:
-        math_arb = detect_h2h_arbitrage(record)
+    for record in line_records:
+        math_arb = detect_best_arb_for_record(record)
         llm_hit = llm_hits.get(record.event_id)
         merged = _merge_arbitrage(math_arb, llm_hit, min_yield=min_yield)
 
@@ -174,11 +139,11 @@ async def score_arbitrage(
             record.arbitrage = None
             record.metadata.pop("arb_method", None)
 
-    return records
+    return line_records
 
 
 class HarvesterEngine:
-    """End-to-end: fetch → target sources → normalize → LLM + math arbs."""
+    """End-to-end: fetch → target sources → normalize → per-line arb scoring."""
 
     async def run(
         self,
@@ -190,13 +155,13 @@ class HarvesterEngine:
         settings = get_settings()
         from integrator_factory import IntegratorFactory
         from odds_api_fetch import (
+            bulk_market_list,
             discover_and_resolve_sport_keys,
             fetch_odds_api_all_sports,
-            fetch_odds_api_multi_market,
+            fetch_sport_odds,
             resolve_sport_keys,
         )
 
-        markets = [m.strip() for m in settings.odds_api_markets.split(",") if m.strip()]
         factory = IntegratorFactory()
         try:
             if sport_key:
@@ -209,15 +174,9 @@ class HarvesterEngine:
                 sport_keys = [settings.default_sport_key]
 
             if len(sport_keys) == 1:
-                sport = sport_keys[0]
-                if len(markets) <= 1:
-                    records = await factory.odds_api_integrator().fetch_records(
-                        sport, market_types=markets or None
-                    )
-                else:
-                    records = await fetch_odds_api_multi_market(factory, sport, markets)
+                records = await fetch_sport_odds(factory, sport_keys[0])
             else:
-                records = await fetch_odds_api_all_sports(factory, sport_keys, markets)
+                records = await fetch_odds_api_all_sports(factory, sport_keys, bulk_market_list())
         finally:
             await factory.close()
 

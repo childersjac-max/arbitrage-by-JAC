@@ -20,7 +20,6 @@ const state = {
   maxPollMs: 12 * 60 * 1000,
   autoRefreshTimer: null,
   allOpportunities: [],
-  scannedEvents: [],
   runSummary: null,
   filterOptions: null,
   defaults: { wager_usd: 1000, sort_by: "roi_pct" },
@@ -44,8 +43,6 @@ const el = {
   empty: document.getElementById("empty-state"),
   emptyMsg: document.getElementById("empty-message"),
   arbCards: document.getElementById("arb-cards"),
-  scannedSection: document.getElementById("scanned-section"),
-  list: document.getElementById("opp-list"),
   panelOpportunities: document.getElementById("panel-opportunities"),
   panelSources: document.getElementById("panel-sources"),
   sourcesEmpty: document.getElementById("sources-empty"),
@@ -455,69 +452,6 @@ function renderArbCards(opportunities) {
   });
 }
 
-function sortLowHoldEvents(events) {
-  return [...events].sort((a, b) => {
-    const av = a.overround_pct ?? 999;
-    const bv = b.overround_pct ?? 999;
-    return av - bv;
-  });
-}
-
-function renderScannedEvents(events, summary) {
-  el.list.innerHTML = "";
-  const showLowHold = state.viewMode === "lowhold";
-  const sorted = showLowHold ? sortLowHoldEvents(events) : events;
-
-  if (!sorted.length) {
-    if (!showLowHold && state.viewMode === "arbs") {
-      setVisible(el.scannedSection, false);
-    }
-    const label = state.view === "today" ? "today" : "tomorrow";
-    if (summary && summary.events_total > 0 && state.viewMode === "arbs") {
-      el.emptyMsg.textContent = `No arbitrage opportunities for ${label}.`;
-      el.empty.querySelector(".empty-hint").textContent =
-        `Scanned ${summary.events_total} event(s) · ${summary.sources_loaded} source(s). Try Low Hold or Filters.`;
-    } else if (!sorted.length && showLowHold) {
-      setVisible(el.scannedSection, false);
-    } else {
-      el.emptyMsg.textContent = `No data for ${label}.`;
-    }
-    return;
-  }
-
-  setVisible(el.scannedSection, true);
-  if (showLowHold) {
-    setVisible(el.empty, false);
-    setVisible(el.arbCards, false);
-  }
-
-  sorted.forEach((ev) => {
-    const row = document.createElement("div");
-    row.className = ev.is_opportunity ? "opp-row" : "opp-row opp-row--scan";
-    let right = "";
-    if (ev.is_opportunity) {
-      right = `<span class="opp-yield">${formatPct(ev.yield_pct)}</span>`;
-    } else if (ev.overround_pct != null) {
-      right = `<span class="opp-market">+${ev.overround_pct.toFixed(2)}% vig</span>`;
-    } else {
-      right = `<span class="opp-market">No arb</span>`;
-    }
-    row.innerHTML = `
-      <div>
-        <div class="opp-event">${escapeHtml(ev.event_name)}</div>
-        <div class="opp-meta">${escapeHtml(ev.sport_key)} · ${formatCommence(ev.commence_time)} · ${ev.books_count} books</div>
-      </div>
-      <span class="opp-market">${escapeHtml(ev.market_type)}</span>
-      ${right}
-    `;
-    if (ev.is_opportunity && ev.legs?.length) {
-      row.addEventListener("click", () => openSlip(ev));
-      row.style.cursor = "pointer";
-    }
-    el.list.appendChild(row);
-  });
-}
-
 function updateMetricStrip() {
   const books = state.filterOptions?.sportsbooks?.length ?? 0;
   const scan = state.runSummary?.scan_stats;
@@ -536,49 +470,38 @@ function renderFilteredOpportunities() {
     const yields = filtered.map((o) => o.roi_pct || o.yield_pct || 0);
     el.avg.textContent = formatPct(yields.reduce((a, b) => a + b, 0) / yields.length);
     el.best.textContent = formatPct(Math.max(...yields));
-  } else if (state.runSummary) {
+    setVisible(el.empty, false);
+  } else {
     el.avg.textContent = formatPct(0);
     el.best.textContent = formatPct(0);
-  }
-  if (state.viewMode === "arbs") {
-    renderArbCards(filtered);
-    if (!filtered.length) {
-      setVisible(el.empty, true);
+    setVisible(el.empty, true);
+    const label = state.view === "today" ? "today" : "tomorrow";
+    el.emptyMsg.textContent = `No arbitrage opportunities for ${label}.`;
+    const hint = el.empty.querySelector(".empty-hint");
+    const scan = state.runSummary?.scan_stats;
+    if (hint && scan) {
+      hint.textContent =
+        `Scanned ${scan.events_scanned ?? 0} events, ${scan.quote_lines ?? 0} lines, ` +
+        `${formatNumber(scan.combinations_considered ?? 0)} combinations across ` +
+        `${scan.leagues_scanned ?? 0} leagues.`;
     }
   }
+  renderArbCards(filtered);
 }
 
 function renderMainView() {
   if (state.timing === "ingame") {
     setVisible(el.ingameNotice, true);
     setVisible(el.arbCards, false);
-    setVisible(el.scannedSection, false);
     setVisible(el.empty, false);
     return;
   }
   setVisible(el.ingameNotice, false);
-
-  if (state.viewMode === "lowhold") {
-    setVisible(el.arbCards, false);
-    renderScannedEvents(state.scannedEvents, state.runSummary);
-    if (!state.scannedEvents.length) {
-      setVisible(el.empty, true);
-      el.emptyMsg.textContent = "No scanned markets for this tab.";
-    }
-    return;
-  }
-
   renderFilteredOpportunities();
-  if (state.allOpportunities.length) {
-    renderScannedEvents(state.scannedEvents, state.runSummary);
-  } else {
-    renderScannedEvents(state.scannedEvents, state.runSummary);
-  }
 }
 
-function renderOpportunities(opportunities, scannedEvents, summary) {
+function renderOpportunities(opportunities, summary) {
   state.allOpportunities = opportunities || [];
-  state.scannedEvents = scannedEvents || [];
   state.runSummary = summary || null;
   updateMetricStrip();
   renderMainView();
@@ -718,16 +641,7 @@ function applyPayload(data) {
   }
 
   if (state.view === "today" || state.view === "tomorrow") {
-    renderOpportunities(data.opportunities || [], data.scanned_events || [], data.run_summary);
-    const s = data.run_summary;
-    if (s && !data.opportunities?.length && (s.events_today || s.events_tomorrow)) {
-      const hint = el.empty.querySelector(".empty-hint");
-      if (hint && s.events_total) {
-        hint.textContent =
-          `Scanned ${s.events_total} event(s), ${s.sources_loaded} books loaded. ` +
-          `No arb above threshold — use Filters or see scanned games below.`;
-      }
-    }
+    renderOpportunities(data.opportunities || [], data.run_summary);
   }
 
   renderSources(data.sources || []);

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
@@ -73,6 +74,20 @@ class OddsApiIntegrator(OddsIntegrator):
                 keys.append(key)
         return keys
 
+    async def list_events(self, sport_key: str) -> list[dict[str, Any]]:
+        settings = get_settings()
+        if not settings.odds_api_key:
+            raise RuntimeError("Set ODDS_API_KEY in harvester/.env or the environment")
+
+        client = await self._get_client()
+        resp = await client.get(
+            f"/v4/sports/{sport_key}/events",
+            params={"apiKey": settings.odds_api_key},
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        return [item for item in payload if isinstance(item, dict)]
+
     async def health_check(self) -> tuple[bool, str]:
         settings = get_settings()
         if not settings.odds_api_key:
@@ -111,21 +126,50 @@ class OddsApiIntegrator(OddsIntegrator):
         )
         resp.raise_for_status()
         payload: list[dict[str, Any]] = resp.json()
-        return [self._event_to_record(item, sport_key) for item in payload]
+        records: list[UnifiedRecord] = []
+        for item in payload:
+            records.extend(self._event_to_records(item, sport_key))
+        return records
 
-    def _event_to_record(self, event: dict[str, Any], sport_key: str) -> UnifiedRecord:
+    async def fetch_event_odds(
+        self,
+        sport_key: str,
+        event_id: str,
+        market_types: list[str],
+    ) -> list[UnifiedRecord]:
+        settings = get_settings()
+        if not settings.odds_api_key:
+            raise RuntimeError("Set ODDS_API_KEY in harvester/.env or the environment")
+        if not market_types:
+            return []
+
+        client = await self._get_client()
+        resp = await client.get(
+            f"/v4/sports/{sport_key}/events/{event_id}/odds",
+            params={
+                "apiKey": settings.odds_api_key,
+                "regions": settings.odds_api_regions,
+                "markets": ",".join(market_types),
+                "oddsFormat": settings.odds_api_odds_format,
+            },
+        )
+        resp.raise_for_status()
+        return self._event_to_records(resp.json(), sport_key)
+
+    def _event_to_records(self, event: dict[str, Any], sport_key: str) -> list[UnifiedRecord]:
         home = str(event.get("home_team") or "")
         away = str(event.get("away_team") or "")
-        event_id = str(event.get("id") or f"{sport_key}:{home}:{away}")
+        api_event_id = str(event.get("id") or f"{sport_key}:{home}:{away}")
         commence = _parse_commence(event.get("commence_time"))
         display = _event_display_name(home, away)
 
-        by_book: dict[str, list[SourceQuote]] = {}
+        by_market: dict[str, dict[str, list[SourceQuote]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
         for bookmaker in event.get("bookmakers") or []:
             if not isinstance(bookmaker, dict):
                 continue
             book_key = str(bookmaker.get("key") or "unknown")
-            book_quotes: list[SourceQuote] = []
             for market in bookmaker.get("markets") or []:
                 if not isinstance(market, dict):
                     continue
@@ -137,7 +181,7 @@ class OddsApiIntegrator(OddsIntegrator):
                     price = outcome.get("price")
                     if price is None:
                         continue
-                    book_quotes.append(
+                    by_market[market_key][book_key].append(
                         SourceQuote(
                             source=book_key,
                             outcome=name,
@@ -146,24 +190,25 @@ class OddsApiIntegrator(OddsIntegrator):
                             raw_label=name,
                         )
                     )
-            if book_quotes:
-                by_book[book_key] = book_quotes
 
-        primary_market = "h2h"
-        if by_book:
-            first_book = next(iter(event.get("bookmakers") or []), {})
-            if isinstance(first_book, dict) and first_book.get("markets"):
-                m0 = first_book["markets"][0]
-                if isinstance(m0, dict) and m0.get("key"):
-                    primary_market = str(m0["key"])
-
-        return UnifiedRecord(
-            timestamp=datetime.now(timezone.utc),
-            event_id=event_id,
-            sport_key=sport_key,
-            normalized_event_name=display,
-            market_type=primary_market,
-            commence_time=commence,
-            sources=by_book,
-            metadata={"home_team": home, "away_team": away},
-        )
+        records: list[UnifiedRecord] = []
+        for market_key, sources in by_market.items():
+            if not any(sources.values()):
+                continue
+            records.append(
+                UnifiedRecord(
+                    timestamp=datetime.now(timezone.utc),
+                    event_id=f"{api_event_id}:{market_key}",
+                    sport_key=sport_key,
+                    normalized_event_name=display,
+                    market_type=market_key,
+                    commence_time=commence,
+                    sources={book: list(quotes) for book, quotes in sources.items()},
+                    metadata={
+                        "home_team": home,
+                        "away_team": away,
+                        "api_event_id": api_event_id,
+                    },
+                )
+            )
+        return records

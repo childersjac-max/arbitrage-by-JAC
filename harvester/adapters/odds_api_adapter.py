@@ -6,7 +6,7 @@ from adapters.base import BaseFeedAdapter
 from integrator_factory import IntegratorFactory
 from llm_arbitrage import filter_records_to_target_sources
 from models_depth import EventSnapshot
-from odds_api_fetch import fetch_odds_api_multi_market
+from odds_api_fetch import fetch_sport_odds
 from settings import get_settings
 from snapshot_builder import merge_records_to_events
 
@@ -22,9 +22,7 @@ class OddsApiFeedAdapter(BaseFeedAdapter):
     return await self._factory.odds_api_integrator().health_check()
 
   async def fetch_events(self, sport_key: str) -> list[EventSnapshot]:
-    settings = get_settings()
-    markets = [m.strip() for m in settings.odds_api_markets.split(",") if m.strip()]
-    records = await fetch_odds_api_multi_market(self._factory, sport_key, markets)
+    records = await fetch_sport_odds(self._factory, sport_key)
     records = filter_records_to_target_sources(records)
     return merge_records_to_events(records)
 

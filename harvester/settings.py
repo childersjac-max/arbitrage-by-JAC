@@ -30,6 +30,25 @@ class HarvesterSettings(BaseSettings):
         default="h2h,spreads,totals",
         validation_alias="ODDS_API_MARKETS",
     )
+    odds_api_bulk_markets: str = Field(
+        default="h2h,spreads,totals,outrights",
+        validation_alias="ODDS_API_BULK_MARKETS",
+    )
+    odds_api_event_markets: str = Field(
+        default=(
+            "alternate_spreads,alternate_totals,alternate_team_totals,"
+            "player_points,player_rebounds,player_assists,player_threes,"
+            "player_points_alternate,player_rebounds_alternate,player_assists_alternate,"
+            "player_pass_yds,player_rush_yds,player_receptions,player_anytime_td,"
+            "batter_hits,pitcher_strikeouts,player_goals,player_shots_on_goal,"
+            "btts,draw_no_bet"
+        ),
+        validation_alias="ODDS_API_EVENT_MARKETS",
+    )
+    odds_api_deep_markets: bool = Field(
+        default=True,
+        validation_alias="ODDS_API_DEEP_MARKETS",
+    )
     odds_api_sports_mode: str = Field(
         default="single",
         validation_alias="ODDS_API_SPORTS_MODE",

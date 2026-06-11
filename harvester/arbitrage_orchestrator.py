@@ -22,9 +22,10 @@ from llm_arbitrage import filter_records_to_target_sources
 from models import UnifiedRecord
 from models_depth import IngestionSnapshot
 from odds_api_fetch import (
+  bulk_market_list,
   discover_and_resolve_sport_keys,
   fetch_odds_api_all_sports,
-  fetch_odds_api_multi_market,
+  fetch_sport_odds,
   resolve_sport_keys,
 )
 from settings import get_settings
@@ -41,7 +42,7 @@ async def run_ingestion(
   markets: list[str] | None = None,
 ) -> tuple[list[UnifiedRecord], IngestionSnapshot]:
   settings = get_settings()
-  market_list = markets or [m.strip() for m in settings.odds_api_markets.split(",") if m.strip()]
+  market_list = markets or bulk_market_list(settings)
 
   factory = IntegratorFactory()
   errors: list[str] = []
@@ -57,7 +58,7 @@ async def run_ingestion(
       sport_keys = [settings.default_sport_key]
 
     if len(sport_keys) == 1:
-      records = await fetch_odds_api_multi_market(factory, sport_keys[0], market_list)
+      records = await fetch_sport_odds(factory, sport_keys[0])
     else:
       records = await fetch_odds_api_all_sports(factory, sport_keys, market_list)
 

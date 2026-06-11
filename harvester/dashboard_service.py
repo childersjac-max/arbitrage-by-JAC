@@ -29,17 +29,42 @@ class RunState:
     run_status: str = ""
     last_error: str | None = None
     last_run_at: datetime | None = None
+    run_started_at: datetime | None = None
+    run_generation: int = 0
     records: list[UnifiedRecord] = field(default_factory=list)
     source_report: list[dict[str, Any]] = field(default_factory=list)
 
 
+_state = RunState()
+_active_run_task: asyncio.Task[None] | None = None
+
+
 def reset_run_state() -> None:
     """Clear stuck 'running' flag (e.g. after server crash)."""
+    global _active_run_task
+    if _active_run_task is not None and not _active_run_task.done():
+        _active_run_task.cancel()
+    _active_run_task = None
     _state.running = False
     _state.run_status = ""
+    _state.run_started_at = None
 
 
-_state = RunState()
+def maybe_reset_stale_run() -> None:
+    """Auto-clear runs that exceeded the timeout (orphaned background tasks)."""
+    if not _state.running or _state.run_started_at is None:
+        return
+    settings = get_settings()
+    elapsed = (datetime.now(timezone.utc) - _state.run_started_at).total_seconds()
+    if elapsed <= settings.run_timeout_sec + 30:
+        return
+    logger.warning("Stale dashboard run detected after %.0fs — resetting", elapsed)
+    reset_run_state()
+    _state.last_error = (
+        f"Scan timed out after {int(settings.run_timeout_sec)}s. "
+        "Showing last saved results. For faster refreshes keep "
+        "HARVESTER_DASHBOARD_FAST_MODE=true (bulk markets only)."
+    )
 
 
 def get_run_state() -> RunState:
@@ -481,16 +506,19 @@ def load_cached_records() -> list[UnifiedRecord]:
         return []
 
 
-async def _run_pipeline(sport_key: str | None) -> None:
+async def _run_pipeline(sport_key: str | None, *, generation: int) -> None:
     settings = get_settings()
     fast = settings.dashboard_fast_mode
     _state.run_status = (
-        "Fetching odds (fast mode, no Ollama)…"
+        "Fetching odds (fast mode, bulk markets)…"
         if fast
         else "Fetching odds from The Odds API…"
     )
     engine = HarvesterEngine()
     records = await engine.run(sport_key, arbs_only=False, fast=fast)
+    if generation != _state.run_generation:
+        logger.info("Ignoring stale run results (generation %s)", generation)
+        return
     _state.run_status = "Saving results…"
     _state.records = records
     _state.source_report = build_source_report(records)
@@ -503,36 +531,61 @@ async def execute_run(*, sport_key: str | None = None) -> None:
     if _state.running:
         return
     settings = get_settings()
+    _state.run_generation += 1
+    generation = _state.run_generation
     _state.running = True
     _state.last_error = None
+    _state.run_started_at = datetime.now(timezone.utc)
     _state.run_status = "Starting…"
     try:
         if settings.dashboard_fast_mode:
-            _state.run_status = "Fast scan (Odds API + math only)…"
+            _state.run_status = "Fast scan (bulk markets + per-line arb)…"
         else:
             hint = ""
             if settings.use_llm_arbitrage or settings.use_local_normalization:
                 hint = " (Ollama may take several minutes)"
             _state.run_status = f"Full pipeline{hint}…"
         await asyncio.wait_for(
-            _run_pipeline(sport_key),
+            _run_pipeline(sport_key, generation=generation),
             timeout=settings.run_timeout_sec,
         )
     except asyncio.TimeoutError:
         logger.error("Dashboard run timed out after %ss", settings.run_timeout_sec)
+        _state.run_generation += 1
         _state.last_error = (
             f"Timed out after {int(settings.run_timeout_sec)}s. "
-            "Keep Ollama open, or set HARVESTER_USE_LLM_ARBITRAGE=false and "
-            "HARVESTER_USE_LOCAL_NORMALIZATION=false in harvester/.env for a faster run."
+            "Showing last saved results. For faster scans use "
+            "HARVESTER_DASHBOARD_FAST_MODE=true or lower ODDS_API_MAX_SPORTS_PER_RUN."
         )
-        _state.source_report = build_source_report(_state.records, api_error=_state.last_error)
+        if _state.records:
+            _state.source_report = build_source_report(_state.records, api_error=_state.last_error)
+        else:
+            _state.source_report = build_source_report([], api_error=_state.last_error)
+    except asyncio.CancelledError:
+        logger.info("Dashboard run cancelled")
+        _state.run_generation += 1
+        _state.last_error = "Scan cancelled."
+        raise
     except Exception as exc:
         logger.exception("Dashboard run failed")
+        _state.run_generation += 1
         _state.last_error = str(exc)
-        _state.records = []
-        _state.source_report = build_source_report([], api_error=str(exc))
-        _persist_cache([])
+        if _state.records:
+            _state.source_report = build_source_report(_state.records, api_error=str(exc))
+        else:
+            _state.records = []
+            _state.source_report = build_source_report([], api_error=str(exc))
+            _persist_cache([])
     finally:
         _state.running = False
-        if not _state.last_error:
-            _state.run_status = ""
+        _state.run_status = ""
+        _state.run_started_at = None
+
+
+async def execute_run_tracked(*, sport_key: str | None = None) -> None:
+    """Wrapper used by the web app so background tasks can be cancelled."""
+    global _active_run_task
+    try:
+        await execute_run(sport_key=sport_key)
+    finally:
+        _active_run_task = None

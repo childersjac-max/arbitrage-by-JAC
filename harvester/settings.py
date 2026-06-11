@@ -100,8 +100,16 @@ class HarvesterSettings(BaseSettings):
         validation_alias="HARVESTER_TIMEZONE",
     )
     run_timeout_sec: float = Field(
-        default=120.0,
+        default=600.0,
         validation_alias="HARVESTER_RUN_TIMEOUT_SEC",
+    )
+    dashboard_max_sports_per_run: int = Field(
+        default=15,
+        validation_alias="HARVESTER_DASHBOARD_MAX_SPORTS_PER_RUN",
+    )
+    dashboard_max_events_per_sport: int = Field(
+        default=10,
+        validation_alias="HARVESTER_DASHBOARD_MAX_EVENTS_PER_SPORT",
     )
     http_proxy_url: str | None = Field(default=None, validation_alias="HARVESTER_HTTP_PROXY")
     http_user_agent: str = Field(

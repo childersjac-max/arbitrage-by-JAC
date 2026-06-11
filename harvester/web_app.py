@@ -16,9 +16,10 @@ from pydantic import BaseModel, Field
 from config import get_settings
 from dashboard_service import (
     build_dashboard_payload,
-    execute_run,
+    execute_run_tracked,
     get_run_state,
     load_cached_records,
+    maybe_reset_stale_run,
     reset_run_state,
 )
 
@@ -34,6 +35,10 @@ async def lifespan(app: FastAPI):
     state = get_run_state()
     if cached:
         state.records = cached
+        if not state.source_report and cached:
+            from source_status import build_source_report
+
+            state.source_report = build_source_report(cached)
     yield
 
 
@@ -75,6 +80,7 @@ async def index() -> FileResponse:
 
 @app.get("/api/status")
 async def api_status(day: str = Query("today", pattern="^(today|tomorrow)$")):
+    maybe_reset_stale_run()
     state = get_run_state()
     records = state.records
     if not records:
@@ -100,13 +106,20 @@ async def api_run(body: RunRequest = RunRequest()):
 
     sport = body.sport_key if body else None
 
+    import dashboard_service as dash
+
+    if dash._active_run_task is not None and not dash._active_run_task.done():
+        return {"ok": True, "running": True, "message": "Run already in progress"}
+
     async def _background() -> None:
         try:
-            await execute_run(sport_key=sport)
+            await execute_run_tracked(sport_key=sport)
+        except asyncio.CancelledError:
+            logger.info("Background run task cancelled")
         except Exception:
             logger.exception("Background run failed")
 
-    asyncio.create_task(_background())
+    dash._active_run_task = asyncio.create_task(_background())
     return {"ok": True, "running": True, "message": "Run started"}
 
 

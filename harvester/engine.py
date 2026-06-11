@@ -174,9 +174,11 @@ class HarvesterEngine:
                 sport_keys = [settings.default_sport_key]
 
             if len(sport_keys) == 1:
-                records = await fetch_sport_odds(factory, sport_keys[0])
+                records = await fetch_sport_odds(factory, sport_keys[0], fast=fast)
             else:
-                records = await fetch_odds_api_all_sports(factory, sport_keys, bulk_market_list())
+                records = await fetch_odds_api_all_sports(
+                    factory, sport_keys, bulk_market_list(), fast=fast
+                )
         finally:
             await factory.close()
 

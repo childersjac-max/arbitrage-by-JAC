@@ -630,11 +630,11 @@ function applyPayload(data) {
     state.defaults = data.defaults;
   }
 
-  if (data.error && state.view !== "sources") {
-    el.error.textContent = data.error;
-    setVisible(el.error, true);
-  } else if (!data.api_key_configured) {
+  if (!data.api_key_configured) {
     el.error.textContent = "ODDS_API_KEY is not set in harvester/.env";
+    setVisible(el.error, true);
+  } else if (data.error && state.view !== "sources") {
+    el.error.textContent = data.error;
     setVisible(el.error, true);
   } else {
     setVisible(el.error, false);
@@ -647,7 +647,10 @@ function applyPayload(data) {
   renderSources(data.sources || []);
   updateMetricStrip();
   updatePanels();
-  setLoading(Boolean(data.running), data.run_status || (data.running ? "Running pipeline…" : ""));
+  setLoading(
+    Boolean(data.running),
+    data.running ? (data.run_status || "Running pipeline…") : "",
+  );
 }
 
 async function fetchStatus() {

@@ -13,6 +13,15 @@ from settings import HarvesterSettings, get_settings
 
 logger = logging.getLogger(__name__)
 
+
+def _report_fetch_progress(message: str) -> None:
+    try:
+        from dashboard_service import get_run_state
+
+        get_run_state().run_status = message
+    except Exception:
+        pass
+
 DEFAULT_EVENT_MARKETS = (
     "alternate_spreads,alternate_totals,alternate_team_totals,"
     "player_points,player_rebounds,player_assists,player_threes,"
@@ -123,17 +132,26 @@ async def fetch_sport_odds(
     sport_key: str,
     *,
     max_events_per_sport: int | None = None,
+    fast: bool = False,
 ) -> list[UnifiedRecord]:
     """Bulk featured markets + optional per-event props/alternates for one sport."""
     settings = get_settings()
-    cap = (
-        max_events_per_sport
-        if max_events_per_sport is not None
-        else settings.odds_api_max_events_per_sport
-    )
+    if max_events_per_sport is None:
+        cap = (
+            settings.dashboard_max_events_per_sport
+            if fast
+            else settings.odds_api_max_events_per_sport
+        )
+    else:
+        cap = max_events_per_sport
+
+    _report_fetch_progress(f"Fetching {sport_key} (bulk markets)…")
     bulk = await fetch_odds_api_multi_market(factory, sport_key, bulk_market_list(settings))
-    deep = await fetch_deep_event_markets(factory, sport_key, max_events=cap)
-    merged = bulk + deep
+    merged = list(bulk)
+    if settings.odds_api_deep_markets and not fast:
+        _report_fetch_progress(f"Fetching {sport_key} (props & alternates)…")
+        deep = await fetch_deep_event_markets(factory, sport_key, max_events=cap)
+        merged.extend(deep)
     return cap_records_per_sport(merged, cap)
 
 
@@ -190,20 +208,31 @@ async def fetch_odds_api_all_sports(
     markets: list[str] | None = None,
     *,
     max_events_per_sport: int | None = None,
+    fast: bool = False,
 ) -> list[UnifiedRecord]:
     """Fetch bulk + deep markets for every sport key."""
     settings = get_settings()
-    cap = (
-        max_events_per_sport
-        if max_events_per_sport is not None
-        else settings.odds_api_max_events_per_sport
-    )
+    if max_events_per_sport is None:
+        cap = (
+            settings.dashboard_max_events_per_sport
+            if fast
+            else settings.odds_api_max_events_per_sport
+        )
+    else:
+        cap = max_events_per_sport
 
+    if fast:
+        sport_keys = sport_keys[: settings.dashboard_max_sports_per_run]
+
+    total = len(sport_keys)
     all_records: list[UnifiedRecord] = []
-    for sport_key in sport_keys:
+    for index, sport_key in enumerate(sport_keys, start=1):
         try:
-            if settings.odds_api_deep_markets:
-                batch = await fetch_sport_odds(factory, sport_key, max_events_per_sport=cap)
+            _report_fetch_progress(f"Fetching {sport_key} ({index}/{total})…")
+            if settings.odds_api_deep_markets and not fast:
+                batch = await fetch_sport_odds(
+                    factory, sport_key, max_events_per_sport=cap, fast=fast
+                )
             else:
                 market_list = markets or bulk_market_list(settings)
                 batch = await fetch_odds_api_multi_market(factory, sport_key, market_list)

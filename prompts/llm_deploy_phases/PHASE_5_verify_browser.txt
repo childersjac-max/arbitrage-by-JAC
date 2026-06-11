@@ -1,0 +1,41 @@
+# PHASE 5 of 6 — Verify ALL sports in browser
+
+REFERENCE: prompts/llm_deploy_phases/ALL_SPORTS_AND_MARKETS.txt
+SHARED RULES: prompts/llm_deploy_phases/_SHARED_RULES.txt
+
+GOAL: User confirms dashboard shows multi-sport, multi-market data.
+
+COMMAND:
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline
+source venv/Scripts/activate
+python arbitrage_orchestrator.py --full
+cd ../harvester
+python web_app.py
+```
+
+USER CHECKLIST:
+1. Open http://127.0.0.1:8765
+2. Sources tab: US books show high line counts
+3. Events span **multiple sports** (not NBA only) — check sport labels / filters
+4. Market types visible: moneyline, spreads, totals (and props if Phase 2 done)
+5. Opportunities tab loads (empty OK if no arbs today)
+6. Refresh run completes without errors
+
+API spot-check:
+
+```bash
+curl -s "http://127.0.0.1:8765/api/status?day=today" | python -c "
+import sys,json; d=json.load(sys.stdin)
+sports=set()
+for e in d.get('today_events',[]) + d.get('tomorrow_events',[]):
+    sports.add(e.get('sport_key','?'))
+print('sports_in_dashboard', sorted(sports))
+print('event_count', len(d.get('today_events',[]))+len(d.get('tomorrow_events',[])))
+"
+```
+
+EXPECT: `sports_in_dashboard` has 2+ distinct sport keys when in season.
+
+STOP when confirmed. Next: PHASE_6_always_on_optional.txt

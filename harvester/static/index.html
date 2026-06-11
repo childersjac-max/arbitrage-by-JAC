@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arbitrage Bet Finder Tool</title>
+  <style>
+    /* Critical layout — works even if /static/styles.css fails to load */
+    [hidden] { display: none !important; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Segoe UI", system-ui, sans-serif; background: #0c0f14; color: #f4f7fb; min-height: 100vh; }
+    .os-header { border-bottom: 1px solid #2a3544; background: #141a22; }
+    .os-header-inner { max-width: 1280px; margin: 0 auto; padding: 0.75rem 1.25rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .os-logo { display: flex; align-items: center; gap: 0.5rem; color: #f4f7fb; text-decoration: none; }
+    .os-logo-mark { width: 32px; height: 32px; border-radius: 8px; background: #00d47e; color: #0c0f14; font-size: 0.7rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+    .os-nav { display: flex; gap: 0.25rem; flex: 1; }
+    .os-nav-link, .os-btn { border: 1px solid #2a3544; background: #1a222d; color: #f4f7fb; border-radius: 8px; padding: 0.45rem 0.85rem; font-size: 0.875rem; cursor: pointer; }
+    .os-nav-link--active { background: #212b38; }
+    .os-main { max-width: 1280px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+    .os-page-title { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.35rem; }
+    .os-page-meta { font-size: 0.8rem; color: #8b9aad; }
+    .os-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.75rem; padding: 0.65rem; margin: 1rem 0; background: #141a22; border: 1px solid #2a3544; border-radius: 14px; }
+    .os-toolbar-group { display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center; }
+    .os-toolbar-group--right { margin-left: auto; }
+    .os-segment { display: inline-flex; background: #1a222d; border: 1px solid #2a3544; border-radius: 999px; padding: 3px; }
+    .os-segment-btn { border: none; background: transparent; color: #8b9aad; padding: 0.4rem 0.85rem; border-radius: 999px; font-weight: 600; font-size: 0.8rem; cursor: pointer; }
+    .os-segment-btn.active { background: #212b38; color: #f4f7fb; }
+    .os-capability-strip { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 1rem; background: #141a22; border: 1px solid #2a3544; border-radius: 10px; }
+    .os-subtabs { display: flex; gap: 0.35rem; border-bottom: 1px solid #2a3544; margin-bottom: 0.85rem; }
+    .os-subtab { border: none; background: none; color: #8b9aad; padding: 0.55rem 1rem; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .os-subtab.active { color: #f4f7fb; border-bottom-color: #00d47e; }
+    .os-results-card { background: #141a22; border: 1px solid #2a3544; border-radius: 14px; padding: 0.75rem; min-height: 200px; }
+    .filters-panel { position: fixed; top: 0; right: 0; width: min(400px, 100vw); height: 100vh; background: #141a22; border-left: 1px solid #2a3544; z-index: 50; display: flex; flex-direction: column; }
+    .filters-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 40; }
+    .filters-header, .filters-footer { padding: 1rem 1.25rem; border-color: #2a3544; }
+    .filters-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2a3544; }
+    .filters-body { flex: 1; overflow-y: auto; padding: 1rem 1.25rem; }
+    .filters-footer { display: flex; gap: 0.5rem; border-top: 1px solid #2a3544; }
+    .btn-primary { background: #00d47e; color: #0c0f14; border: none; border-radius: 8px; padding: 0.55rem 1rem; font-weight: 700; cursor: pointer; }
+  </style>
+  <link rel="stylesheet" href="/static/styles.css?v=20260610" />
+</head>
+<body>
+  <div class="os-app">
+    <!-- Top app bar (OddsShopper-style) -->
+    <header class="os-header">
+      <div class="os-header-inner">
+        <a class="os-logo" href="/" aria-label="Home">
+          <span class="os-logo-mark">OS</span>
+          <span class="os-logo-text">Arbitrage <em>Finder</em></span>
+        </a>
+        <nav class="os-nav" aria-label="Main">
+          <button type="button" class="os-nav-link os-nav-link--active" data-nav="arbitrage">Arbitrage</button>
+          <button type="button" class="os-nav-link" data-nav="sources" id="nav-sources">Sources</button>
+        </nav>
+        <div class="os-header-actions">
+          <button type="button" id="btn-refresh" class="os-btn os-btn--ghost" aria-label="Refresh run">
+            <span class="btn-refresh-icon" aria-hidden="true">↻</span>
+            <span id="btn-refresh-label">Refresh</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="os-main">
+      <!-- Page title -->
+      <div class="os-page-head">
+        <h1 class="os-page-title">Arbitrage Bet Finder Tool</h1>
+        <p class="os-page-meta" id="last-run"></p>
+      </div>
+
+      <!-- Primary toolbar: mode toggles + Filters / Presets / Auto Refresh -->
+      <div class="os-toolbar">
+        <div class="os-toolbar-group">
+          <div class="os-segment" role="group" aria-label="View mode" id="segment-mode">
+            <button type="button" class="os-segment-btn active" data-mode="arbs">Arbs Only</button>
+            <button type="button" class="os-segment-btn" data-mode="lowhold">Low Hold</button>
+          </div>
+          <div class="os-segment" role="group" aria-label="Game timing" id="segment-timing">
+            <button type="button" class="os-segment-btn active" data-timing="pregame">Pre-Game</button>
+            <button type="button" class="os-segment-btn" data-timing="ingame">In-Game</button>
+          </div>
+        </div>
+        <div class="os-toolbar-group os-toolbar-group--right">
+          <button type="button" id="btn-filters" class="os-btn os-btn--outline">
+            <svg class="os-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M4 6h16M7 12h10M10 18h4"/>
+            </svg>
+            Filters
+            <span class="os-badge" id="filter-active-badge">0</span>
+          </button>
+          <div class="os-dropdown" id="presets-dropdown">
+            <button type="button" class="os-btn os-btn--outline os-dropdown-trigger" id="presets-trigger" aria-expanded="false" aria-haspopup="true">
+              Presets
+              <svg class="os-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="os-dropdown-menu hidden" id="presets-menu" role="menu" hidden>
+              <button type="button" class="os-dropdown-item" data-preset="load" role="menuitem">Load saved preset</button>
+              <button type="button" class="os-dropdown-item" data-preset="save" role="menuitem">Save current preset</button>
+              <button type="button" class="os-dropdown-item" data-preset="reset" role="menuitem">Reset to defaults</button>
+            </div>
+          </div>
+          <label class="os-toggle" title="Auto refresh every 60s">
+            <input type="checkbox" id="auto-refresh-toggle" />
+            <span class="os-toggle-track"></span>
+            <span class="os-toggle-label">Auto Refresh</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Trust / capability strip (OddsShopper-style) -->
+      <div class="os-capability-strip">
+        <div class="os-capability">
+          <span class="os-capability-value" id="metric-books">0</span>
+          <span class="os-capability-label">books</span>
+        </div>
+        <div class="os-capability-divider"></div>
+        <div class="os-capability">
+          <span class="os-capability-value" id="metric-leagues">0</span>
+          <span class="os-capability-label">leagues</span>
+        </div>
+        <div class="os-capability-divider"></div>
+        <div class="os-capability">
+          <span class="os-capability-value" id="metric-combinations">0</span>
+          <span class="os-capability-label">combinations</span>
+        </div>
+        <div class="os-capability-divider"></div>
+        <div class="os-capability">
+          <span class="os-capability-value os-capability-value--green" id="stat-total">0</span>
+          <span class="os-capability-label">arbs found</span>
+        </div>
+        <div class="os-capability-divider"></div>
+        <div class="os-capability">
+          <span class="os-capability-value os-capability-value--green" id="stat-best">0.00%</span>
+          <span class="os-capability-label">best ROI</span>
+        </div>
+        <div class="os-capability-divider"></div>
+        <div class="os-capability">
+          <span class="os-capability-value" id="stat-avg">0.00%</span>
+          <span class="os-capability-label">avg profit</span>
+        </div>
+        <div class="os-capability os-capability--tag">Guaranteed profit</div>
+        <div class="os-capability os-capability--tag">Auto stake math</div>
+      </div>
+
+      <!-- Day / schedule tabs -->
+      <div class="os-subtabs" role="tablist">
+        <button type="button" class="os-subtab tab active" data-view="today" role="tab" aria-selected="true">
+          Today <span class="os-count" id="count-today">0</span>
+        </button>
+        <button type="button" class="os-subtab tab" data-view="tomorrow" role="tab" aria-selected="false">
+          Tomorrow <span class="os-count" id="count-tomorrow">0</span>
+        </button>
+        <button type="button" class="os-subtab tab" data-view="sources" role="tab" aria-selected="false">
+          Sources <span class="os-count os-count--muted" id="count-sources-loaded">0</span>
+        </button>
+      </div>
+
+      <!-- In-game notice (hidden by default) -->
+      <div class="os-notice hidden" id="ingame-notice" hidden>
+        <p>Live in-game arbitrage requires real-time odds streaming. Pre-game arbs are shown when <strong>Pre-Game</strong> is selected.</p>
+      </div>
+
+      <!-- Results panel -->
+      <section class="os-results-card" id="panel-opportunities">
+        <div class="os-results-inner">
+          <div class="empty-state" id="empty-state">
+            <div class="os-empty-icon" aria-hidden="true">◎</div>
+            <p id="empty-message">No arbitrage opportunities right now.</p>
+            <p class="empty-hint">Click <strong>Refresh</strong> to scan 110+ market types across US books. Real arbs are rare — switch to <strong>Low Hold</strong> to browse scanned games.</p>
+          </div>
+          <div class="arb-cards" id="arb-cards"></div>
+          <div class="scanned-section hidden" id="scanned-section" hidden>
+            <h2 class="scanned-heading">Low hold markets</h2>
+            <div class="opp-list" id="opp-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="os-results-card hidden" id="panel-sources" hidden>
+        <p class="sources-intro">Sportsbooks and data sources on the last refresh.</p>
+        <div class="empty-state" id="sources-empty">
+          <p>No source status yet.</p>
+          <p class="empty-hint">Click <strong>Refresh</strong> to load sportsbook status.</p>
+        </div>
+        <div class="source-list hidden" id="source-list" hidden></div>
+      </section>
+
+      <p class="error-banner hidden" id="error-banner" hidden></p>
+    </main>
+  </div>
+
+  <!-- Filters slide-over (OddsShopper-style) -->
+  <div id="filters-backdrop" class="filters-backdrop hidden" hidden aria-hidden="true"></div>
+  <aside id="filters-panel" class="filters-panel" hidden aria-label="Filters" aria-hidden="true">
+    <header class="filters-header">
+      <h2>Filters</h2>
+      <button type="button" id="filters-close" class="filters-close" aria-label="Close filters">×</button>
+    </header>
+    <div class="filters-body">
+      <label class="filter-field">
+        <span class="filter-label">Wager Amount</span>
+        <div class="wager-input-wrap">
+          <span class="wager-prefix">$</span>
+          <input type="number" id="filter-wager" min="100" max="50000" step="100" value="1000" />
+        </div>
+      </label>
+      <fieldset class="filter-field">
+        <legend class="filter-label">Sort By</legend>
+        <label class="radio-row"><input type="radio" name="sort-by" value="roi_pct" checked /> ROI %</label>
+        <label class="radio-row"><input type="radio" name="sort-by" value="profit_usd" /> Profit $</label>
+      </fieldset>
+      <section class="filter-section" data-section="sportsbooks">
+        <button type="button" class="filter-section-toggle">
+          <span>Sportsbooks</span>
+          <span class="filter-section-badge" id="badge-sportsbooks">0 Selected</span>
+        </button>
+        <div class="filter-section-body filter-section-body--open" id="list-sportsbooks"></div>
+      </section>
+      <section class="filter-section" data-section="leagues">
+        <button type="button" class="filter-section-toggle">
+          <span>Sports &amp; Leagues</span>
+          <span class="filter-section-badge" id="badge-leagues">0 Selected</span>
+        </button>
+        <div class="filter-section-body filter-section-body--open" id="list-leagues"></div>
+      </section>
+      <section class="filter-section" data-section="markets">
+        <button type="button" class="filter-section-toggle">
+          <span>Market Type</span>
+          <span class="filter-section-badge" id="badge-markets">0 Selected</span>
+        </button>
+        <div class="filter-section-body filter-section-body--open filter-section-body--scroll" id="list-markets"></div>
+      </section>
+    </div>
+    <footer class="filters-footer">
+      <button type="button" id="filter-reset" class="btn-text">Reset all</button>
+      <button type="button" id="filter-save" class="btn-outline">Save Preset</button>
+      <button type="button" id="filter-apply" class="btn-primary">Apply Filters</button>
+    </footer>
+  </aside>
+
+  <dialog id="slip-dialog" class="slip-dialog">
+    <div class="slip-dialog-inner">
+      <button type="button" class="slip-close" id="slip-close" aria-label="Close">×</button>
+      <h2 id="slip-title">Bet slip</h2>
+      <p class="slip-yield" id="slip-yield"></p>
+      <ul class="slip-legs" id="slip-legs"></ul>
+    </div>
+  </dialog>
+
+  <script src="/static/app.js?v=20260610"></script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+# CANONICAL — ALL sports + ALL bet types for arbitrage (The Odds API v4, region=us)
+# Use in every phase. Goal: maximize lines considered across every active sport.
+
+## SPORT DISCOVERY (preferred — do not hardcode NBA only)
+
+```http
+GET /v4/sports?apiKey=KEY          # in-season only (free, no quota)
+GET /v4/sports?apiKey=KEY&all=true # all sports (free)
+```
+
+Implement in harvester:
+- `harvester/integrators/odds_api.py` → `list_active_sports()` returns keys where `active==true`
+- `harvester/arbitrage_orchestrator.py` → loop **every active sport** unless user caps via env
+- Special key `upcoming` = next games across all sports (good smoke test)
+
+Env:
+```env
+ODDS_API_SPORTS_MODE=all_active
+ODDS_API_SPORTS_EXCLUDE=soccer_germany_bundesliga2
+ODDS_API_MAX_SPORTS_PER_RUN=50
+ODDS_API_MAX_EVENTS_PER_SPORT=15
+```
+
+Fallback explicit list (if dynamic discovery not coded yet):
+```env
+ODDS_API_SPORTS=americanfootball_nfl,americanfootball_ncaaf,americanfootball_cfl,basketball_nba,basketball_wnba,basketball_ncaab,basketball_nbl,baseball_mlb,icehockey_nhl,icehockey_ahl,soccer_usa_mls,soccer_epl,soccer_uefa_champs_league,soccer_spain_la_liga,soccer_italy_serie_a,soccer_germany_bundesliga,soccer_france_ligue_one,mma_mixed_martial_arts,boxing_boxing,tennis_atp_aus_open_singles,tennis_wta_aus_open_singles,cricket_big_bash,aussierules_afl,rugbyleague_nrl,rugbyunion_six_nations,golf_masters_tournament_winner
+```
+
+## US MAJOR SPORTS (minimum bar — always include when active)
+
+| Group | Sport keys |
+|-------|------------|
+| NFL / college football | americanfootball_nfl, americanfootball_ncaaf, americanfootball_cfl |
+| NBA / college / WNBA | basketball_nba, basketball_ncaab, basketball_wnba, basketball_nbl |
+| MLB | baseball_mlb |
+| NHL | icehockey_nhl, icehockey_ahl |
+| MLS + top soccer | soccer_usa_mls, soccer_epl, soccer_uefa_champs_league, soccer_spain_la_liga, soccer_italy_serie_a, soccer_germany_bundesliga, soccer_france_ligue_one |
+| Combat | mma_mixed_martial_arts, boxing_boxing |
+| Tennis (grand slams / tours) | tennis_atp_*, tennis_wta_* (discover via /sports) |
+| Golf outrights | golf_*_winner keys when in season |
+| Cricket / AFL / Rugby | cricket_big_bash, aussierules_afl, rugbyleague_nrl, rugbyunion_six_nations |
+
+Full list: https://the-odds-api.com/sports-odds-data/sports-apis.html
+
+## ALL BET TYPES — featured (bulk `/v4/sports/{sport}/odds`)
+
+Always request for **every sport** (1 credit × market × sport):
+
+| Type | API key | Arb matching |
+|------|---------|--------------|
+| Moneyline / 1X2 / H2H | `h2h` | best price per outcome |
+| Point spread | `spreads` | same team + same point |
+| Totals O/U | `totals` | same point, over vs under |
+| Outrights / futures | `outrights` | same selection (futures arbs rare) |
+
+Bulk markets string: `h2h,spreads,totals,outrights`
+
+## ALL BET TYPES — event depth (`/events/{eventId}/odds`)
+
+Request per event (1 credit × market × event). Merge all into snapshot.
+
+### Universal alternates
+- `alternate_spreads`
+- `alternate_totals`
+- `alternate_team_totals`
+
+### Basketball (NBA/NCAAB/WNBA)
+- `player_points`, `player_rebounds`, `player_assists`, `player_threes`, `player_blocks`, `player_steals`, `player_turnovers`, `player_points_rebounds_assists`
+- `player_points_alternate`, `player_rebounds_alternate`, `player_assists_alternate`, `player_threes_alternate`
+
+### Football (NFL/NCAAF)
+- `player_pass_tds`, `player_pass_yds`, `player_rush_yds`, `player_receptions`, `player_reception_yds`, `player_anytime_td`
+- `*_alternate` variants per Odds API docs
+
+### Baseball (MLB)
+- `batter_home_runs`, `batter_hits`, `batter_rbis`, `pitcher_strikeouts`, `pitcher_hits_allowed`
+- alternates per docs
+
+### Hockey (NHL)
+- `player_points`, `player_goals`, `player_assists`, `player_shots_on_goal`
+- alternates per docs
+
+### Soccer
+- `btts`, `draw_no_bet`, `alternate_spreads`, `alternate_totals`, `player_goal_scorer_anytime`
+- many league-specific markets — discover from API response per event
+
+### MMA / Boxing
+- `h2h` primary; method-of-victory props on event endpoint when available
+
+Reference: https://the-odds-api.com/sports-odds-data/betting-markets.html
+
+## DASHBOARD RULES
+
+- Do **NOT** filter dashboard to `basketball_nba` only
+- `build_dashboard_payload` must show events from **all ingested sports**
+- Sources tab: aggregate quote counts across all sports
+- Opportunities: tag each with `sport_key` + `market_type`
+
+## API CREDIT MATH (warn user)
+
+Per full refresh (approx):
+- Bulk: `active_sports × 4 markets` credits
+- Event depth: `active_sports × events × event_markets` credits
+Use `ODDS_API_MAX_SPORTS_PER_RUN` and `ODDS_API_MAX_EVENTS_PER_SPORT` to cap.

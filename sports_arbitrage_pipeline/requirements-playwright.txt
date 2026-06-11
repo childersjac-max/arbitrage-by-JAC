@@ -1,0 +1,2 @@
+# Optional browser automation (NOT required for arbitrage_orchestrator / Odds API)
+playwright>=1.40.0,<2

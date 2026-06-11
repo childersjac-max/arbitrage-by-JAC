@@ -1,0 +1,15 @@
+Arb dashboard :8765 — split-leg cards + Filters panel.
+
+PULL: git fetch origin cursor/ui-card-filters-autorun-4fea && git checkout origin/cursor/ui-card-filters-autorun-4fea -- prompts/llm_ui_phases prompts/llm_multi_agent_arb_card_dashboard*.txt multi-agent-llm/run_phases.*
+
+AUTO-RUN (recommended): cd multi-agent-llm && bash run_phases.sh --set ui_card
+Full pipeline: bash run_phases.sh --set full
+Gradio one-paste: prompts/llm_ui_phases/AUTORUN_ALL_UI_PHASES.txt
+
+UI A-F: API+filter_options → filters HTML → card CSS → card JS → filters JS → verify
+
+Cards: sport badge, event, market, ROI pill, 2 legs (american odds, market avg, stake, payout, Bet First), Place Both, comparison table (best=green), wager recalc live
+
+Filters: $1000 wager, sort ROI%|Profit$, sportsbooks/sports/leagues/market types (N Selected badges), Reset/Save Preset/Apply Filters
+
+View: orchestrator --full + harvester web_app.py → http://127.0.0.1:8765. No fake arbs. Never ask ODDS_API_KEY.

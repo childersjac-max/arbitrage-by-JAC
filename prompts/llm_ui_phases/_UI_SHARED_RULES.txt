@@ -1,0 +1,7 @@
+UI SHARED RULES (arb card dashboard — port 8765)
+- Edit: harvester/static/index.html, styles.css, app.js, harvester/dashboard_service.py
+- Data: GET /api/status?day=today — real opportunities only, no fake demo rows
+- Theme: dark #0b0d10, card #181e24, ROI green #22c55e, primary button #3b82f6
+- ODDS_API_KEY: harvester/.env — never ask user
+- AUTONOMOUS: complete this UI sub-phase in one pass; full files, no TODOs
+- American odds = display only; math uses decimal prices

@@ -1,0 +1,45 @@
+# UI PHASE D of F — Card rendering + stake math + sort
+
+REFERENCE: prompts/llm_ui_phases/_UI_SHARED_RULES.txt
+PREREQUISITE: UI PHASE A API, UI PHASE C markup/CSS
+
+GOAL: Wire `app.js` to render arb cards from live API.
+
+### Implement in `harvester/static/app.js`:
+
+```javascript
+function decimalToAmerican(d) { ... }
+function allocateStakes(legs, wagerUsd) { ... }
+function profitAndRoi(legs, wagerUsd) { ... }
+function renderOpportunityCard(opp, wagerUsd) { ... }
+function renderComparisonTable(quote_matrix) { ... }
+```
+
+- Fetch `/api/status?day=today` (respect active day tab)
+- `renderOpportunities()` → clear `#opp-list`, append one `.arb-card` per opportunity
+- Wager input in Filters panel (PHASE E) OR header sync → recalc all cards on change
+- Stake inputs per leg: editing one leg recalculates others to keep equal payout (arb math)
+- Sort opportunities client-side by `roi_pct` or `profit_usd_at_1000` (default roi_pct desc)
+- Click "Bet First" / leg bet → open `BOOK_URLS[source]` new tab
+- "Place Both" → open both book URLs
+
+```javascript
+const BOOK_URLS = {
+  draftkings: "https://sportsbook.draftkings.com/",
+  fanduel: "https://sportsbook.fanduel.com/",
+  betmgm: "https://sports.betmgm.com/",
+  caesars: "https://www.caesars.com/sportsbook-and-casino",
+  fanatics: "https://sportsbook.fanatics.com/",
+  betcris: "https://www.betcris.com/",
+};
+```
+
+Persist `wager_usd` + `sort_by` in localStorage.
+
+VERIFY:
+```bash
+curl -s http://127.0.0.1:8765/api/status?day=today | python -m json.tool | head -40
+```
+Browser: cards render when opportunities exist; stakes update live.
+
+STOP. Next: UI_PHASE_E_filters_js.txt

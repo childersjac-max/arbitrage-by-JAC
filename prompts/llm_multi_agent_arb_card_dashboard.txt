@@ -1,0 +1,101 @@
+# MULTI-AGENT — Arb card dashboard + Filters panel (auto-chained UI phases)
+# Project: arbitrage-by-JAC | Dashboard: http://127.0.0.1:8765
+#
+# ═══════════════════════════════════════════════════════════════════
+# PULL PROMPTS (Git Bash):
+#
+#   cd ~/Projects/arbitrage-by-JAC
+#   git fetch origin cursor/ui-card-filters-autorun-4fea
+#   git checkout origin/cursor/ui-card-filters-autorun-4fea -- \
+#     prompts/llm_ui_phases \
+#     prompts/llm_multi_agent_arb_card_dashboard.txt \
+#     prompts/llm_multi_agent_arb_card_dashboard_SHORT.txt \
+#     multi-agent-llm/run_phases.py multi-agent-llm/run_phases.sh
+#
+# ═══════════════════════════════════════════════════════════════════
+# UNATTENDED — run all UI phases automatically (RECOMMENDED):
+#
+#   cd ~/Projects/arbitrage-by-JAC/multi-agent-llm
+#   source .venv/Scripts/activate
+#   bash run_phases.sh --set ui_card      # UI A–F only
+#   bash run_phases.sh --set full         # deploy 1–6 + UI A–F (entire pipeline)
+#
+# Logs: multi-agent-llm/logs/phase_ui_*.txt
+# Gradio one-paste (may timeout on CPU): prompts/llm_ui_phases/AUTORUN_ALL_UI_PHASES.txt
+# ═══════════════════════════════════════════════════════════════════
+#
+# Manual Gradio: paste one file per session from prompts/llm_ui_phases/
+
+---
+
+## DELIVERABLE
+
+Professional arbitrage dashboard with:
+
+### A) Split-leg opportunity cards
+- Header: sport badge, event, market label, time, green `+$profit • X% ROI` pill
+- Two leg columns: book, selection+line, american odds + market avg, stake $, payout, Bet First
+- Place Both button
+- Comparison table: all books, best odds highlighted green
+
+### B) Filters panel (reference UI — screenshot)
+- **Wager Amount** — `$` input default `1000.00` (recalculates all card stakes live; optional bankroll slider $100–$50k may sync with this)
+- **Sort By** — radio: `ROI %` (default) | `Profit $`
+- **Sportsbooks** — collapsible multi-select, badge e.g. `35 Selected`
+- **Sports & Leagues** — grouped by sport, badge e.g. `44 Selected`
+- **Market Type** — scrollable multi-select (100+ types), badge e.g. `1028 Selected`
+- Footer: **Reset all** | **Save Preset** | **Apply Filters** (primary blue)
+
+Filters apply client-side to `opportunities[]` from `GET /api/status?day=today`.
+
+---
+
+## AUTO-CHAINED UI PHASES (run via `run_phases.sh --set ui_card`)
+
+| Phase | File | Builds |
+|-------|------|--------|
+| A | `llm_ui_phases/UI_PHASE_A_api_payload.txt` | API + filter_options metadata |
+| B | `llm_ui_phases/UI_PHASE_B_filters_panel_html.txt` | Filters modal HTML/CSS |
+| C | `llm_ui_phases/UI_PHASE_C_card_html_css.txt` | Arb card layout CSS |
+| D | `llm_ui_phases/UI_PHASE_D_card_js.txt` | Card render + stake math |
+| E | `llm_ui_phases/UI_PHASE_E_filters_js.txt` | Filters logic + presets |
+| F | `llm_ui_phases/UI_PHASE_F_verify_polish.txt` | QA + polish |
+
+---
+
+## FULL PIPELINE CHAIN (`run_phases.sh --set full`)
+
+1. Deploy PHASE 1–6 — multi-sport ingest + arb engine + LAN (prompts/llm_deploy_phases/)
+2. UI PHASE A–F — cards + filters (prompts/llm_ui_phases/)
+
+---
+
+## FILES TO EDIT (summary)
+
+```
+harvester/dashboard_service.py   # opportunities + filter_options
+harvester/static/index.html      # filters panel + card shell
+harvester/static/styles.css      # dark theme, cards, filters
+harvester/static/app.js          # render, filter, sort, stakes
+```
+
+---
+
+## HARD RULES
+
+- Real data only — no fake arb cards when API returns 0
+- Decimal math, american display only
+- Never ask for ODDS_API_KEY
+- Complete files per phase, no TODOs
+
+---
+
+## VERIFY
+
+```bash
+cd ~/Projects/arbitrage-by-JAC/sports_arbitrage_pipeline && source venv/Scripts/activate
+python arbitrage_orchestrator.py --full
+cd ../harvester && python web_app.py
+```
+
+**http://127.0.0.1:8765**

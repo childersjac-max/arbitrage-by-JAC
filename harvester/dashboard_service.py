@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any
 
+from allocation.balances import balances_snapshot, get_book_balances, save_book_balances
+from allocation.optimizer import enrich_opportunities, optimize_portfolio
 from engine import HarvesterEngine, best_prices_implied_sum
 from harvester_paths import PACKAGE_DIR
 from models import UnifiedRecord
@@ -199,6 +201,10 @@ def build_dashboard_payload(
         tomorrow_opps = _filter_by_day(all_opps, records, day="tomorrow")
         active = today_opps if day == "today" else tomorrow_opps
 
+        balances = get_book_balances()
+        portfolio = optimize_portfolio(active, balances)
+        active = enrich_opportunities(active, portfolio)
+
         today_events = [_scanned_event_from_record(r) for r in _filter_records_by_day(records, day="today")]
         tomorrow_events = [_scanned_event_from_record(r) for r in _filter_records_by_day(records, day="tomorrow")]
         active_events = today_events if day == "today" else tomorrow_events
@@ -230,6 +236,8 @@ def build_dashboard_payload(
             },
             "opportunities": active,
             "scanned_events": active_events,
+            "portfolio": portfolio.to_dict(),
+            "balances": balances_snapshot(),
             "run_summary": run_summary,
             "sources": sources,
             "source_summary": source_summary(sources),

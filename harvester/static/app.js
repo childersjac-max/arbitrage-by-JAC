@@ -29,10 +29,21 @@ const el = {
   slipYield: document.getElementById("slip-yield"),
   slipLegs: document.getElementById("slip-legs"),
   slipClose: document.getElementById("slip-close"),
+  portfolioPanel: document.getElementById("portfolio-panel"),
+  portfolioProfit: document.getElementById("portfolio-profit"),
+  portfolioDeployed: document.getElementById("portfolio-deployed"),
+  portfolioSelected: document.getElementById("portfolio-selected"),
+  portfolioBalance: document.getElementById("portfolio-balance"),
+  portfolioBooks: document.getElementById("portfolio-books"),
+  portfolioSub: document.getElementById("portfolio-sub"),
 };
 
 function formatPct(n) {
   return `${Number(n).toFixed(2)}%`;
+}
+
+function formatMoney(n) {
+  return `$${Number(n || 0).toFixed(2)}`;
 }
 
 function formatLastRun(iso) {
@@ -119,25 +130,70 @@ function renderScannedEvents(events, summary) {
   });
 }
 
+function renderPortfolio(portfolio, balances) {
+  if (!el.portfolioPanel) return;
+  if (!portfolio && !balances) {
+    el.portfolioPanel.classList.add("hidden");
+    return;
+  }
+  el.portfolioPanel.classList.remove("hidden");
+  if (!portfolio) return;
+
+  el.portfolioProfit.textContent = formatMoney(portfolio.total_expected_profit_usd);
+  el.portfolioDeployed.textContent = formatMoney(portfolio.total_deployed_usd);
+  el.portfolioSelected.textContent = String(portfolio.opportunities_selected ?? 0);
+  el.portfolioBalance.textContent = formatMoney(balances?.total_usd ?? 0);
+
+  const skipped = portfolio.opportunities_skipped ?? 0;
+  const hasPortfolio = portfolio.opportunities_selected > 0 || portfolio.total_deployed_usd > 0;
+  el.portfolioSub.textContent =
+    hasPortfolio
+      ? `Greedy optimizer · ${portfolio.opportunities_selected} selected · ${skipped} skipped`
+      : "No executable arbs at current balances — adjust balances or wait for new opportunities";
+
+  el.portfolioBooks.innerHTML = "";
+  const util = portfolio.book_utilization || {};
+  (balances?.books || []).forEach((book) => {
+    if (!book.available && !util[book.key]) return;
+    const chip = document.createElement("div");
+    chip.className = "portfolio-book-chip";
+    const usedPct = ((util[book.key] || 0) * 100).toFixed(0);
+    chip.innerHTML = `
+      <span class="portfolio-book-name">${escapeHtml(book.name)}</span>
+      <span class="portfolio-book-bal">${formatMoney(book.balance_usd)}</span>
+      <span class="portfolio-book-util">${usedPct}% used</span>
+    `;
+    el.portfolioBooks.appendChild(chip);
+  });
+}
+
 function renderOpportunities(opportunities, scannedEvents, summary) {
   if (opportunities.length) {
     el.list.innerHTML = "";
     el.empty.classList.add("hidden");
     el.list.classList.remove("hidden");
     opportunities.forEach((opp) => {
-    const row = document.createElement("div");
-    row.className = "opp-row";
-    const method = opp.arb_method ? ` · ${opp.arb_method}` : "";
-    row.innerHTML = `
-      <div>
-        <div class="opp-event">${escapeHtml(opp.event_name)}</div>
-        <div class="opp-meta">${escapeHtml(opp.sport_key)} · ${formatCommence(opp.commence_time)}${escapeHtml(method)}</div>
-      </div>
-      <span class="opp-market">${escapeHtml(opp.market_type)}</span>
-      <span class="opp-yield">${formatPct(opp.yield_pct)}</span>
-    `;
-    row.addEventListener("click", () => openSlip(opp));
-    el.list.appendChild(row);
+      const row = document.createElement("div");
+      row.className = "opp-row";
+      const method = opp.arb_method ? ` · ${opp.arb_method}` : "";
+      const alloc = opp.allocation || {};
+      let allocLine = "";
+      if (alloc.selected) {
+        allocLine = `<div class="opp-alloc">+${formatMoney(alloc.expected_profit_usd)} @ ${formatMoney(alloc.total_stake_usd)} · limit: ${escapeHtml(alloc.limiting_book || "—")}</div>`;
+      } else if (alloc.limiting_book) {
+        allocLine = `<div class="opp-alloc opp-alloc--skip">Skipped · limit: ${escapeHtml(alloc.limiting_book)}</div>`;
+      }
+      row.innerHTML = `
+        <div>
+          <div class="opp-event">${escapeHtml(opp.event_name)}</div>
+          <div class="opp-meta">${escapeHtml(opp.sport_key)} · ${formatCommence(opp.commence_time)}${escapeHtml(method)}</div>
+          ${allocLine}
+        </div>
+        <span class="opp-market">${escapeHtml(opp.market_type)}</span>
+        <span class="opp-yield">${formatPct(opp.yield_pct)}</span>
+      `;
+      row.addEventListener("click", () => openSlip(opp));
+      el.list.appendChild(row);
     });
     return;
   }
@@ -212,21 +268,22 @@ function formatCommence(iso) {
 
 function openSlip(opp) {
   el.slipTitle.textContent = opp.event_name;
-  let yieldLine = `Profit: ${formatPct(opp.yield_pct)}`;
+  const alloc = opp.allocation || {};
+  let yieldLine = `ROI: ${formatPct(opp.yield_pct)}`;
+  if (alloc.selected) {
+    yieldLine += ` · Profit ${formatMoney(alloc.expected_profit_usd)} on ${formatMoney(alloc.total_stake_usd)}`;
+  }
   if (opp.arb_method) yieldLine += ` (${opp.arb_method})`;
   el.slipYield.textContent = yieldLine;
-  if (opp.llm_reasoning) {
-    const note = document.createElement("p");
-    note.className = "slip-note";
-    note.textContent = opp.llm_reasoning;
-    el.slipYield.after(note);
-  }
   el.slipLegs.innerHTML = "";
   (opp.legs || []).forEach((leg) => {
     const li = document.createElement("li");
+    const stakeLine = leg.stake_usd != null
+      ? `${formatMoney(leg.stake_usd)} → payout ${formatMoney(leg.payout_usd)}`
+      : `stake ${(leg.stake_weight * 100).toFixed(1)}%`;
     li.innerHTML = `
       <strong>${escapeHtml(leg.outcome)}</strong>
-      <span class="leg-detail">${escapeHtml(leg.source)} · ${leg.price.toFixed(2)} decimal · stake ${(leg.stake_weight * 100).toFixed(1)}%</span>
+      <span class="leg-detail">${escapeHtml(leg.source)} · ${leg.price.toFixed(2)} decimal · ${stakeLine}</span>
     `;
     el.slipLegs.appendChild(li);
   });
@@ -259,6 +316,7 @@ function applyPayload(data) {
   }
 
   if (state.view === "today" || state.view === "tomorrow") {
+    renderPortfolio(data.portfolio, data.balances);
     renderOpportunities(data.opportunities || [], data.scanned_events || [], data.run_summary);
     const s = data.run_summary;
     if (s && !data.opportunities?.length && (s.events_today || s.events_tomorrow)) {

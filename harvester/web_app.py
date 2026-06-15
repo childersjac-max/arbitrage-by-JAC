@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from allocation.balances import balances_snapshot, get_book_balances, save_book_balances
 from config import get_settings
 from dashboard_service import (
     build_dashboard_payload,
@@ -45,6 +46,23 @@ if STATIC_DIR.is_dir():
 
 class RunRequest(BaseModel):
     sport_key: str | None = None
+
+
+class BalancesUpdate(BaseModel):
+    balances: dict[str, float] = Field(default_factory=dict)
+
+
+@app.get("/api/balances")
+async def api_balances():
+    return balances_snapshot()
+
+
+@app.put("/api/balances")
+async def api_update_balances(body: BalancesUpdate):
+    if not body.balances:
+        raise HTTPException(400, "balances object required")
+    save_book_balances(body.balances)
+    return balances_snapshot()
 
 
 @app.get("/")

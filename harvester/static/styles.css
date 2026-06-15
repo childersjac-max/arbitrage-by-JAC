@@ -406,6 +406,87 @@ body {
   text-transform: uppercase;
 }
 
+.opp-alloc {
+  font-size: 0.72rem;
+  color: var(--green);
+  margin-top: 0.25rem;
+}
+
+.opp-alloc--skip {
+  color: var(--muted);
+}
+
+.portfolio-panel {
+  margin: 1rem 0;
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.portfolio-head h2 {
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.portfolio-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+
+.portfolio-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.portfolio-label {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.portfolio-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.portfolio-value--green {
+  color: var(--green);
+}
+
+.portfolio-books {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.portfolio-book-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.72rem;
+}
+
+.portfolio-book-name {
+  font-weight: 600;
+}
+
+.portfolio-book-bal {
+  color: var(--muted);
+}
+
+.portfolio-book-util {
+  color: var(--green);
+}
+
 .error-banner {
   margin-top: 1rem;
   padding: 0.75rem 1rem;

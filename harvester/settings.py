@@ -64,6 +64,35 @@ class HarvesterSettings(BaseSettings):
         default=120.0,
         validation_alias="HARVESTER_RUN_TIMEOUT_SEC",
     )
+    balance_provider: str = Field(
+        default="mock",
+        validation_alias="HARVESTER_BALANCE_PROVIDER",
+    )
+    pikkit_api_key: str = Field(default="", validation_alias="PIKKIT_API_KEY")
+    min_leg_stake_usd: float = Field(
+        default=1.0,
+        validation_alias="HARVESTER_MIN_LEG_STAKE_USD",
+    )
+    min_allocation_profit_usd: float = Field(
+        default=0.5,
+        validation_alias="HARVESTER_MIN_ALLOCATION_PROFIT_USD",
+    )
+    min_allocation_roi_pct: float = Field(
+        default=0.1,
+        validation_alias="HARVESTER_MIN_ALLOCATION_ROI_PCT",
+    )
+    alloc_weight_profit: float = Field(
+        default=1.0,
+        validation_alias="HARVESTER_ALLOC_WEIGHT_PROFIT",
+    )
+    alloc_weight_roi: float = Field(
+        default=0.25,
+        validation_alias="HARVESTER_ALLOC_WEIGHT_ROI",
+    )
+    alloc_weight_capital_penalty: float = Field(
+        default=0.15,
+        validation_alias="HARVESTER_ALLOC_WEIGHT_CAPITAL_PENALTY",
+    )
     http_proxy_url: str | None = Field(default=None, validation_alias="HARVESTER_HTTP_PROXY")
     http_user_agent: str = Field(
         default="harvester/1.0",

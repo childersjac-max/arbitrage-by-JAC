@@ -10,7 +10,12 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from allocation.balances import balances_snapshot, get_book_balances, save_book_balances
-from allocation.optimizer import enrich_opportunities, optimize_portfolio
+from allocation.optimizer import (
+    enrich_opportunities,
+    find_best_potential_play,
+    mark_best_potential_play,
+    optimize_portfolio,
+)
 from engine import HarvesterEngine, best_prices_implied_sum
 from harvester_paths import PACKAGE_DIR
 from models import UnifiedRecord
@@ -202,8 +207,10 @@ def build_dashboard_payload(
         active = today_opps if day == "today" else tomorrow_opps
 
         balances = get_book_balances()
+        potential_play = find_best_potential_play(active, balances)
         portfolio = optimize_portfolio(active, balances)
         active = enrich_opportunities(active, portfolio)
+        active = mark_best_potential_play(active, potential_play)
 
         today_events = [_scanned_event_from_record(r) for r in _filter_records_by_day(records, day="today")]
         tomorrow_events = [_scanned_event_from_record(r) for r in _filter_records_by_day(records, day="tomorrow")]
@@ -237,6 +244,7 @@ def build_dashboard_payload(
             "opportunities": active,
             "scanned_events": active_events,
             "portfolio": portfolio.to_dict(),
+            "potential_play": potential_play.to_dict() if potential_play else None,
             "balances": balances_snapshot(),
             "run_summary": run_summary,
             "sources": sources,

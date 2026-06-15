@@ -19,10 +19,12 @@ from typing import Any
 from allocation.models import (
     AllocatedLeg,
     AllocatedOpportunity,
+    PotentialPlay,
     PortfolioResult,
     SkippedOpportunity,
 )
 from settings import HarvesterSettings, get_settings
+from target_sources import TARGET_SOURCE_BY_KEY
 
 
 def _normalized_weights(legs: list[dict[str, Any]]) -> list[float]:
@@ -83,6 +85,158 @@ def compute_max_size(
         return 0.0, limiting_book
 
     return round(max_total, 2), limiting_book
+
+
+def compute_max_size_if_rebalanced(
+    opportunity: dict[str, Any],
+    total_capital_usd: float,
+    *,
+    min_leg_stake_usd: float = 1.0,
+) -> float:
+    """
+    Max stake if the user can freely move all funds across books for this arb.
+
+    With reallocation, total stake is capped by aggregate capital (not per-book
+  distribution). Profit still scales linearly, so deploying all capital on one
+  arb maximizes $ profit for that play.
+    """
+    legs = opportunity.get("legs") or []
+    if len(legs) < 2 or total_capital_usd <= 0:
+        return 0.0
+
+    weights = _normalized_weights(legs)
+    min_total = 0.0
+    for weight in weights:
+        if weight > 0:
+            min_total = max(min_total, min_leg_stake_usd / weight)
+
+    if total_capital_usd < min_total:
+        return 0.0
+
+    return round(total_capital_usd, 2)
+
+
+def build_fund_relocation_plan(
+    current_balances: dict[str, float],
+    allocated_legs: list[AllocatedLeg],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    Per-book targets vs current balances when funding the ideal arb.
+
+    Returns (fund_targets, funding_sources) where:
+    - fund_targets: books that need stakes; delta_usd > 0 means deposit/transfer in
+    - funding_sources: books with spare cash after funding the play
+    """
+    required: dict[str, float] = {}
+    for leg in allocated_legs:
+        required[leg.source] = required.get(leg.source, 0.0) + leg.stake_usd
+
+    fund_targets: list[dict[str, Any]] = []
+    for leg in allocated_legs:
+        book = leg.source
+        if any(t["book"] == book for t in fund_targets):
+            continue
+        current = float(current_balances.get(book, 0.0))
+        need = round(required.get(book, 0.0), 2)
+        src = TARGET_SOURCE_BY_KEY.get(book)
+        fund_targets.append(
+            {
+                "book": book,
+                "book_name": src.name if src else book,
+                "current_usd": round(current, 2),
+                "required_usd": need,
+                "delta_usd": round(need - current, 2),
+            }
+        )
+
+    funding_sources: list[dict[str, Any]] = []
+    for book, balance in current_balances.items():
+        spare = round(balance - required.get(book, 0.0), 2)
+        if spare > 0:
+            src = TARGET_SOURCE_BY_KEY.get(book)
+            funding_sources.append(
+                {
+                    "book": book,
+                    "book_name": src.name if src else book,
+                    "available_usd": spare,
+                }
+            )
+
+    fund_targets.sort(key=lambda row: -row["delta_usd"])
+    funding_sources.sort(key=lambda row: -row["available_usd"])
+    return fund_targets, funding_sources
+
+
+def find_best_potential_play(
+    opportunities: list[dict[str, Any]],
+    balances: dict[str, float],
+    *,
+    settings: HarvesterSettings | None = None,
+) -> PotentialPlay | None:
+    """
+    Highest $ profit single arb if all available funds are moved to the right books.
+
+    Picks the opportunity with the largest profit_at_size(total_capital, roi).
+    """
+    settings = settings or get_settings()
+    total_capital = sum(balances.values())
+    if total_capital <= 0 or not opportunities:
+        return None
+
+    best_opp: dict[str, Any] | None = None
+    best_size = 0.0
+    best_profit = -1.0
+
+    for opp in opportunities:
+        yield_pct = float(opp.get("yield_pct") or 0.0)
+        if yield_pct < settings.min_allocation_roi_pct:
+            continue
+
+        size = compute_max_size_if_rebalanced(
+            opp,
+            total_capital,
+            min_leg_stake_usd=settings.min_leg_stake_usd,
+        )
+        if size <= 0:
+            continue
+
+        profit = profit_at_size(size, yield_pct)
+        if profit < settings.min_allocation_profit_usd:
+            continue
+
+        if profit > best_profit:
+            best_profit = profit
+            best_opp = opp
+            best_size = size
+
+    if best_opp is None:
+        return None
+
+    current_size, _ = compute_max_size(
+        best_opp,
+        balances,
+        min_leg_stake_usd=settings.min_leg_stake_usd,
+    )
+    current_profit = profit_at_size(current_size, float(best_opp.get("yield_pct") or 0.0))
+
+    ideal_legs = allocate_stakes_for_opportunity(best_opp, best_size, balances)
+    fund_targets, funding_sources = build_fund_relocation_plan(balances, ideal_legs)
+
+    return PotentialPlay(
+        opportunity_id=str(best_opp.get("id") or ""),
+        event_name=str(best_opp.get("event_name") or ""),
+        sport_key=str(best_opp.get("sport_key") or ""),
+        market_type=str(best_opp.get("market_type") or ""),
+        roi_pct=float(best_opp.get("yield_pct") or 0.0),
+        total_capital_usd=total_capital,
+        max_stake_usd=best_size,
+        potential_profit_usd=best_profit,
+        current_profit_usd=current_profit,
+        profit_uplift_usd=round(best_profit - current_profit, 2),
+        fund_targets=fund_targets,
+        funding_sources=funding_sources,
+        legs=[leg.to_dict() for leg in ideal_legs],
+    )
 
 
 def score_arb(
@@ -342,3 +496,21 @@ def enrich_opportunities(
         enriched.append(row)
 
     return enriched
+
+
+def mark_best_potential_play(
+    opportunities: list[dict[str, Any]],
+    potential: PotentialPlay | None,
+) -> list[dict[str, Any]]:
+    """Flag the highest potential $ play in the opportunity list."""
+    if not potential:
+        return opportunities
+    pid = potential.opportunity_id
+    for row in opportunities:
+        is_best = str(row.get("id") or "") == pid
+        row["is_best_potential"] = is_best
+        if is_best:
+            alloc = row.setdefault("allocation", {})
+            alloc["potential_profit_usd"] = potential.potential_profit_usd
+            alloc["profit_uplift_usd"] = potential.profit_uplift_usd
+    return opportunities

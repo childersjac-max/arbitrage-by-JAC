@@ -98,3 +98,39 @@ class PortfolioResult:
                 k: round(v, 4) for k, v in sorted(self.book_utilization.items())
             },
         }
+
+
+@dataclass
+class PotentialPlay:
+    """Best single arb if user reallocates all available funds to the right books."""
+
+    opportunity_id: str
+    event_name: str
+    sport_key: str
+    market_type: str
+    roi_pct: float
+    total_capital_usd: float
+    max_stake_usd: float
+    potential_profit_usd: float
+    current_profit_usd: float
+    profit_uplift_usd: float
+    fund_targets: list[dict[str, Any]] = field(default_factory=list)
+    funding_sources: list[dict[str, Any]] = field(default_factory=list)
+    legs: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "opportunity_id": self.opportunity_id,
+            "event_name": self.event_name,
+            "sport_key": self.sport_key,
+            "market_type": self.market_type,
+            "roi_pct": round(self.roi_pct, 4),
+            "total_capital_usd": round(self.total_capital_usd, 2),
+            "max_stake_usd": round(self.max_stake_usd, 2),
+            "potential_profit_usd": round(self.potential_profit_usd, 2),
+            "current_profit_usd": round(self.current_profit_usd, 2),
+            "profit_uplift_usd": round(self.profit_uplift_usd, 2),
+            "fund_targets": self.fund_targets,
+            "funding_sources": self.funding_sources,
+            "legs": self.legs,
+        }

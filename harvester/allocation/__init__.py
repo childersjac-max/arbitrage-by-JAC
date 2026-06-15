@@ -5,6 +5,8 @@ from allocation.optimizer import (
     allocate_stakes_for_opportunity,
     compute_max_size,
     enrich_opportunities,
+    find_best_potential_play,
+    mark_best_potential_play,
     optimize_portfolio,
     profit_at_size,
     score_arb,

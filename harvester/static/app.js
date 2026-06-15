@@ -36,6 +36,14 @@ const el = {
   portfolioBalance: document.getElementById("portfolio-balance"),
   portfolioBooks: document.getElementById("portfolio-books"),
   portfolioSub: document.getElementById("portfolio-sub"),
+  potentialPlayCard: document.getElementById("potential-play-card"),
+  potentialPlayTitle: document.getElementById("potential-play-title"),
+  potentialPlayMeta: document.getElementById("potential-play-meta"),
+  potentialPlayProfit: document.getElementById("potential-play-profit"),
+  potentialPlayCurrent: document.getElementById("potential-play-current"),
+  potentialPlayUplift: document.getElementById("potential-play-uplift"),
+  potentialPlayStake: document.getElementById("potential-play-stake"),
+  potentialPlayFundList: document.getElementById("potential-play-fund-list"),
 };
 
 function formatPct(n) {
@@ -130,6 +138,55 @@ function renderScannedEvents(events, summary) {
   });
 }
 
+function renderPotentialPlay(play, opportunities) {
+  if (!el.potentialPlayCard) return;
+  if (!play) {
+    el.potentialPlayCard.classList.add("hidden");
+    return;
+  }
+  el.potentialPlayCard.classList.remove("hidden");
+  el.potentialPlayTitle.textContent = play.event_name || "—";
+  el.potentialPlayMeta.textContent =
+    `${play.sport_key || ""} · ${play.market_type || ""} · ${formatPct(play.roi_pct)} ROI`;
+  el.potentialPlayProfit.textContent = formatMoney(play.potential_profit_usd);
+  el.potentialPlayCurrent.textContent = formatMoney(play.current_profit_usd);
+  el.potentialPlayUplift.textContent = `+${formatMoney(play.profit_uplift_usd)}`;
+  el.potentialPlayStake.textContent = formatMoney(play.max_stake_usd);
+
+  el.potentialPlayFundList.innerHTML = "";
+  const needs = (play.fund_targets || []).filter((t) => t.delta_usd > 0);
+  const sources = play.funding_sources || [];
+
+  if (!needs.length) {
+    const li = document.createElement("li");
+    li.textContent = "Balances already aligned — you can deploy without moving funds.";
+    el.potentialPlayFundList.appendChild(li);
+  } else {
+    needs.forEach((target) => {
+      const li = document.createElement("li");
+      const name = target.book_name || target.book;
+      li.innerHTML = `<strong>${escapeHtml(name)}</strong>: add ${formatMoney(target.delta_usd)} ` +
+        `(have ${formatMoney(target.current_usd)}, need ${formatMoney(target.required_usd)})`;
+      el.potentialPlayFundList.appendChild(li);
+    });
+    if (sources.length) {
+      const li = document.createElement("li");
+      li.className = "potential-play-fund-source";
+      const names = sources
+        .slice(0, 4)
+        .map((s) => `${s.book_name || s.book} (${formatMoney(s.available_usd)})`)
+        .join(", ");
+      li.textContent = `Fund from: ${names}`;
+      el.potentialPlayFundList.appendChild(li);
+    }
+  }
+
+  el.potentialPlayCard.onclick = () => {
+    const match = (opportunities || []).find((o) => o.id === play.opportunity_id);
+    if (match) openSlip(match);
+  };
+}
+
 function renderPortfolio(portfolio, balances) {
   if (!el.portfolioPanel) return;
   if (!portfolio && !balances) {
@@ -175,11 +232,14 @@ function renderOpportunities(opportunities, scannedEvents, summary) {
     opportunities.forEach((opp) => {
       const row = document.createElement("div");
       row.className = "opp-row";
+      if (opp.is_best_potential) row.classList.add("opp-row--potential");
       const method = opp.arb_method ? ` · ${opp.arb_method}` : "";
       const alloc = opp.allocation || {};
       let allocLine = "";
       if (alloc.selected) {
         allocLine = `<div class="opp-alloc">+${formatMoney(alloc.expected_profit_usd)} @ ${formatMoney(alloc.total_stake_usd)} · limit: ${escapeHtml(alloc.limiting_book || "—")}</div>`;
+      } else if (opp.is_best_potential && alloc.potential_profit_usd) {
+        allocLine = `<div class="opp-alloc opp-alloc--potential">Potential ${formatMoney(alloc.potential_profit_usd)} if rebalanced (+${formatMoney(alloc.profit_uplift_usd || 0)})</div>`;
       } else if (alloc.limiting_book) {
         allocLine = `<div class="opp-alloc opp-alloc--skip">Skipped · limit: ${escapeHtml(alloc.limiting_book)}</div>`;
       }
@@ -316,6 +376,7 @@ function applyPayload(data) {
   }
 
   if (state.view === "today" || state.view === "tomorrow") {
+    renderPotentialPlay(data.potential_play, data.opportunities);
     renderPortfolio(data.portfolio, data.balances);
     renderOpportunities(data.opportunities || [], data.scanned_events || [], data.run_summary);
     const s = data.run_summary;

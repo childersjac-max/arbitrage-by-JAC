@@ -3,30 +3,16 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
 from config import get_settings
 from integrators.base import OddsIntegrator
-from models import SourceQuote, UnifiedRecord
+from integrators.odds_events import event_dict_to_record
+from models import UnifiedRecord
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_commence(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        text = value.replace("Z", "+00:00")
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return None
-
-
-def _event_display_name(home: str, away: str) -> str:
-    return f"{away} @ {home}"
 
 
 class OddsApiIntegrator(OddsIntegrator):
@@ -88,59 +74,11 @@ class OddsApiIntegrator(OddsIntegrator):
         )
         resp.raise_for_status()
         payload: list[dict[str, Any]] = resp.json()
-        return [self._event_to_record(item, sport_key) for item in payload]
-
-    def _event_to_record(self, event: dict[str, Any], sport_key: str) -> UnifiedRecord:
-        home = str(event.get("home_team") or "")
-        away = str(event.get("away_team") or "")
-        event_id = str(event.get("id") or f"{sport_key}:{home}:{away}")
-        commence = _parse_commence(event.get("commence_time"))
-        display = _event_display_name(home, away)
-
-        by_book: dict[str, list[SourceQuote]] = {}
-        for bookmaker in event.get("bookmakers") or []:
-            if not isinstance(bookmaker, dict):
-                continue
-            book_key = str(bookmaker.get("key") or "unknown")
-            book_quotes: list[SourceQuote] = []
-            for market in bookmaker.get("markets") or []:
-                if not isinstance(market, dict):
-                    continue
-                market_key = str(market.get("key") or "h2h")
-                for outcome in market.get("outcomes") or []:
-                    if not isinstance(outcome, dict):
-                        continue
-                    name = str(outcome.get("name") or "")
-                    price = outcome.get("price")
-                    if price is None:
-                        continue
-                    book_quotes.append(
-                        SourceQuote(
-                            source=book_key,
-                            outcome=name,
-                            price=float(price),
-                            line=outcome.get("point"),
-                            raw_label=name,
-                        )
-                    )
-            if book_quotes:
-                by_book[book_key] = book_quotes
-
-        primary_market = "h2h"
-        if by_book:
-            first_book = next(iter(event.get("bookmakers") or []), {})
-            if isinstance(first_book, dict) and first_book.get("markets"):
-                m0 = first_book["markets"][0]
-                if isinstance(m0, dict) and m0.get("key"):
-                    primary_market = str(m0["key"])
-
-        return UnifiedRecord(
-            timestamp=datetime.now(timezone.utc),
-            event_id=event_id,
-            sport_key=sport_key,
-            normalized_event_name=display,
-            market_type=primary_market,
-            commence_time=commence,
-            sources=by_book,
-            metadata={"home_team": home, "away_team": away},
-        )
+        return [
+            event_dict_to_record(
+                item,
+                sport_key,
+                metadata_extra={"odds_source": "the_odds_api"},
+            )
+            for item in payload
+        ]

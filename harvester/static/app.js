@@ -89,6 +89,7 @@ function statusPillClass(status) {
 function channelLabel(channel) {
   if (channel === "gateway") return "Data gateway";
   if (channel === "direct") return "Direct adapter";
+  if (channel === "perplexity") return "Via Perplexity";
   return "Via Odds API";
 }
 
@@ -369,7 +370,9 @@ function applyPayload(data) {
     el.error.textContent = data.error;
     el.error.classList.remove("hidden");
   } else if (!data.api_key_configured) {
-    el.error.textContent = "ODDS_API_KEY is not set in harvester/.env";
+    const provider = data.odds_provider || "perplexity";
+    const keyName = provider === "perplexity" ? "PERPLEXITY_API_KEY" : "ODDS_API_KEY";
+    el.error.textContent = `${keyName} is not set in harvester/.env`;
     el.error.classList.remove("hidden");
   } else {
     el.error.classList.add("hidden");

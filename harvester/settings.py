@@ -31,6 +31,21 @@ class HarvesterSettings(BaseSettings):
         validation_alias="ODDS_API_MARKETS",
     )
     odds_api_odds_format: str = Field(default="decimal", validation_alias="ODDS_API_ODDS_FORMAT")
+    odds_provider: str = Field(
+        default="auto",
+        validation_alias="HARVESTER_ODDS_PROVIDER",
+        description="auto | perplexity | odds_api",
+    )
+    perplexity_api_key: str = Field(default="", validation_alias="PERPLEXITY_API_KEY")
+    perplexity_base_url: str = Field(
+        default="https://api.perplexity.ai",
+        validation_alias="PERPLEXITY_BASE_URL",
+    )
+    perplexity_model: str = Field(default="sonar-pro", validation_alias="PERPLEXITY_MODEL")
+    perplexity_max_tokens: int = Field(
+        default=12000,
+        validation_alias="PERPLEXITY_MAX_TOKENS",
+    )
     default_sport_key: str = Field(
         default="basketball_nba",
         validation_alias="HARVESTER_DEFAULT_SPORT",
@@ -98,6 +113,31 @@ class HarvesterSettings(BaseSettings):
         default="harvester/1.0",
         validation_alias="HARVESTER_HTTP_USER_AGENT",
     )
+
+    def effective_odds_provider(self) -> str:
+        raw = (self.odds_provider or "auto").strip().lower()
+        if raw in ("perplexity", "odds_api"):
+            return raw
+        if self.perplexity_api_key.strip():
+            return "perplexity"
+        if self.odds_api_key.strip():
+            return "odds_api"
+        return "perplexity"
+
+    def odds_source_configured(self) -> bool:
+        if self.effective_odds_provider() == "perplexity":
+            return bool(self.perplexity_api_key.strip())
+        return bool(self.odds_api_key.strip())
+
+    def odds_gateway_key(self) -> str:
+        return "perplexity_odds" if self.effective_odds_provider() == "perplexity" else "the_odds_api"
+
+    def odds_gateway_label(self) -> str:
+        return (
+            "Perplexity Sonar"
+            if self.effective_odds_provider() == "perplexity"
+            else "The Odds API"
+        )
 
 
 @lru_cache

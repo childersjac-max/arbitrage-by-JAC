@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import Any
 
 from models import UnifiedRecord
+from settings import get_settings
 from target_sources import CATEGORY_LABELS, ODDS_API_KEY_TO_TARGET, TARGET_SOURCES, TargetSource
 
 
@@ -39,7 +40,10 @@ def _row_for_target(
     *,
     api_error: str | None,
 ) -> dict[str, Any]:
-    channel = "direct" if src.direct_only else "odds_api"
+    settings = get_settings()
+    channel = "direct" if src.direct_only else (
+        "perplexity" if settings.effective_odds_provider() == "perplexity" else "odds_api"
+    )
     display = src.name
 
     if api_error:
@@ -106,6 +110,7 @@ def _row_for_target(
         }
 
     aliases = ", ".join(src.odds_api_keys)
+    gateway = get_settings().odds_gateway_label()
     return {
         "key": src.key,
         "name": display,
@@ -114,7 +119,7 @@ def _row_for_target(
         "channel": channel,
         "status": "empty",
         "status_label": "No odds returned",
-        "message": f"Not in this run (Odds API keys: {aliases})",
+        "message": f"Not in this run ({gateway} keys: {aliases})",
         "events_with_odds": 0,
         "used_in_arbitrage": False,
     }
@@ -147,8 +152,8 @@ def build_source_report(
 
     report.append(
         {
-            "key": "the_odds_api",
-            "name": "The Odds API",
+            "key": get_settings().odds_gateway_key(),
+            "name": get_settings().odds_gateway_label(),
             "category": "gateway",
             "category_label": "Data gateway",
             "channel": "gateway",

@@ -12,7 +12,6 @@ from pathlib import Path
 
 from config import get_settings
 from engine import HarvesterEngine
-from integrators.odds_api import OddsApiIntegrator
 from integrators.stubs import STUB_INTEGRATORS
 
 
@@ -34,12 +33,15 @@ async def _cmd_run(args: argparse.Namespace) -> int:
 
 
 async def _cmd_health(args: argparse.Namespace) -> int:
-    integrator = OddsApiIntegrator()
+    from integrator_factory import IntegratorFactory
+
+    factory = IntegratorFactory()
+    integrator = factory.primary_odds_integrator()
     try:
         ok, msg = await integrator.health_check()
     finally:
-        await integrator.close()
-    print(f"the_odds_api: {'OK' if ok else 'FAIL'} — {msg}")
+        await factory.close()
+    print(f"{integrator.name}: {'OK' if ok else 'FAIL'} — {msg}")
     if args.stubs:
         for name, stub in STUB_INTEGRATORS.items():
             s_ok, s_msg = await stub.health_check()
@@ -65,7 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("-o", "--output", type=Path)
     run_p.set_defaults(func=_cmd_run)
 
-    health_p = sub.add_parser("health", help="Check The Odds API connectivity")
+    health_p = sub.add_parser("health", help="Check odds provider connectivity")
     health_p.add_argument("--stubs", action="store_true", help="Also list stub integrators")
     health_p.set_defaults(func=_cmd_health)
 
@@ -80,8 +82,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     _configure_logging(args.verbose)
     settings = get_settings()
-    if args.command == "run" and not settings.odds_api_key:
-        print("Error: set ODDS_API_KEY in harvester/.env", file=sys.stderr)
+    if args.command == "run" and not settings.odds_source_configured():
+        provider = settings.effective_odds_provider()
+        key_name = "PERPLEXITY_API_KEY" if provider == "perplexity" else "ODDS_API_KEY"
+        print(f"Error: set {key_name} in harvester/.env", file=sys.stderr)
         return 1
     return asyncio.run(args.func(args))
 

@@ -82,17 +82,21 @@ async def api_status(day: str = Query("today", pattern="^(today|tomorrow)$")):
         state.records = records
     payload = build_dashboard_payload(records, day=day)
     settings = get_settings()
-    payload["api_key_configured"] = bool(settings.odds_api_key)
+    payload["api_key_configured"] = settings.odds_source_configured()
+    payload["odds_provider"] = settings.effective_odds_provider()
+    payload["odds_gateway"] = settings.odds_gateway_label()
     return payload
 
 
 @app.post("/api/run")
 async def api_run(body: RunRequest = RunRequest()):
     settings = get_settings()
-    if not settings.odds_api_key:
+    if not settings.odds_source_configured():
+        provider = settings.effective_odds_provider()
+        key_name = "PERPLEXITY_API_KEY" if provider == "perplexity" else "ODDS_API_KEY"
         raise HTTPException(
             400,
-            "ODDS_API_KEY is not set. Add it to harvester/.env",
+            f"{key_name} is not set. Add it to harvester/.env",
         )
     state = get_run_state()
     if state.running:

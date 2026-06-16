@@ -196,7 +196,7 @@ class HarvesterEngine:
         factory = IntegratorFactory()
         try:
             if len(markets) <= 1:
-                records = await factory.odds_api_integrator().fetch_records(
+                records = await factory.primary_odds_integrator().fetch_records(
                     sport, market_types=markets or None
                 )
             else:

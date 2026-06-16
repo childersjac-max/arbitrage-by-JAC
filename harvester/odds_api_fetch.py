@@ -1,4 +1,4 @@
-"""Multi-market Odds API fetch helpers."""
+"""Multi-market odds fetch helpers (Perplexity or The Odds API)."""
 
 from __future__ import annotations
 
@@ -15,10 +15,13 @@ async def fetch_odds_api_multi_market(
   sport_key: str,
   markets: list[str],
 ) -> list[UnifiedRecord]:
-  """Fetch each market type from The Odds API (each market uses API quota)."""
-  integrator = factory.odds_api_integrator()
-  merged: dict[str, UnifiedRecord] = {}
+  """Fetch odds for one or more market types using the configured provider."""
+  integrator = factory.primary_odds_integrator()
 
+  if integrator.name == "perplexity_odds":
+    return await integrator.fetch_records(sport_key, market_types=markets)
+
+  merged: dict[str, UnifiedRecord] = {}
   for market in markets:
     try:
       batch = await integrator.fetch_records(sport_key, market_types=[market])

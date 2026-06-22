@@ -32,9 +32,9 @@ class HarvesterSettings(BaseSettings):
     )
     odds_api_odds_format: str = Field(default="decimal", validation_alias="ODDS_API_ODDS_FORMAT")
     odds_provider: str = Field(
-        default="auto",
+        default="odds_api",
         validation_alias="HARVESTER_ODDS_PROVIDER",
-        description="auto | perplexity | odds_api",
+        description="odds_api | perplexity | auto",
     )
     perplexity_api_key: str = Field(default="", validation_alias="PERPLEXITY_API_KEY")
     perplexity_base_url: str = Field(
@@ -115,14 +115,14 @@ class HarvesterSettings(BaseSettings):
     )
 
     def effective_odds_provider(self) -> str:
-        raw = (self.odds_provider or "auto").strip().lower()
+        raw = (self.odds_provider or "odds_api").strip().lower()
         if raw in ("perplexity", "odds_api"):
             return raw
-        if self.perplexity_api_key.strip():
-            return "perplexity"
         if self.odds_api_key.strip():
             return "odds_api"
-        return "perplexity"
+        if self.perplexity_api_key.strip():
+            return "perplexity"
+        return "odds_api"
 
     def odds_source_configured(self) -> bool:
         if self.effective_odds_provider() == "perplexity":

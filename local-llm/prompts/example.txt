@@ -1,0 +1,6 @@
+Write a short Python outline for a script that:
+1. Reads team names from a CSV file
+2. Calls a local HTTP API to normalize them
+3. Writes results to a new CSV
+
+Use only the standard library plus requests. Add brief comments.
